@@ -14,12 +14,12 @@ from dataclasses import dataclass, field
 from typing import ClassVar
 from unittest.mock import MagicMock
 
-from EvoScientist.cli.widgets.mcp_browser import MCPBrowserWidget
-from EvoScientist.cli.widgets.picker_base import (
+from metasci_scribe.cli.widgets.mcp_browser import MCPBrowserWidget
+from metasci_scribe.cli.widgets.picker_base import (
     first_selectable_index,
     move_selection,
 )
-from EvoScientist.cli.widgets.skill_browser import SkillBrowserWidget
+from metasci_scribe.cli.widgets.skill_browser import SkillBrowserWidget
 
 _SKILL_INDEX = [
     {

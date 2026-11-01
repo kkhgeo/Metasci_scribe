@@ -19,8 +19,8 @@ from starlette.routing import Route, WebSocketRoute
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from EvoScientist.langgraph_dev import boundary
-from EvoScientist.langgraph_dev.http import app as server_app
+from metasci_scribe.langgraph_dev import boundary
+from metasci_scribe.langgraph_dev.http import app as server_app
 
 EVIL = "https://evil.example"
 
@@ -359,7 +359,9 @@ def test_boundary_trusts_only_a_quick_tunnel_name(
 def test_boundary_logs_each_refusal(guarded, monkeypatch, caplog):
     _set_trust(monkeypatch)
     client = guarded()
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.langgraph_dev.boundary"):
+    with caplog.at_level(
+        logging.WARNING, logger="metasci_scribe.langgraph_dev.boundary"
+    ):
         client.get("/threads", headers={"Origin": EVIL})
         client.get("/threads", headers={"Origin": EVIL})
     refusals = [r for r in caplog.records if "Refused a request" in r.getMessage()]
@@ -384,7 +386,7 @@ def test_server_app_is_behind_the_boundary(monkeypatch):
 def test_server_app_keeps_its_boundary_from_the_agent_commands(monkeypatch):
     """The agent's shell inherits the server's environment, and a ``langgraph
     dev`` started there would take this CORS_CONFIG over its own settings."""
-    from EvoScientist.langgraph_dev import http
+    from metasci_scribe.langgraph_dev import http
 
     env = boundary.server_env("127.0.0.1", "https://smith.langchain.com")
     for key, value in env.items():

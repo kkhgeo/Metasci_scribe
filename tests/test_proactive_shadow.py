@@ -1,4 +1,4 @@
-"""Tests for EvoScientist.proactive.shadow."""
+"""Tests for metasci_scribe.proactive.shadow."""
 
 from __future__ import annotations
 
@@ -13,9 +13,9 @@ from langchain_core.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
-from EvoScientist.config.settings import EvoScientistConfig
-from EvoScientist.middleware.proactive_mode import ProactiveModeMiddleware
-from EvoScientist.proactive.shadow import (
+from metasci_scribe.config.settings import ScribeConfig
+from metasci_scribe.middleware.proactive_mode import ProactiveModeMiddleware
+from metasci_scribe.proactive.shadow import (
     ProactiveToolLeakError,
     flatten_tool_history,
     install_tool_strip_spy,
@@ -57,7 +57,7 @@ SOURCE = [
 
 
 def test_shadow_cfg_overrides_only_the_side_effect_flags():
-    cfg = shadow_cfg(EvoScientistConfig(model_fallbacks="a,b"))
+    cfg = shadow_cfg(ScribeConfig(model_fallbacks="a,b"))
     assert cfg.enable_scheduler is False
     assert cfg.memory_workers_enabled is False
     assert cfg.enable_ask_user is False
@@ -68,9 +68,7 @@ def test_shadow_cfg_overrides_only_the_side_effect_flags():
 
 def test_shadow_cfg_keeps_the_attended_retry_budget():
     cfg = shadow_cfg(
-        EvoScientistConfig(
-            model_retry_wait_seconds=60, auto_mode_retry_wait_seconds=1800
-        )
+        ScribeConfig(model_retry_wait_seconds=60, auto_mode_retry_wait_seconds=1800)
     )
     assert cfg.auto_mode_retry_wait_seconds == 60
 
@@ -262,7 +260,7 @@ def test_flatten_puts_a_placeholder_for_an_image_result():
 
 
 def test_flatten_drops_the_tool_block_of_an_unparsable_call_read_from_the_server():
-    from EvoScientist.gateway.server import _messages_from_state
+    from metasci_scribe.gateway.server import _messages_from_state
 
     call = AIMessage(
         content=[
@@ -301,9 +299,9 @@ def test_a_conversation_with_tool_calls_reaches_a_strict_provider_as_text():
 
 def test_the_real_shadow_stack_calls_the_model_without_tools(workspace, monkeypatch):
     """No middleware of the real agent binds tools on a shadow turn."""
-    import EvoScientist.EvoScientist as es_mod
-    from EvoScientist.paths import SessionDirs
-    from EvoScientist.proactive.shadow import build_shadow_graph
+    import metasci_scribe.agent as es_mod
+    from metasci_scribe.paths import SessionDirs
+    from metasci_scribe.proactive.shadow import build_shadow_graph
 
     monkeypatch.setattr(es_mod, "_load_mcp_tools_cached", lambda **kwargs: {})
     binds = []
@@ -318,7 +316,7 @@ def test_the_real_shadow_stack_calls_the_model_without_tools(workspace, monkeypa
             [AIMessage(content="Done.", response_metadata={"finish_reason": "stop"})]
         )
     )
-    graph = build_shadow_graph(EvoScientistConfig(), model, SessionDirs(workspace))
+    graph = build_shadow_graph(ScribeConfig(), model, SessionDirs(workspace))
 
     assert asyncio.run(run_shadow_turn(graph, TOOL_HISTORY, "trigger")) == "Done."
     assert binds == []

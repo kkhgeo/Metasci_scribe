@@ -6,7 +6,7 @@ from tests.fakes.common import TEST_WORKSPACE
 
 
 def _mw():
-    from EvoScientist.middleware.scheduler import SchedulerMiddleware
+    from metasci_scribe.middleware.scheduler import SchedulerMiddleware
 
     m = SchedulerMiddleware(TEST_WORKSPACE)
     m._cache = None
@@ -15,7 +15,7 @@ def _mw():
 
 
 def test_schedules_block_lists_active_crons(monkeypatch):
-    from EvoScientist.cron import schedule as crons
+    from metasci_scribe.cron import schedule as crons
 
     monkeypatch.setattr(crons, "is_available", lambda: True)
     monkeypatch.setattr(
@@ -39,14 +39,14 @@ def test_schedules_block_lists_active_crons(monkeypatch):
 
 
 def test_schedules_block_empty_when_unavailable(monkeypatch):
-    from EvoScientist.cron import schedule as crons
+    from metasci_scribe.cron import schedule as crons
 
     monkeypatch.setattr(crons, "is_available", lambda: False)
     assert _mw()._schedules_block() == ""
 
 
 def test_schedules_block_empty_on_error(monkeypatch):
-    from EvoScientist.cron import schedule as crons
+    from metasci_scribe.cron import schedule as crons
 
     monkeypatch.setattr(crons, "is_available", lambda: True)
 

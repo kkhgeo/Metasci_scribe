@@ -15,12 +15,12 @@ from langchain_core.outputs import ChatGenerationChunk
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.config import get_config
 
-from EvoScientist.backends import MODEL_RETRY_RUN_KEY
-from EvoScientist.config import EvoScientistConfig
-from EvoScientist.EvoScientist import create_cli_agent
-from EvoScientist.middleware.model_retry import ModelRetryMiddleware
-from EvoScientist.paths import Workspace
-from EvoScientist.stream.events import stream_agent_events
+from metasci_scribe.agent import create_cli_agent
+from metasci_scribe.backends import MODEL_RETRY_RUN_KEY
+from metasci_scribe.config import ScribeConfig
+from metasci_scribe.middleware.model_retry import ModelRetryMiddleware
+from metasci_scribe.paths import Workspace
+from metasci_scribe.stream.events import stream_agent_events
 
 pytestmark = pytest.mark.usefixtures("no_mcp")
 
@@ -29,8 +29,8 @@ pytestmark = pytest.mark.usefixtures("no_mcp")
 def test_config(monkeypatch):
     """The stream runner reads the retry budget from the active config, not the user's."""
     monkeypatch.setattr(
-        "EvoScientist.EvoScientist._config",
-        EvoScientistConfig(enable_async_subagents=False),
+        "metasci_scribe.agent._config",
+        ScribeConfig(enable_async_subagents=False),
     )
 
 
@@ -78,7 +78,7 @@ class _Flaky(GenericFakeChatModel):
 
 
 def _agent(tmp_path, model, **config):
-    cfg = EvoScientistConfig(enable_async_subagents=False, **config)
+    cfg = ScribeConfig(enable_async_subagents=False, **config)
     return create_cli_agent(
         workspace=Workspace(tmp_path),
         config=cfg,
@@ -104,7 +104,7 @@ async def test_dropped_stream_is_retried_and_the_answer_is_clean(tmp_path, waits
 
 async def test_local_gateway_run_carries_the_retry_key(tmp_path, monkeypatch):
     """The in-process run writes configurable["model_retry"] from the live config."""
-    from EvoScientist import backends
+    from metasci_scribe import backends
 
     monkeypatch.setattr(
         backends,
@@ -342,11 +342,11 @@ class _Rejecting(GenericFakeChatModel):
 @pytest.fixture
 def fallback(monkeypatch):
     """A one-entry fallback chain served by whatever model the test puts in the holder."""
-    from EvoScientist.middleware import model_fallback
+    from metasci_scribe.middleware import model_fallback
 
     holder: dict = {}
     monkeypatch.setattr(
-        "EvoScientist.llm.models.get_chat_model",
+        "metasci_scribe.llm.models.get_chat_model",
         lambda model, provider=None, **kwargs: holder["model"],
     )
     model_fallback.set_fallback_chain([("fallback-model", "openai")])

@@ -8,8 +8,8 @@ import threading
 
 import pytest
 
-from EvoScientist.cli.channel_sends import PendingChannelSends
-from EvoScientist.runtime import AsyncRuntime
+from metasci_scribe.cli.channel_sends import PendingChannelSends
+from metasci_scribe.runtime import AsyncRuntime
 
 
 @pytest.mark.asyncio

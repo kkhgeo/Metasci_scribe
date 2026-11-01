@@ -8,10 +8,10 @@ import pytest
 from deepagents.backends.protocol import GlobResult, GrepResult, LsResult
 from deepagents.backends.utils import file_data_to_string, validate_path
 
-from EvoScientist import agent_shell, backends, paths
-from EvoScientist.channels.base import Channel, RawIncoming
-from EvoScientist.cli.file_mentions import resolve_file_mentions
-from EvoScientist.stream.events import build_agent_stream_input
+from metasci_scribe import agent_shell, backends, paths
+from metasci_scribe.channels.base import Channel, RawIncoming
+from metasci_scribe.cli.file_mentions import resolve_file_mentions
+from metasci_scribe.stream.events import build_agent_stream_input
 
 
 @pytest.mark.parametrize(

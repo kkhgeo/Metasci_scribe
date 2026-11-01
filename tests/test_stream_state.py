@@ -1,6 +1,6 @@
 """Tests for StreamState, SubAgentState, and display helpers from cli.py."""
 
-from EvoScientist.cli import (
+from metasci_scribe.cli import (
     StreamState,
     SubAgentState,
     _build_todo_stats,
@@ -875,7 +875,7 @@ class TestUsageWidgetElapsed:
     """Tests for UsageWidget elapsed time display."""
 
     def test_without_elapsed(self):
-        from EvoScientist.cli.widgets.usage_widget import UsageWidget
+        from metasci_scribe.cli.widgets.usage_widget import UsageWidget
 
         w = UsageWidget(1000, 500)
         plain = w._Static__content.plain
@@ -884,7 +884,7 @@ class TestUsageWidgetElapsed:
         assert "Elapsed" not in plain
 
     def test_with_elapsed(self):
-        from EvoScientist.cli.widgets.usage_widget import UsageWidget
+        from metasci_scribe.cli.widgets.usage_widget import UsageWidget
 
         w = UsageWidget(1000, 500, elapsed="12s")
         plain = w._Static__content.plain
@@ -895,13 +895,13 @@ class TestIsFinalResponseDelegation:
     """Tests that _is_final_response delegates to StreamState.has_pending_work."""
 
     def test_final_when_no_work(self):
-        from EvoScientist.cli.tui_interactive import _is_final_response
+        from metasci_scribe.cli.tui_interactive import _is_final_response
 
         state = StreamState()
         assert _is_final_response(state) is True
 
     def test_not_final_during_tool(self):
-        from EvoScientist.cli.tui_interactive import _is_final_response
+        from metasci_scribe.cli.tui_interactive import _is_final_response
 
         state = StreamState()
         state.handle_event(
@@ -910,7 +910,7 @@ class TestIsFinalResponseDelegation:
         assert _is_final_response(state) is False
 
     def test_consistent_with_has_pending_work(self):
-        from EvoScientist.cli.tui_interactive import _is_final_response
+        from metasci_scribe.cli.tui_interactive import _is_final_response
 
         state = StreamState()
         state.handle_event(
@@ -930,7 +930,7 @@ class TestIsFinalResponseDelegation:
 
 class TestRubricState:
     def test_tracks_checking_and_the_latest_result(self):
-        from EvoScientist.stream.state import StreamState
+        from metasci_scribe.stream.state import StreamState
 
         state = StreamState()
         assert state.rubric_result is None
@@ -974,8 +974,8 @@ class TestRubricState:
 
         from rich.console import Console
 
-        from EvoScientist.stream.display import create_streaming_display
-        from EvoScientist.stream.state import StreamState
+        from metasci_scribe.stream.display import create_streaming_display
+        from metasci_scribe.stream.state import StreamState
 
         state = StreamState()
         state.handle_event({"type": "text", "content": "First draft."})
@@ -996,7 +996,7 @@ class TestRubricState:
         assert "First draft.Revised" not in rendered
 
     def test_a_failed_pass_with_no_answer_yet_adds_nothing(self):
-        from EvoScientist.stream.state import StreamState
+        from metasci_scribe.stream.state import StreamState
 
         state = StreamState()
         state.handle_event(
@@ -1005,7 +1005,7 @@ class TestRubricState:
         assert state.response_text == ""
 
     def test_a_satisfied_pass_keeps_the_answer(self):
-        from EvoScientist.stream.state import StreamState
+        from metasci_scribe.stream.state import StreamState
 
         state = StreamState()
         state.handle_event({"type": "text", "content": "Final answer."})
@@ -1108,7 +1108,7 @@ def test_subagent_discard_removes_its_tool_calls_only():
 
 def test_discard_keeps_the_clean_prefix_of_a_boundary_crossing_narration_segment():
     """A rubric draft and the failed revision share one segment: the draft must survive."""
-    from EvoScientist.stream.state import StreamState
+    from metasci_scribe.stream.state import StreamState
 
     state = StreamState()
     state.handle_event({"type": "text", "content": "DRAFT"})
@@ -1152,7 +1152,7 @@ def test_discard_keeps_the_clean_prefix_of_a_boundary_crossing_narration_segment
 
 
 def test_discard_reindexes_segments_after_a_removed_tool_call():
-    from EvoScientist.stream.state import StreamState
+    from metasci_scribe.stream.state import StreamState
 
     state = StreamState()
     state.handle_event({"type": "text", "content": "one"})

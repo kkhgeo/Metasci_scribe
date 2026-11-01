@@ -19,8 +19,8 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 
 # Imported before any patch is active: the module binds ``get_effective_config``
 # at import, and a first import under the patch would freeze the mock in place.
-import EvoScientist.EvoScientist  # noqa: F401
-from EvoScientist.config import MemoryObservationWriter
+import metasci_scribe.agent  # noqa: F401
+from metasci_scribe.config import MemoryObservationWriter
 
 
 def _build(name: str, workspace, aux_model=None):
@@ -45,43 +45,41 @@ def _build(name: str, workspace, aux_model=None):
 
     with ExitStack() as stack:
         stack.enter_context(
-            patch("EvoScientist.config.get_effective_config", return_value=cfg)
+            patch("metasci_scribe.config.get_effective_config", return_value=cfg)
         )
-        stack.enter_context(patch("EvoScientist.config.apply_config_to_env"))
+        stack.enter_context(patch("metasci_scribe.config.apply_config_to_env"))
         stack.enter_context(
             patch(
-                "EvoScientist.utils.load_subagents",
+                "metasci_scribe.utils.load_subagents",
                 return_value=[
                     {"name": name, "system_prompt": "", "tools": [], "skills": None}
                 ],
             )
         )
-        stack.enter_context(patch("EvoScientist.EvoScientist._ensure_chat_model"))
+        stack.enter_context(patch("metasci_scribe.agent._ensure_chat_model"))
         aux = stack.enter_context(
             patch(
-                "EvoScientist.EvoScientist._ensure_auxiliary_chat_model",
+                "metasci_scribe.agent._ensure_auxiliary_chat_model",
                 **({"return_value": aux_model} if aux_model is not None else {}),
             )
         )
         stack.enter_context(
-            patch(
-                "EvoScientist.EvoScientist._get_default_backend", return_value=backend
-            )
+            patch("metasci_scribe.agent._get_default_backend", return_value=backend)
         )
         stack.enter_context(
             patch(
-                "EvoScientist.EvoScientist._get_default_middleware",
+                "metasci_scribe.agent._get_default_middleware",
                 side_effect=lambda **_: [lifecycle_stub],
             )
         )
         stack.enter_context(
-            patch("EvoScientist.EvoScientist._load_mcp_tools_cached", return_value={})
+            patch("metasci_scribe.agent._load_mcp_tools_cached", return_value={})
         )
         create = stack.enter_context(patch("deepagents.create_deep_agent"))
         create.return_value.with_config.return_value = MagicMock()
 
-        from EvoScientist.paths import Workspace
-        from EvoScientist.subagents._factory import build_async_subagent_graph
+        from metasci_scribe.paths import Workspace
+        from metasci_scribe.subagents._factory import build_async_subagent_graph
 
         build_async_subagent_graph(name, workspace=Workspace(workspace))
         return create.call_args.kwargs, backend, aux.return_value, lifecycle_stub
@@ -132,9 +130,9 @@ def test_scheduler_graph_build_emits_no_beta_warning(tmp_path):
 
 
 def test_rubric_evaluation_is_logged_at_info(caplog):
-    from EvoScientist.middleware.rubric import _log_rubric_evaluation
+    from metasci_scribe.middleware.rubric import _log_rubric_evaluation
 
-    with caplog.at_level(logging.INFO, logger="EvoScientist.middleware.rubric"):
+    with caplog.at_level(logging.INFO, logger="metasci_scribe.middleware.rubric"):
         _log_rubric_evaluation(
             {
                 "grading_run_id": "g-1",
@@ -172,7 +170,7 @@ def test_grader_strategy_is_json_mode_for_gemini_on_openrouter():
     """OpenRouter drops the criteria oneOf from Gemini tool schemas; JSON mode works."""
     from langchain.agents.structured_output import ProviderStrategy
 
-    from EvoScientist.middleware.rubric import _grader_strategy
+    from metasci_scribe.middleware.rubric import _grader_strategy
 
     strategy = _grader_strategy(_openrouter("google/gemini-3.8-flash"))
     assert isinstance(strategy, ProviderStrategy)
@@ -186,7 +184,7 @@ def test_grader_strategy_is_tool_calling_for_anthropic_on_openrouter():
     """
     from langchain.agents.structured_output import ToolStrategy
 
-    from EvoScientist.middleware.rubric import _grader_strategy
+    from metasci_scribe.middleware.rubric import _grader_strategy
 
     for model_id in ("anthropic/claude-fable-5", "anthropic/claude-sonnet-4.6"):
         assert isinstance(_grader_strategy(_openrouter(model_id)), ToolStrategy)
@@ -200,7 +198,7 @@ def test_grader_strategy_is_tool_calling_for_openai_on_openrouter():
     """
     from langchain.agents.structured_output import ToolStrategy
 
-    from EvoScientist.middleware.rubric import _grader_strategy
+    from metasci_scribe.middleware.rubric import _grader_strategy
 
     for model_id in ("openai/gpt-5.6-luna", "openai/gpt-6-luna"):
         assert isinstance(_grader_strategy(_openrouter(model_id)), ToolStrategy)
@@ -213,7 +211,7 @@ def test_grader_strategy_for_muse_spark_and_qwen_on_openrouter():
     """
     from langchain.agents.structured_output import ProviderStrategy, ToolStrategy
 
-    from EvoScientist.middleware.rubric import _grader_strategy
+    from metasci_scribe.middleware.rubric import _grader_strategy
 
     assert isinstance(
         _grader_strategy(_openrouter("meta/muse-spark-open")), ProviderStrategy
@@ -227,7 +225,7 @@ def test_grader_strategy_for_muse_spark_and_qwen_on_openrouter():
 def test_grader_strategy_defers_to_langchain_elsewhere():
     from langchain_anthropic import ChatAnthropic
 
-    from EvoScientist.middleware.rubric import _grader_strategy
+    from metasci_scribe.middleware.rubric import _grader_strategy
 
     assert (
         _grader_strategy(ChatAnthropic(model="claude-haiku-4-5", api_key="k")) is None
@@ -246,7 +244,7 @@ def test_scheduler_grader_is_built_with_the_explicit_strategy(tmp_path):
     rubric = kwargs["middleware"][-1]
     assert rubric._model is aux  # no model copy; the strategy is passed explicitly
     with patch(
-        "EvoScientist.middleware.rubric.create_agent", wraps=create_agent
+        "metasci_scribe.middleware.rubric.create_agent", wraps=create_agent
     ) as spy:
         rubric._ensure_grader()
     response_format = spy.call_args.kwargs["response_format"]
@@ -262,7 +260,7 @@ def test_scheduler_grader_uses_tool_calling_without_thinking_on_deepseek(
 
     import httpx
 
-    from EvoScientist.llm import get_chat_model
+    from metasci_scribe.llm import get_chat_model
     from tests.fakes.common import deepseek_tool_call_response
 
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
@@ -307,7 +305,7 @@ def test_native_sonnet_5_5_grader_uses_json_schema_not_forced_tools(
     import anthropic
     from packaging.version import Version
 
-    from EvoScientist.llm import get_chat_model
+    from metasci_scribe.llm import get_chat_model
 
     if Version(anthropic.__version__) >= Version("1"):
         import httpx2 as httpx
@@ -412,7 +410,7 @@ def test_grader_call_budget_stops_a_parse_error_loop():
     from langchain.agents import create_agent
     from langchain.agents.structured_output import ToolStrategy
 
-    from EvoScientist.middleware.rubric import _GraderCallBudget
+    from metasci_scribe.middleware.rubric import _GraderCallBudget
 
     fake = _BrokenGrader()
     grader = create_agent(
@@ -429,7 +427,7 @@ def test_grader_call_budget_stops_a_parse_error_loop():
 
 
 def test_scheduler_grader_carries_a_call_budget(tmp_path):
-    from EvoScientist.middleware.rubric import _GraderCallBudget
+    from metasci_scribe.middleware.rubric import _GraderCallBudget
 
     kwargs, _backend, _aux, _stub = _build("scheduler", tmp_path)
     grader_mw = kwargs["middleware"][-1]._grader_middleware
@@ -516,7 +514,7 @@ async def test_grader_call_budget_also_guards_the_async_path():
     from langchain.agents import create_agent
     from langchain.agents.structured_output import ToolStrategy
 
-    from EvoScientist.middleware.rubric import _GraderCallBudget
+    from metasci_scribe.middleware.rubric import _GraderCallBudget
 
     fake = _BrokenGrader()
     grader = create_agent(
@@ -534,7 +532,7 @@ async def test_grader_call_budget_also_guards_the_async_path():
 
 def test_scheduler_build_is_quiet_for_an_unsupported_grader(tmp_path, caplog):
     """The warning belongs to the first graded run, not to server start."""
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.middleware.rubric"):
+    with caplog.at_level(logging.WARNING, logger="metasci_scribe.middleware.rubric"):
         _build(
             "scheduler", tmp_path, aux_model=_openrouter("anthropic/claude-fable-5.1")
         )

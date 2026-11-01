@@ -9,7 +9,7 @@ __pycache__/
 .pytest_cache/
 *.pyc
 
-# --- upstream EvoScientist v0.3.8 .gitignore ---
+# --- upstream Metasci Scribe v0.3.8 .gitignore ---
 # macOS
 .DS_Store
 
@@ -48,9 +48,9 @@ bridge/package-lock.json
 .langgraph_api/
 workspace/
 skills/
-!EvoScientist/skills/
+!metasci_scribe/skills/
 memory/
-!EvoScientist/memory/
+!metasci_scribe/memory/
 media/
 conversation_history/
 .deno_cache/

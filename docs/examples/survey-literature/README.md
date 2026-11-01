@@ -1,10 +1,10 @@
 # Literature Survey
 
-Run [**EvoScientist**](https://github.com/EvoScientist/EvoScientist) with the [`paper-navigator`](https://github.com/EvoScientist/EvoSkills/tree/main#-paper-navigator--academic-paper-discovery--reading) skill to produce a conference-grade literature survey from a topic.
+Run [**Metasci Scribe**](https://github.com/EvoScientist/EvoScientist) with the [`paper-navigator`](https://github.com/EvoScientist/EvoSkills/tree/main#-paper-navigator--academic-paper-discovery--reading) skill to produce a conference-grade literature survey from a topic.
 
 ## What it does
 
-You give EvoScientist:
+You give Metasci Scribe:
 
 - a research topic or venue scope (e.g. *SIGIR 2026 full papers on arXiv*)
 - an LLM provider
@@ -32,11 +32,11 @@ Both cover 68 arXiv-public papers, organized into 10 sections (abstract → them
 
 Requirements: an OpenRouter API key (this run used `gpt-4`; any capable model works).
 
-Install EvoScientist and pick a provider:
+Install Metasci Scribe and pick a provider:
 
 ```bash
-uv tool install EvoScientist
-EvoSci onboard
+uv tool install Metasci Scribe
+metasci-scribe onboard
 ```
 
 ![Onboard model selection](assets/model_selection.png)
@@ -49,7 +49,7 @@ Install the `paper-navigator` skill:
 
 ![Skill picker](assets/skill_selection.png)
 
-Run EvoScientist and paste the prompt:
+Run Metasci Scribe and paste the prompt:
 
 ```
 Use paper-navigator to write a systematic survey of SIGIR 2026 papers
@@ -71,7 +71,7 @@ This example was generated with:
 | Model | `gpt-4` |
 | Skill | `paper-navigator` (v1.1.0) |
 
-To swap providers, re-run `EvoSci onboard` or edit `~/.config/evoscientist/config.yaml`.
+To swap providers, re-run `metasci-scribe onboard` or edit `~/.config/metasci-scribe/config.yaml`.
 
 ## Adapting this to your own venue
 

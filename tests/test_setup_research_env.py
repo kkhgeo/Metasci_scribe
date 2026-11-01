@@ -12,9 +12,9 @@ from pathlib import Path
 
 import pytest
 
-from EvoScientist import agent_shell
-from EvoScientist.setup import research_env as re_env
-from EvoScientist.setup.protocol import StageError
+from metasci_scribe import agent_shell
+from metasci_scribe.setup import research_env as re_env
+from metasci_scribe.setup.protocol import StageError
 
 # Captured at import, before conftest's autouse stub replaces them per test.
 _REAL_AGENT_PYTHON = re_env._agent_python
@@ -210,9 +210,9 @@ def _fake_python(directory: Path) -> Path:
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     """Isolated DATA_DIR with a space and non-ASCII characters, no python on PATH."""
-    from EvoScientist import paths
+    from metasci_scribe import paths
 
-    data = tmp_path / "Jan Kowalski ąę" / ".evoscientist"
+    data = tmp_path / "Jan Kowalski ąę" / ".metasci-scribe"
     monkeypatch.setattr(paths, "DATA_DIR", data)
     monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
     runner = FakeRunner()
@@ -441,10 +441,10 @@ def test_unusable_reason(output, usable):
 
 @pytest.mark.parametrize(
     ("marker", "usable"),
-    [("uv-receipt.toml", False), (".evoscientist-managed", False), (None, True)],
+    [("uv-receipt.toml", False), (".metasci-scribe-managed", False), (None, True)],
 )
-def test_evoscientists_own_environment(monkeypatch, tmp_path, marker, usable):
-    """The environment EvoScientist runs from is unusable only when its
+def test_scribes_own_environment(monkeypatch, tmp_path, marker, usable):
+    """The environment Metasci Scribe runs from is unusable only when its
     installer made it (uv tool install, the Docker image); a conda env or venv
     the user made stays usable."""
     if marker is not None:
@@ -456,7 +456,7 @@ def test_evoscientists_own_environment(monkeypatch, tmp_path, marker, usable):
 
 def test_a_marker_in_another_prefix_does_not_count(monkeypatch, tmp_path):
     (tmp_path / "uv-receipt.toml").write_text("")
-    monkeypatch.setattr(sys, "prefix", str(tmp_path / "evoscientist"))
+    monkeypatch.setattr(sys, "prefix", str(tmp_path / "metasci-scribe"))
     assert re_env._unusable_reason(f"3.12\n{tmp_path}\n0\n") is None
 
 
@@ -475,7 +475,7 @@ def test_find_usable_python_runs_the_python_3_probe(env, monkeypatch):
 
 
 def _own_env_before_a_system_python(env, monkeypatch) -> Path:
-    """Our environment first on PATH (activated by hand, or a nested EvoSci in
+    """Our environment first on PATH (activated by hand, or a nested metasci-scribe in
     the agent's shell), a working system python after it."""
     re_env.ensure_research_env("default")
     re_env._env_python(env["env"]).chmod(0o755)  # the fake venv wrote a plain file
@@ -505,7 +505,7 @@ def test_working_own_environment_first_on_path_is_injected(env, monkeypatch):
 
 def test_broken_own_environment_first_on_path_gives_the_hint(env, monkeypatch):
     """A later system python does not hide a broken environment the shell
-    would run first: the hint points at `EvoSci setup`, which rebuilds it."""
+    would run first: the hint points at `metasci-scribe setup`, which rebuilds it."""
     _own_env_before_a_system_python(env, monkeypatch)
     env["run"].env_starts = False
     assert re_env.research_env_overrides() is None
@@ -1064,7 +1064,10 @@ def test_decision_is_logged_once_with_a_setup_hint(env, caplog):
         assert re_env.research_env_overrides() is None
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert len(warnings) == 1
-    assert "Run `EvoSci setup`, then restart EvoScientist" in warnings[0].getMessage()
+    assert (
+        "Run `metasci-scribe setup`, then restart Metasci Scribe"
+        in warnings[0].getMessage()
+    )
 
 
 @pytest.mark.parametrize(

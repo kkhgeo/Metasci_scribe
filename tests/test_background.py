@@ -1,11 +1,11 @@
-"""Tests for EvoScientist.background — the background-process manager."""
+"""Tests for metasci_scribe.background — the background-process manager."""
 
 import sys
 import time
 
 import pytest
 
-from EvoScientist import background as bg
+from metasci_scribe import background as bg
 
 
 def _sleep_cmd(seconds: int) -> str:
@@ -55,16 +55,18 @@ def test_launch_returns_id_and_creates_log(tmp_path):
 def test_launch_applies_research_env_overrides(tmp_path, monkeypatch):
     """Background jobs get the same env overrides as the execute shell, merged
     over the inherited environment."""
-    from EvoScientist.setup import research_env
+    from metasci_scribe.setup import research_env
 
     monkeypatch.setattr(
-        research_env, "research_env_overrides", lambda: {"EVOSCI_BG_PROBE": "venv"}
+        research_env,
+        "research_env_overrides",
+        lambda: {"METASCI_SCRIBE_BG_PROBE": "venv"},
     )
-    monkeypatch.setenv("EVOSCI_BG_INHERITED", "kept")
+    monkeypatch.setenv("METASCI_SCRIBE_BG_INHERITED", "kept")
     if sys.platform == "win32":
-        cmd = "echo %EVOSCI_BG_PROBE% %EVOSCI_BG_INHERITED%"
+        cmd = "echo %METASCI_SCRIBE_BG_PROBE% %METASCI_SCRIBE_BG_INHERITED%"
     else:
-        cmd = "echo $EVOSCI_BG_PROBE $EVOSCI_BG_INHERITED"
+        cmd = "echo $METASCI_SCRIBE_BG_PROBE $METASCI_SCRIBE_BG_INHERITED"
     pid = bg.launch(cmd, str(tmp_path))
     assert _wait_until(lambda: "EXITED" in bg.status(pid))
     log = (tmp_path / ".bg_processes" / f"{pid}.log").read_text()

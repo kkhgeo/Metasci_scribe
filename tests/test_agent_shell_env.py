@@ -6,10 +6,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import EvoScientist.EvoScientist as es_mod
-from EvoScientist.setup import research_env
+import metasci_scribe.agent as es_mod
+from metasci_scribe.setup import research_env
 
-_PROBE = {"EVOSCI_SHELL_PROBE": "venv"}
+_PROBE = {"METASCI_SCRIBE_SHELL_PROBE": "venv"}
 
 
 @pytest.fixture
@@ -19,7 +19,7 @@ def overrides(monkeypatch):
 
 def test_default_backend_gets_the_overrides(overrides, workspace):
     backend = es_mod._get_default_backend(workspace)
-    assert backend.default._env["EVOSCI_SHELL_PROBE"] == "venv"
+    assert backend.default._env["METASCI_SCRIBE_SHELL_PROBE"] == "venv"
 
 
 def test_cli_agent_backend_gets_the_overrides(overrides, tmp_path, workspace):
@@ -47,15 +47,15 @@ def test_cli_agent_backend_gets_the_overrides(overrides, tmp_path, workspace):
             chat_model=MagicMock(),
             workspace=workspace,
         )
-    assert backends[0].default._env["EVOSCI_SHELL_PROBE"] == "venv"
+    assert backends[0].default._env["METASCI_SCRIBE_SHELL_PROBE"] == "venv"
 
 
 def test_autoskill_backend_gets_the_overrides(overrides, tmp_path, workspace):
-    from EvoScientist.backends import build_autoskill_agent_backend
+    from metasci_scribe.backends import build_autoskill_agent_backend
 
     backend = build_autoskill_agent_backend(
         memory_dir=tmp_path / "memories",
         proposals_dir=tmp_path / "proposals",
         skills_dir=workspace.skills_dir,
     )
-    assert backend.default._env["EVOSCI_SHELL_PROBE"] == "venv"
+    assert backend.default._env["METASCI_SCRIBE_SHELL_PROBE"] == "venv"

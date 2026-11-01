@@ -10,7 +10,7 @@ items with overflow indicators.
 
 from __future__ import annotations
 
-from EvoScientist.cli.tui_interactive import (
+from metasci_scribe.cli.tui_interactive import (
     _COMPLETIONS_CSS,
     _build_completion_rows,
     _completion_row_budget,
@@ -18,7 +18,7 @@ from EvoScientist.cli.tui_interactive import (
     _render_completion_text,
     _window_completion_rows,
 )
-from EvoScientist.commands._completion_engine import (
+from metasci_scribe.commands._completion_engine import (
     CompletionCandidate,
     compute_completions,
 )

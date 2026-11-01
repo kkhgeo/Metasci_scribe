@@ -9,8 +9,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from EvoScientist.cli import commands
-from EvoScientist.paths import SessionDirs, Workspace
+from metasci_scribe.cli import commands
+from metasci_scribe.paths import SessionDirs, Workspace
 from tests.fakes.common import FakeGraphGateway, FakeThreadStore
 
 
@@ -40,8 +40,8 @@ def _run(
     name: str | None = None,
 ) -> dict:
     """Drive the main callback up to ``cmd_interactive`` and capture its inputs."""
-    import EvoScientist.cli.interactive as interactive_mod
-    import EvoScientist.config as config_mod
+    import metasci_scribe.cli.interactive as interactive_mod
+    import metasci_scribe.config as config_mod
 
     captured: dict = {}
 
@@ -185,10 +185,10 @@ def _run_prompt(
     backend: str = "local",
 ) -> dict:
     """Drive the main callback through a ``-p`` run and capture its folders."""
-    import EvoScientist.cli.interactive as interactive_mod
-    import EvoScientist.config as config_mod
-    import EvoScientist.gateway as gateway_mod
-    import EvoScientist.sessions as sessions_mod
+    import metasci_scribe.cli.interactive as interactive_mod
+    import metasci_scribe.config as config_mod
+    import metasci_scribe.gateway as gateway_mod
+    import metasci_scribe.sessions as sessions_mod
 
     captured: dict = {"synced": [], "prespawned": []}
     gateway = FakeGraphGateway(
@@ -339,7 +339,7 @@ def test_one_shot_new_thread_keeps_launch_dirs(monkeypatch, tmp_path):
 
 def test_webui_mode_run_works_in_root(monkeypatch, tmp_path):
     """Run mode is a CLI/TUI feature: the WebUI starts in the root, no run folder."""
-    import EvoScientist.deploy.webui as webui_mod
+    import metasci_scribe.deploy.webui as webui_mod
 
     monkeypatch.chdir(tmp_path)
     launched: list[str] = []

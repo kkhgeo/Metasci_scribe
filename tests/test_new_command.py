@@ -2,14 +2,14 @@
 
 from unittest.mock import AsyncMock, MagicMock
 
-from EvoScientist.paths import SessionDirs
+from metasci_scribe.paths import SessionDirs
 from tests.fakes.common import TEST_WORKSPACE
 
 
 class TestNewCommand:
     async def test_execute_calls_start_new_session(self):
-        from EvoScientist.commands.base import CommandContext
-        from EvoScientist.commands.implementation.session import NewCommand
+        from metasci_scribe.commands.base import CommandContext
+        from metasci_scribe.commands.implementation.session import NewCommand
 
         ui = MagicMock()
         ui.start_new_session = AsyncMock()
@@ -23,14 +23,14 @@ class TestNewCommand:
         ui.start_new_session.assert_awaited_once()
 
     def test_requires_agent_false(self):
-        from EvoScientist.commands.implementation.session import NewCommand
+        from metasci_scribe.commands.implementation.session import NewCommand
 
         assert NewCommand().requires_agent is False
 
     async def test_no_agent_access(self):
         """Command body must not touch ctx.agent (it's still loading)."""
-        from EvoScientist.commands.base import CommandContext
-        from EvoScientist.commands.implementation.session import NewCommand
+        from metasci_scribe.commands.base import CommandContext
+        from metasci_scribe.commands.implementation.session import NewCommand
 
         ui = MagicMock()
         ui.start_new_session = AsyncMock()
@@ -42,8 +42,8 @@ class TestNewCommand:
 
     async def test_clears_invited_experts_and_announces(self):
         """/new dismisses invited experts uniformly with channel-shutdown clear."""
-        from EvoScientist.commands.base import ChannelRuntime, CommandContext
-        from EvoScientist.commands.implementation.session import NewCommand
+        from metasci_scribe.commands.base import ChannelRuntime, CommandContext
+        from metasci_scribe.commands.implementation.session import NewCommand
 
         ui = MagicMock()
         ui.start_new_session = AsyncMock()
@@ -66,8 +66,8 @@ class TestNewCommand:
 
     async def test_no_announcement_when_no_experts_invited(self):
         """No noise on ``/new`` when the invite list is already empty."""
-        from EvoScientist.commands.base import ChannelRuntime, CommandContext
-        from EvoScientist.commands.implementation.session import NewCommand
+        from metasci_scribe.commands.base import ChannelRuntime, CommandContext
+        from metasci_scribe.commands.implementation.session import NewCommand
 
         ui = MagicMock()
         ui.start_new_session = AsyncMock()
@@ -84,8 +84,8 @@ class TestNewCommand:
 
     async def test_no_announcement_without_channel_runtime(self):
         """Runs cleanly when no ChannelRuntime is attached."""
-        from EvoScientist.commands.base import CommandContext
-        from EvoScientist.commands.implementation.session import NewCommand
+        from metasci_scribe.commands.base import CommandContext
+        from metasci_scribe.commands.implementation.session import NewCommand
 
         ui = MagicMock()
         ui.start_new_session = AsyncMock()
@@ -103,8 +103,8 @@ class TestNewCommand:
         """A raising start_new_session leaves the current session's invites."""
         import pytest
 
-        from EvoScientist.commands.base import ChannelRuntime, CommandContext
-        from EvoScientist.commands.implementation.session import NewCommand
+        from metasci_scribe.commands.base import ChannelRuntime, CommandContext
+        from metasci_scribe.commands.implementation.session import NewCommand
 
         ui = MagicMock()
         ui.start_new_session = AsyncMock(side_effect=RuntimeError("gateway down"))

@@ -1,4 +1,4 @@
-"""Tests for EvoScientist.middleware.proactive_mode."""
+"""Tests for metasci_scribe.middleware.proactive_mode."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from EvoScientist.middleware.proactive_mode import (
+from metasci_scribe.middleware.proactive_mode import (
     ProactiveModeMiddleware,
     _read_proactive_mode,
     create_proactive_mode_middleware,
@@ -113,15 +113,15 @@ def test_factory_returns_middleware_instance():
 
 
 def _stack(workspace, **kwargs):
-    from EvoScientist.config.settings import EvoScientistConfig
-    from EvoScientist.EvoScientist import _get_default_middleware
+    from metasci_scribe.agent import _get_default_middleware
+    from metasci_scribe.config.settings import ScribeConfig
 
     model = MagicMock(profile={"max_input_tokens": 200_000})
     model.thinking = None
     model.reasoning = None
     return _get_default_middleware(
         workspace=workspace,
-        cfg=EvoScientistConfig(enable_ask_user=False),
+        cfg=ScribeConfig(enable_ask_user=False),
         chat_model=model,
         **kwargs,
     )
@@ -156,7 +156,7 @@ def test_compiled_deep_agent_calls_the_model_without_tools_on_a_proactive_run(
     from langchain_core.tools import tool
     from langgraph.checkpoint.memory import InMemorySaver
 
-    from EvoScientist.middleware.memory import create_memory_middleware
+    from metasci_scribe.middleware.memory import create_memory_middleware
 
     seen = []
     bound = {"tools": []}

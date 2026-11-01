@@ -13,8 +13,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from EvoScientist.llm.models import get_chat_model
-from EvoScientist.llm.registry import (
+from metasci_scribe.llm.models import get_chat_model
+from metasci_scribe.llm.registry import (
     _ANTHROPIC_ROUTED_PROVIDERS,
     _OPENAI_ROUTED_PROVIDERS,
 )
@@ -97,7 +97,7 @@ def test_explicit_key_used_without_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """An explicit api_key= kwarg is used as-is even when the provider's env
     var is unset and the vendor fallback key is present."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-vendor-fallback")
-    with patch("EvoScientist.llm.models.init_chat_model") as mock_init:
+    with patch("metasci_scribe.llm.models.init_chat_model") as mock_init:
         mock_init.return_value = MagicMock()
         get_chat_model("minimax-m3", provider="minimax", api_key="sk-explicit")
     assert mock_init.call_args[1]["api_key"] == "sk-explicit"
@@ -115,7 +115,7 @@ def test_minimax_with_own_key_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MINIMAX_API_KEY", "sk-minimax-test")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-vendor-must-not-be-used")
 
-    with patch("EvoScientist.llm.models.init_chat_model") as mock_init:
+    with patch("metasci_scribe.llm.models.init_chat_model") as mock_init:
         mock_init.return_value = MagicMock()
         model = get_chat_model("minimax-m3", provider="minimax")
 
@@ -133,7 +133,7 @@ def test_novita_with_own_key_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("NOVITA_API_KEY", "sk-novita-test")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-vendor-must-not-be-used")
 
-    with patch("EvoScientist.llm.models.init_chat_model") as mock_init:
+    with patch("metasci_scribe.llm.models.init_chat_model") as mock_init:
         mock_init.return_value = MagicMock()
         model = get_chat_model("moonshotai/kimi-k3", provider="novita")
 
@@ -166,14 +166,14 @@ def test_custom_placeholder_warns_once(
     emitted on the first build only and not repeated on the second."""
     monkeypatch.setenv(f"{prefix}_BASE_URL", "https://gw.example.com/v1")
     monkeypatch.delenv(f"{prefix}_API_KEY", raising=False)
-    from EvoScientist.llm import models
+    from metasci_scribe.llm import models
 
     # Temporarily replace the cache for this test; monkeypatch restores the
     # original (possibly populated) cache afterward so other providers keep
     # their once-per-provider state.
     monkeypatch.setattr(models, "_PLACEHOLDER_WARNED", set())
 
-    with patch("EvoScientist.llm.models.init_chat_model") as mock_init:
+    with patch("metasci_scribe.llm.models.init_chat_model") as mock_init:
         mock_init.return_value = MagicMock()
         # First build: warn.
         with pytest.warns(UserWarning, match=f"{prefix.lower()}_api_key"):
@@ -193,7 +193,7 @@ def test_custom_placeholder_warns_once(
 
 def test_native_openai_without_key_does_not_raise_routed_error() -> None:
     """Native openai should not hit the routed-provider key check."""
-    with patch("EvoScientist.llm.models.init_chat_model") as mock_init:
+    with patch("metasci_scribe.llm.models.init_chat_model") as mock_init:
         mock_init.return_value = MagicMock()
         model = get_chat_model("gpt-5.5", provider="openai")
 

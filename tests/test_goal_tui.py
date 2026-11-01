@@ -12,16 +12,16 @@ import pytest
 
 pytest.importorskip("textual")
 
-import EvoScientist.cli.tui_interactive as tui_mod
-from EvoScientist.cli.widgets.ask_user_widget import AskUserWidget
-from EvoScientist.cli.widgets.assistant_message import AssistantMessage
-from EvoScientist.cli.widgets.loading_widget import LoadingWidget
-from EvoScientist.cli.widgets.subagent_widget import SubAgentWidget
-from EvoScientist.cli.widgets.system_message import SystemMessage
-from EvoScientist.cli.widgets.user_message import UserMessage
-from EvoScientist.gateway import RuntimeGateways
-from EvoScientist.gateway.local import LocalGraphGateway
-from EvoScientist.paths import SessionDirs
+import metasci_scribe.cli.tui_interactive as tui_mod
+from metasci_scribe.cli.widgets.ask_user_widget import AskUserWidget
+from metasci_scribe.cli.widgets.assistant_message import AssistantMessage
+from metasci_scribe.cli.widgets.loading_widget import LoadingWidget
+from metasci_scribe.cli.widgets.subagent_widget import SubAgentWidget
+from metasci_scribe.cli.widgets.system_message import SystemMessage
+from metasci_scribe.cli.widgets.user_message import UserMessage
+from metasci_scribe.gateway import RuntimeGateways
+from metasci_scribe.gateway.local import LocalGraphGateway
+from metasci_scribe.paths import SessionDirs
 from tests.fakes.goal import OBJECTIVE, cli_goal_agent
 from tests.fakes.tui import (
     NoHistory,
@@ -149,7 +149,7 @@ async def test_accepting_a_goal_shows_one_user_message_and_runs_to_completion(
 async def test_while_the_draft_is_written_a_line_and_a_spinner_show(
     monkeypatch, workspace, tmp_path
 ):
-    from EvoScientist.middleware.goal import GoalDrafter
+    from metasci_scribe.middleware.goal import GoalDrafter
 
     # The graph may run on another loop than the test: a thread-safe flag.
     release = threading.Event()
@@ -185,8 +185,8 @@ async def test_while_the_draft_is_written_a_line_and_a_spinner_show(
 async def test_ctrl_c_while_the_draft_is_written_leaves_nothing_behind(
     monkeypatch, workspace, tmp_path
 ):
-    from EvoScientist.middleware.goal import GoalDrafter
-    from EvoScientist.stream import display as display_mod
+    from metasci_scribe.middleware.goal import GoalDrafter
+    from metasci_scribe.stream import display as display_mod
 
     release = threading.Event()
     real_draft = GoalDrafter.draft
@@ -359,7 +359,7 @@ async def test_the_review_question_is_brought_on_screen(
 ):
     """The user scrolled up while the criteria were drafted; the review needs
     an answer, so it must not open below the visible part of the chat."""
-    from EvoScientist.middleware.goal import GoalDrafter
+    from metasci_scribe.middleware.goal import GoalDrafter
 
     release = threading.Event()
     real_draft = GoalDrafter.draft
@@ -482,7 +482,7 @@ async def test_queued_commands_in_a_row_all_run(monkeypatch, workspace):
 
 
 async def test_ctrl_c_drops_what_was_queued_before_it(monkeypatch, workspace):
-    from EvoScientist.stream import display as display_mod
+    from metasci_scribe.stream import display as display_mod
 
     held = _HeldGateway()
     app = await capture_app(monkeypatch, workspace)
@@ -509,7 +509,7 @@ async def test_input_sent_after_ctrl_c_runs_when_the_stopped_turn_has_ended(
     """The stopped turn still closes down for a moment and the app is busy
     until it has. What the user sends meanwhile was entered after the
     interrupt, so it is not left sitting in the queue."""
-    from EvoScientist.stream import display as display_mod
+    from metasci_scribe.stream import display as display_mod
 
     steps = _StepGateway()
     steps.gate("second").set()
@@ -550,7 +550,7 @@ async def test_input_sent_after_ctrl_c_runs_when_the_stopped_turn_has_ended(
 async def test_input_sent_right_after_stopping_an_unstarted_turn_runs(
     monkeypatch, workspace
 ):
-    from EvoScientist.stream import display as display_mod
+    from metasci_scribe.stream import display as display_mod
 
     steps = _StepGateway()
     steps.gate("again").set()
@@ -751,7 +751,7 @@ async def test_a_command_cut_by_ctrl_c_leaves_a_channel_turns_input_off(
     until it ends, and the old command's end must not switch it on."""
     from unittest.mock import MagicMock
 
-    from EvoScientist.cli.channel import ChannelMessage, _register_channel_request
+    from metasci_scribe.cli.channel import ChannelMessage, _register_channel_request
 
     agent, _model = cli_goal_agent(tmp_path)
     app = await capture_app(monkeypatch, workspace)
@@ -814,7 +814,7 @@ async def test_a_second_ctrl_c_drops_the_handle_of_a_turn_that_never_ran(
     """A turn cancelled before its first step is done one loop step later and
     its release callback runs one step after that. Whatever takes the app in
     between must keep it when that callback arrives."""
-    from EvoScientist.stream import display as display_mod
+    from metasci_scribe.stream import display as display_mod
 
     steps = _StepGateway()
     app = await capture_app(monkeypatch, workspace)
@@ -879,7 +879,7 @@ async def test_ctrl_c_during_a_turns_cleanup_does_not_let_two_turns_run(
     """The turn has streamed its answer and reads the thread for the status
     bar. Ctrl+C there must stop that turn, not hand the app to the next one
     while this one can still release it and send the queue."""
-    from EvoScientist.stream import display as display_mod
+    from metasci_scribe.stream import display as display_mod
 
     steps = _StepGateway()
     steps.gate("first").set()
@@ -929,7 +929,7 @@ async def test_ctrl_c_during_a_turns_cleanup_does_not_let_two_turns_run(
 async def test_ctrl_c_before_a_dispatched_turn_starts_frees_the_app(
     monkeypatch, workspace
 ):
-    from EvoScientist.stream import display as display_mod
+    from metasci_scribe.stream import display as display_mod
 
     steps = _StepGateway()
     steps.gate("again").set()
@@ -955,7 +955,7 @@ async def test_ctrl_c_before_a_notifier_turn_starts_frees_the_app(
     monkeypatch, workspace
 ):
     """A background-task notification starts its turn the way typed input does."""
-    from EvoScientist.stream import display as display_mod
+    from metasci_scribe.stream import display as display_mod
 
     steps = _StepGateway()
     steps.gate("again").set()
@@ -1003,7 +1003,7 @@ async def test_ctrl_c_during_a_channel_turn_keeps_the_input_off(monkeypatch, wor
     restores it at its own end."""
     from unittest.mock import MagicMock
 
-    from EvoScientist.cli.channel import ChannelMessage, _register_channel_request
+    from metasci_scribe.cli.channel import ChannelMessage, _register_channel_request
 
     app = await capture_app(monkeypatch, workspace)
     msg = ChannelMessage(
@@ -1049,7 +1049,7 @@ async def test_ctrl_c_right_after_the_command_handed_over_frees_the_app(
 ):
     """The goal run is scheduled but has not run a step; stopping it there
     must not leave the app held by a run that never starts."""
-    from EvoScientist.stream import display as display_mod
+    from metasci_scribe.stream import display as display_mod
 
     agent, model = cli_goal_agent(tmp_path)
     app = await capture_app(monkeypatch, workspace)
@@ -1204,7 +1204,7 @@ async def test_a_command_whose_agent_load_fails_keeps_what_was_queued(
 
 async def test_a_turn_started_from_the_queue_can_be_stopped(monkeypatch, workspace):
     """It gets its handle like a typed turn: Ctrl+C must find it."""
-    from EvoScientist.stream import display as display_mod
+    from metasci_scribe.stream import display as display_mod
 
     steps = _StepGateway()
     app = await capture_app(monkeypatch, workspace)
@@ -1283,7 +1283,7 @@ async def test_input_sent_after_ctrl_c_in_a_finished_turns_cleanup_runs(
     """The turn has answered and reads the thread for the status bar; Ctrl+C
     cuts that read, and the user sends a message before the cut has gone
     through. The message was entered after the interrupt: it must run."""
-    from EvoScientist.stream import display as display_mod
+    from metasci_scribe.stream import display as display_mod
 
     steps = _StepGateway()
     steps.gate("first").set()
@@ -1322,8 +1322,8 @@ async def test_a_command_cut_by_ctrl_c_leaves_an_open_approval_alone(
     monkeypatch, workspace
 ):
     """The same with a tool approval open in the turn that took the app."""
-    from EvoScientist.channels import interaction as interaction_mod
-    from EvoScientist.cli.widgets.approval_widget import ApprovalWidget
+    from metasci_scribe.channels import interaction as interaction_mod
+    from metasci_scribe.cli.widgets.approval_widget import ApprovalWidget
     from tests.fakes.common import FakeGraphGateway, FakeThreadStore
     from tests.fakes.common import interrupt_event as _interrupt_event
 

@@ -12,7 +12,7 @@ import sys
 
 import pytest
 
-from EvoScientist.cli.commands import _resolve_stream_json_auto_mode
+from metasci_scribe.cli.commands import _resolve_stream_json_auto_mode
 
 
 @pytest.mark.parametrize(
@@ -34,9 +34,9 @@ def _overrides_for(monkeypatch, argv):
     aborting before the run actually starts."""
     from typer.testing import CliRunner
 
-    import EvoScientist.config as cfg_mod
-    from EvoScientist.cli._app import app
-    from EvoScientist.stream.console import console
+    import metasci_scribe.config as cfg_mod
+    from metasci_scribe.cli._app import app
+    from metasci_scribe.stream.console import console
 
     captured: dict[str, object] = {}
 
@@ -78,8 +78,8 @@ def test_no_auto_mode_writes_explicit_false_override(monkeypatch):
 
 def test_redirect_console_to_stderr():
     """redirect_console_to_stderr moves the shared console's output to stderr."""
-    from EvoScientist.stream.console import console
-    from EvoScientist.stream.json_sink import redirect_console_to_stderr
+    from metasci_scribe.stream.console import console
+    from metasci_scribe.stream.json_sink import redirect_console_to_stderr
 
     original = console.file
     try:
@@ -97,17 +97,17 @@ def _invoke(monkeypatch, argv):
     (dispatch-calls, CliRunner result)."""
     from typer.testing import CliRunner
 
-    import EvoScientist.cli.commands as cmds
-    import EvoScientist.cli.interactive as interactive_mod
-    import EvoScientist.config as cfg_mod
-    from EvoScientist.cli._app import app
-    from EvoScientist.config.settings import EvoScientistConfig
+    import metasci_scribe.cli.commands as cmds
+    import metasci_scribe.cli.interactive as interactive_mod
+    import metasci_scribe.config as cfg_mod
+    from metasci_scribe.cli._app import app
+    from metasci_scribe.config.settings import ScribeConfig
 
     calls: dict[str, object] = {}
 
     def _fake_config(overrides):
         """Return a minimal config honoring only the ui_backend override."""
-        cfg = EvoScientistConfig()
+        cfg = ScribeConfig()
         cfg.ui_backend = overrides.get("ui_backend") or "cli"
         return cfg
 

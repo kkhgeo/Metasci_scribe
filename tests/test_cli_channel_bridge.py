@@ -15,12 +15,12 @@ import threading
 
 import pytest
 
-from EvoScientist.channels import interaction as interaction_mod
-from EvoScientist.channels.bus.events import InboundMessage
-from EvoScientist.channels.bus.message_bus import MessageBus
-from EvoScientist.channels.channel_manager import ChannelManager
-from EvoScientist.cli import channel as channel_mod
-from EvoScientist.cli.channel import ChannelMessage
+from metasci_scribe.channels import interaction as interaction_mod
+from metasci_scribe.channels.bus.events import InboundMessage
+from metasci_scribe.channels.bus.message_bus import MessageBus
+from metasci_scribe.channels.channel_manager import ChannelManager
+from metasci_scribe.cli import channel as channel_mod
+from metasci_scribe.cli.channel import ChannelMessage
 from tests.fakes.common import QueueFakeChannel
 
 
@@ -52,7 +52,7 @@ def _clean_bridge_state():
 class TestReplyInterceptionOrdering:
     async def test_pending_reply_intercepted_not_enqueued(self, tmp_path):
         """A reply to a pending prompt resolves the wait and is NOT enqueued."""
-        from EvoScientist.cli.channel import _bus_inbound_consumer, _message_queue
+        from metasci_scribe.cli.channel import _bus_inbound_consumer, _message_queue
 
         bus = MessageBus()
         manager = ChannelManager(bus, media_dir=tmp_path)
@@ -90,7 +90,7 @@ class TestReplyInterceptionOrdering:
 
     async def test_message_without_pending_wait_is_enqueued(self, tmp_path):
         """With no pending prompt, a normal message flows to enqueue as before."""
-        from EvoScientist.cli.channel import _bus_inbound_consumer, _message_queue
+        from metasci_scribe.cli.channel import _bus_inbound_consumer, _message_queue
 
         bus = MessageBus()
         manager = ChannelManager(bus, media_dir=tmp_path)

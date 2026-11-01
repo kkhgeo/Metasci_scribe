@@ -1,5 +1,5 @@
 """Tests for the record of where config-mapped environment variables came from
-(EvoScientist.config.settings) and its use in the settings API's ``sources``."""
+(metasci_scribe.config.settings) and its use in the settings API's ``sources``."""
 
 from __future__ import annotations
 
@@ -11,17 +11,17 @@ from pathlib import Path
 
 import pytest
 
-from EvoScientist.config import settings
-from EvoScientist.config.settings import (
+from metasci_scribe.config import settings
+from metasci_scribe.config.settings import (
     _ENV_MAPPINGS,
-    EvoScientistConfig,
+    ScribeConfig,
     apply_config_to_env,
     config_value_origin,
     env_origin,
     get_config_path,
     get_effective_config,
 )
-from EvoScientist.langgraph_dev import settings_api
+from metasci_scribe.langgraph_dev import settings_api
 
 
 @pytest.fixture(autouse=True)
@@ -55,7 +55,7 @@ class TestConfigValueOrigin:
         assert config_value_origin("langgraph_dev_port", 9000) == "cli"
 
     def test_default(self):
-        default = EvoScientistConfig().langgraph_dev_port
+        default = ScribeConfig().langgraph_dev_port
         assert config_value_origin("langgraph_dev_port", default) == "default"
 
     def test_workdir_compares_expanded_paths(self, config_file):
@@ -85,10 +85,10 @@ class TestRecording:
 
     def test_a_flag_override_is_cli(self):
         apply_config_to_env(get_effective_config({"dangerous_mode": True}))
-        assert env_origin("EVOSCIENTIST_DANGEROUS_MODE") == {"source": "cli"}
+        assert env_origin("METASCI_SCRIBE_DANGEROUS_MODE") == {"source": "cli"}
         # Turned off again: the variable is removed, and so is its record.
-        apply_config_to_env(EvoScientistConfig())
-        assert env_origin("EVOSCIENTIST_DANGEROUS_MODE") is None
+        apply_config_to_env(ScribeConfig())
+        assert env_origin("METASCI_SCRIBE_DANGEROUS_MODE") is None
 
     def test_dotenv_records_its_path(self, tmp_path, monkeypatch):
         _use_dotenv(tmp_path, monkeypatch)
@@ -99,7 +99,7 @@ class TestRecording:
         }
 
     def test_ccproxy(self, monkeypatch):
-        from EvoScientist.ccproxy_manager import setup_ccproxy_env
+        from metasci_scribe.ccproxy_manager import setup_ccproxy_env
 
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         setup_ccproxy_env(9999)
@@ -111,7 +111,7 @@ def test_the_server_reads_and_removes_the_record():
     """Read once at import; removed so the agent's commands never inherit it."""
     code = (
         "import os, json\n"
-        "from EvoScientist.config import settings\n"
+        "from metasci_scribe.config import settings\n"
         "print(json.dumps([os.environ.get(settings.ENV_ORIGINS_VAR), "
         "settings.env_origin('OPENAI_API_KEY')]))"
     )
@@ -156,14 +156,14 @@ class TestSources:
         }
 
     def test_launcher_workspace_is_not_shadowed(self, monkeypatch):
-        settings.record_env_origin("EVOSCIENTIST_WORKSPACE_DIR", "default")
-        monkeypatch.setenv("EVOSCIENTIST_WORKSPACE_DIR", os.getcwd())
+        settings.record_env_origin("METASCI_SCRIBE_WORKSPACE_DIR", "default")
+        monkeypatch.setenv("METASCI_SCRIBE_WORKSPACE_DIR", os.getcwd())
         sources = settings_api.read_settings()["sources"]
         assert sources["default_workdir"] == {"source": "default", "shadowed": False}
 
     def test_a_port_flag_is_cli_and_shadowed(self, monkeypatch):
-        settings.record_env_origin("EVOSCIENTIST_LANGGRAPH_DEV_PORT", "cli")
-        monkeypatch.setenv("EVOSCIENTIST_LANGGRAPH_DEV_PORT", "9000")
+        settings.record_env_origin("METASCI_SCRIBE_LANGGRAPH_DEV_PORT", "cli")
+        monkeypatch.setenv("METASCI_SCRIBE_LANGGRAPH_DEV_PORT", "9000")
         sources = settings_api.read_settings()["sources"]
         assert sources["langgraph_dev_port"] == {"source": "cli", "shadowed": True}
 
@@ -178,7 +178,7 @@ class TestSources:
         assert body["restart_fields"] == ["openai_api_key"]
 
     def test_auto_approve_flag_needs_no_restart(self, config_file):
-        """A server started by ``EvoSci --auto-approve`` compares the file with
+        """A server started by ``metasci-scribe --auto-approve`` compares the file with
         the file, so the flag is no change."""
         config_file.write_text("auto_approve: false\n", encoding="utf-8")
         apply_config_to_env(get_effective_config({"auto_approve": True}))
@@ -190,20 +190,20 @@ class TestServerRecord:
     """What start_langgraph_dev records for the workspace, port and host."""
 
     def test_a_dotenv_port_keeps_its_source(self, tmp_path, monkeypatch):
-        from EvoScientist.langgraph_dev.manager import _server_env_origins
+        from metasci_scribe.langgraph_dev.manager import _server_env_origins
 
         dotenv = tmp_path / ".env"
-        dotenv.write_text("EVOSCIENTIST_LANGGRAPH_DEV_PORT=6297\n", encoding="utf-8")
+        dotenv.write_text("METASCI_SCRIBE_LANGGRAPH_DEV_PORT=6297\n", encoding="utf-8")
         monkeypatch.setattr(settings, "find_dotenv", lambda *a, **k: str(dotenv))
         get_effective_config()
         origins = _server_env_origins(str(tmp_path), "6297", "127.0.0.1")
-        assert origins["EVOSCIENTIST_LANGGRAPH_DEV_PORT"] == {
+        assert origins["METASCI_SCRIBE_LANGGRAPH_DEV_PORT"] == {
             "source": "dotenv",
             "path": str(dotenv),
         }
 
     def test_a_symlinked_workdir_reads_file(self, config_file, tmp_path):
-        from EvoScientist.langgraph_dev.manager import _server_env_origins
+        from metasci_scribe.langgraph_dev.manager import _server_env_origins
 
         real = tmp_path / "real"
         real.mkdir()
@@ -216,7 +216,7 @@ class TestServerRecord:
             json.dumps({"default_workdir": str(link)}), encoding="utf-8"
         )
         origins = _server_env_origins(str(real.resolve()), "6174", "127.0.0.1")
-        assert origins["EVOSCIENTIST_WORKSPACE_DIR"] == {"source": "file"}
+        assert origins["METASCI_SCRIBE_WORKSPACE_DIR"] == {"source": "file"}
 
 
 def test_an_unreadable_config_file_does_not_stop_a_start(config_file):
@@ -227,7 +227,7 @@ def test_an_unreadable_config_file_does_not_stop_a_start(config_file):
 
 
 def test_apply_config_to_env_reads_the_file_once(config_file, monkeypatch):
-    from EvoScientist.config import store
+    from metasci_scribe.config import store
 
     config_file.write_text(
         "openai_api_key: sk-file-1\ntavily_api_key: tvly-file-2\n"

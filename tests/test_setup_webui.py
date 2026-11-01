@@ -1,4 +1,4 @@
-"""Tests for the WebUI setup stage (``EvoScientist/setup/webui.py``)."""
+"""Tests for the WebUI setup stage (``metasci_scribe/setup/webui.py``)."""
 
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pytest
 
-from EvoScientist.setup import STAGES, webui
-from EvoScientist.setup.protocol import ERROR_CODES, StageError
+from metasci_scribe.setup import STAGES, webui
+from metasci_scribe.setup.protocol import ERROR_CODES, StageError
 
 REG = "https://registry.npmjs.org"
 
@@ -82,9 +82,9 @@ class FakeRegistry:
 def env(tmp_path, monkeypatch):
     """Isolated DATA_DIR with a space and non-ASCII characters; fake registry
     and probe; no override of the range."""
-    from EvoScientist import paths
+    from metasci_scribe import paths
 
-    data = tmp_path.resolve() / "Jan Kowalski ąę" / ".evoscientist"
+    data = tmp_path.resolve() / "Jan Kowalski ąę" / ".metasci-scribe"
     monkeypatch.setattr(paths, "DATA_DIR", data)
     monkeypatch.delenv(webui.COMPAT_ENV, raising=False)
     monkeypatch.setattr(webui, "_failed_install", None)
@@ -158,7 +158,7 @@ def test_invalid_compat_override_is_ignored_with_a_warning(monkeypatch, caplog):
     ],
 )
 def test_registry_priority(monkeypatch, tmp_path, user, mirror, expected):
-    from EvoScientist.setup import node
+    from metasci_scribe.setup import node
 
     monkeypatch.setattr(node, "configured_npm_registry", lambda env, exe: user)
     assert webui.registry_url(mirror, tmp_path / "node") == expected
@@ -404,7 +404,7 @@ _FAKE_SERVER = textwrap.dedent(
     LOGO = {logo}
     class H(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
-            ok = self.path == "/" or (self.path == "/evoscientist-logo.png" and LOGO)
+            ok = self.path == "/" or (self.path == "/metasci-scribe-logo.png" and LOGO)
             self.send_response(200 if ok else 404)
             self.end_headers()
         def log_message(self, *a):
@@ -436,7 +436,7 @@ def test_probe_fails_when_the_logo_is_missing(tmp_path):
     with pytest.raises(StageError) as exc:
         webui.probe(_fake_copy(tmp_path, logo=False), Path(sys.executable), timeout=30)
     assert exc.value.code == "probe_failed"
-    assert "evoscientist-logo.png" in exc.value.message
+    assert "metasci-scribe-logo.png" in exc.value.message
 
 
 def test_probe_fails_with_the_output_when_the_server_exits(tmp_path):
@@ -459,7 +459,7 @@ def test_stage_runs_after_research_env():
 
 
 def test_run_stage_reports_the_installed_copy(env, monkeypatch):
-    from EvoScientist.setup import node
+    from metasci_scribe.setup import node
 
     monkeypatch.setattr(
         node,
@@ -476,7 +476,7 @@ def test_run_stage_reports_the_installed_copy(env, monkeypatch):
 def test_run_stage_reports_a_node_download_under_the_webui_stage(env, monkeypatch):
     """``--stage webui`` / ``--skip node`` on a machine without Node: the Node
     download is visible, not a silent wait."""
-    from EvoScientist.setup import node
+    from metasci_scribe.setup import node
 
     def ensure_node(mirror, progress=None):
         progress(0.5, "Downloading Node 24.21.0")

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from EvoScientist.rubric_text import RubricTextError, read_rubric_text
+from metasci_scribe.rubric_text import RubricTextError, read_rubric_text
 
 
 class TestReadRubricText:
@@ -50,7 +50,7 @@ class TestReadRubricText:
 
 class TestRubricSession:
     def _session(self):
-        from EvoScientist.rubric_session import RubricSession
+        from metasci_scribe.rubric_session import RubricSession
 
         return RubricSession()
 
@@ -93,7 +93,10 @@ class TestRubricSession:
 
 class TestConfigurableExtra:
     def test_rubric_extra_carries_mode_and_the_threads_changes(self):
-        from EvoScientist.rubric_session import RubricSession, rubric_configurable_extra
+        from metasci_scribe.rubric_session import (
+            RubricSession,
+            rubric_configurable_extra,
+        )
 
         session = RubricSession()
         session.record("t", next="- n")
@@ -110,7 +113,10 @@ class TestConfigurableExtra:
         }
 
     def test_a_notifier_turn_carries_no_changes_and_leaves_them_pending(self):
-        from EvoScientist.rubric_session import RubricSession, rubric_configurable_extra
+        from metasci_scribe.rubric_session import (
+            RubricSession,
+            rubric_configurable_extra,
+        )
 
         session = RubricSession()
         session.record("t", sticky="- b")
@@ -120,7 +126,7 @@ class TestConfigurableExtra:
         assert [op["sticky"] for op in session.changes_for("t")] == ["- b"]
 
     def test_merge_skips_empty_parts_and_returns_none_when_nothing_is_left(self):
-        from EvoScientist.rubric_session import merge_configurable_extra
+        from metasci_scribe.rubric_session import merge_configurable_extra
 
         assert merge_configurable_extra(None, {"a": 1}, {}, {"b": 2}) == {
             "a": 1,
@@ -132,7 +138,7 @@ class TestConfigurableExtra:
 
 class TestRubricBadge:
     def test_badge_from_thread_values(self):
-        from EvoScientist.rubric_session import rubric_badge
+        from metasci_scribe.rubric_session import rubric_badge
 
         assert rubric_badge({}, []) is None
         assert (
@@ -148,7 +154,7 @@ class TestRubricBadge:
         assert rubric_badge(both, []) == "on+next"
 
     def test_pending_operations_overlay_the_thread_values(self):
-        from EvoScientist.rubric_session import rubric_badge
+        from metasci_scribe.rubric_session import rubric_badge
 
         pending_set = [{"session": "x", "seq": 1, "sticky": "- s"}]
         assert rubric_badge({}, pending_set) == "on"
@@ -171,7 +177,7 @@ class TestRubricBadge:
 
 class TestValuesForBadge:
     def test_rebuilds_the_two_slots_from_a_badge(self):
-        from EvoScientist.rubric_session import rubric_badge, values_for_badge
+        from metasci_scribe.rubric_session import rubric_badge, values_for_badge
 
         for badge in (None, "on", "next", "on+next"):
             assert rubric_badge(values_for_badge(badge), []) == badge
@@ -183,7 +189,7 @@ class TestValuesForBadge:
 
 
 def _server_gateway():
-    from EvoScientist.gateway.server import LangGraphServerGateway
+    from metasci_scribe.gateway.server import LangGraphServerGateway
 
     return object.__new__(LangGraphServerGateway)
 
@@ -191,7 +197,7 @@ def _server_gateway():
 def test_runs_in_process_goes_by_the_gateway_that_executes():
     from types import SimpleNamespace
 
-    from EvoScientist.rubric_session import runs_in_process
+    from metasci_scribe.rubric_session import runs_in_process
 
     assert runs_in_process(object()) is True
     assert runs_in_process(_server_gateway()) is False
@@ -201,7 +207,7 @@ def test_runs_in_process_goes_by_the_gateway_that_executes():
 
 
 def test_only_the_sessions_own_thread_on_the_local_gateway_is_marked():
-    from EvoScientist.rubric_session import RubricSession, thread_run_extra
+    from metasci_scribe.rubric_session import RubricSession, thread_run_extra
 
     session = RubricSession()
     session.record("mine", sticky="- a")
@@ -227,8 +233,8 @@ def test_only_the_sessions_own_thread_on_the_local_gateway_is_marked():
 
 
 async def test_acknowledge_applied_drops_operations_and_sets_the_badge(tmp_path):
-    from EvoScientist.paths import SessionDirs, Workspace
-    from EvoScientist.rubric_session import RubricSession, acknowledge_applied
+    from metasci_scribe.paths import SessionDirs, Workspace
+    from metasci_scribe.rubric_session import RubricSession, acknowledge_applied
     from tests.fakes.common import FakeGraphGateway
 
     session = RubricSession()

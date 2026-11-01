@@ -1,5 +1,5 @@
-"""Tests for the config file's write path (EvoScientist.config.store) and the
-shared setting validation in EvoScientist.config.settings."""
+"""Tests for the config file's write path (metasci_scribe.config.store) and the
+shared setting validation in metasci_scribe.config.settings."""
 
 from __future__ import annotations
 
@@ -15,11 +15,11 @@ from unittest.mock import patch
 import pytest
 import yaml
 
-from EvoScientist.config import store
-from EvoScientist.config.settings import (
+from metasci_scribe.config import store
+from metasci_scribe.config.settings import (
     API_KEY_FIELDS,
     SECRET_FIELDS,
-    EvoScientistConfig,
+    ScribeConfig,
     SettingsError,
     display_config_value,
     get_config_path,
@@ -65,7 +65,7 @@ class TestParseGuard:
             store.read_config_mapping()
         assert info.value.line is not None
         assert "sk-secret" not in str(info.value)
-        assert "EvoSci config reset" in str(info.value)
+        assert "metasci-scribe config reset" in str(info.value)
 
     def test_a_top_level_list_is_refused(self, config_file):
         config_file.write_text("- a\n- b\n", encoding="utf-8")
@@ -191,8 +191,8 @@ class TestAtomicWrite:
             real_replace(src, dst)
 
         with (
-            patch("EvoScientist.config.store.os.replace", side_effect=flaky),
-            patch("EvoScientist.config.store.time.sleep"),
+            patch("metasci_scribe.config.store.os.replace", side_effect=flaky),
+            patch("metasci_scribe.config.store.time.sleep"),
         ):
             set_config_value("model", "m1")
         assert len(calls) == 3
@@ -202,10 +202,10 @@ class TestAtomicWrite:
         config_file.write_text("model: m1\n", encoding="utf-8")
         with (
             patch(
-                "EvoScientist.config.store.os.replace",
+                "metasci_scribe.config.store.os.replace",
                 side_effect=PermissionError("in use"),
             ),
-            patch("EvoScientist.config.store.time.sleep"),
+            patch("metasci_scribe.config.store.time.sleep"),
             pytest.raises(PermissionError),
         ):
             set_config_value("model", "m2")
@@ -240,7 +240,7 @@ class TestLock:
             with pytest.raises(store.ConfigLockedError) as info:
                 set_config_value("model", "m1")
             assert time.monotonic() - start < 10
-            assert "EvoSci onboard" in str(info.value)
+            assert "metasci-scribe onboard" in str(info.value)
         finally:
             holder.kill()
             holder.wait()
@@ -308,11 +308,11 @@ class TestValidateSetting:
 
 class TestSecrets:
     def test_every_secret_is_a_config_field(self):
-        names = {f.name for f in fields(EvoScientistConfig)}
+        names = {f.name for f in fields(ScribeConfig)}
         assert SECRET_FIELDS <= names
 
     def test_every_api_key_field_is_listed(self):
-        names = {f.name for f in fields(EvoScientistConfig)}
+        names = {f.name for f in fields(ScribeConfig)}
         assert {n for n in names if n.endswith("_api_key")} == API_KEY_FIELDS
 
     def test_mimo_token_plan_base_url_is_not_a_secret(self):
@@ -340,7 +340,7 @@ class TestSecrets:
 def test_config_list_does_not_print_channel_secrets(config_file):
     from typer.testing import CliRunner
 
-    from EvoScientist.cli.commands import config_app
+    from metasci_scribe.cli.commands import config_app
 
     config_file.write_text(
         "telegram_bot_token: 123456:SECRETTOKEN\nopenai_api_key: sk-abcdefgh1234\n",
@@ -351,7 +351,7 @@ def test_config_list_does_not_print_channel_secrets(config_file):
     from rich.console import Console
 
     # The module's rich console is bound at import; render what it was given.
-    with patch("EvoScientist.cli.commands.console.print") as printed:
+    with patch("metasci_scribe.cli.commands.console.print") as printed:
         result = CliRunner().invoke(config_app, ["list"])
     assert result.exit_code == 0, result.output
     out = io.StringIO()
@@ -368,10 +368,10 @@ def test_config_list_does_not_print_channel_secrets(config_file):
 def test_config_set_explains_a_refused_value(config_file):
     from typer.testing import CliRunner
 
-    from EvoScientist.cli.commands import config_app
+    from metasci_scribe.cli.commands import config_app
 
     # The module's rich console is bound at import, so read what it printed.
-    with patch("EvoScientist.cli.commands.console.print") as printed:
+    with patch("metasci_scribe.cli.commands.console.print") as printed:
         result = CliRunner().invoke(config_app, ["set", "provider", "nope"])
     assert result.exit_code == 1
     assert "unknown provider" in " ".join(
@@ -382,12 +382,12 @@ def test_config_set_explains_a_refused_value(config_file):
 def test_config_set_explains_a_write_that_keeps_failing(config_file):
     from typer.testing import CliRunner
 
-    from EvoScientist.cli.commands import config_app
+    from metasci_scribe.cli.commands import config_app
 
     config_file.write_text("model: m1\n", encoding="utf-8")
     with (
         patch.object(store, "_replace", side_effect=PermissionError("in use")),
-        patch("EvoScientist.cli.commands.console.print") as printed,
+        patch("metasci_scribe.cli.commands.console.print") as printed,
     ):
         result = CliRunner().invoke(config_app, ["set", "model", "m2"])
     assert result.exit_code == 1
@@ -398,17 +398,17 @@ def test_config_set_explains_a_write_that_keeps_failing(config_file):
 
 class TestWizard:
     def test_refuses_an_unparseable_file_before_asking(self, config_file):
-        from EvoScientist.config.onboard.wizard import run_onboard
+        from metasci_scribe.config.onboard.wizard import run_onboard
 
         config_file.write_bytes(BROKEN)
-        with patch("EvoScientist.config.onboard.wizard._run_onboard") as inner:
+        with patch("metasci_scribe.config.onboard.wizard._run_onboard") as inner:
             with pytest.raises(store.ConfigParseError):
                 run_onboard()
         inner.assert_not_called()
         assert config_file.read_bytes() == BROKEN
 
     def test_holds_the_lock_while_it_runs(self, config_file):
-        from EvoScientist.config.onboard.wizard import run_onboard
+        from metasci_scribe.config.onboard.wizard import run_onboard
 
         seen = {}
 
@@ -424,11 +424,11 @@ class TestWizard:
             t.start()
             t.join()
             # The wizard's own saves re-enter the lock.
-            save_config(EvoScientistConfig(model="from-wizard"))
+            save_config(ScribeConfig(model="from-wizard"))
             return True
 
         with patch(
-            "EvoScientist.config.onboard.wizard._run_onboard", side_effect=inner
+            "metasci_scribe.config.onboard.wizard._run_onboard", side_effect=inner
         ):
             assert run_onboard() is True
         assert seen == {"locked": True}
@@ -444,11 +444,11 @@ def test_number_must_be_finite(value):
 def test_onboard_exits_1_when_refused(config_file):
     from typer.testing import CliRunner
 
-    import EvoScientist.cli.commands  # noqa: F401  registers the commands
-    from EvoScientist.cli._app import app
+    import metasci_scribe.cli.commands  # noqa: F401  registers the commands
+    from metasci_scribe.cli._app import app
 
     config_file.write_bytes(BROKEN)
-    with patch("EvoScientist.cli.commands.console.print"):
+    with patch("metasci_scribe.cli.commands.console.print"):
         result = CliRunner().invoke(app, ["onboard", "--non-interactive"])
     assert result.exit_code == 1
     assert config_file.read_bytes() == BROKEN
@@ -457,8 +457,8 @@ def test_onboard_exits_1_when_refused(config_file):
 def test_channel_setup_holds_the_lock_while_it_asks(config_file, monkeypatch):
     from typer.testing import CliRunner
 
-    import EvoScientist.cli.commands  # noqa: F401  registers the commands
-    from EvoScientist.cli._app import app
+    import metasci_scribe.cli.commands  # noqa: F401  registers the commands
+    from metasci_scribe.cli._app import app
 
     monkeypatch.setattr(store, "_LOCK_TIMEOUT", 0.2)
     seen = {}
@@ -476,8 +476,10 @@ def test_channel_setup_holds_the_lock_while_it_asks(config_file, monkeypatch):
         return {"channel_enabled": "telegram"}
 
     with (
-        patch("EvoScientist.config.onboard.channels._step_channels", side_effect=step),
-        patch("EvoScientist.cli.commands.console.print"),
+        patch(
+            "metasci_scribe.config.onboard.channels._step_channels", side_effect=step
+        ),
+        patch("metasci_scribe.cli.commands.console.print"),
     ):
         result = CliRunner().invoke(app, ["channel", "setup"])
     assert result.exit_code == 0, result.output

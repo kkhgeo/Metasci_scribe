@@ -1,0 +1,752 @@
+"""LLM model configuration based on LangChain init_chat_model.
+
+This module provides a unified interface for creating chat model instances
+with support for multiple providers (Anthropic, OpenAI, Google GenAI, Atlas
+Cloud, MiniMax (Anthropic-compatible), NVIDIA, SiliconFlow, OpenRouter, Requesty,
+Novita, Opper, Xiaomi MiMo (Anthropic-compatible), ZhipuAI, Volcengine,
+DashScope, DashScope-Code, DeepSeek, Ollama, and custom OpenAI/Anthropic-
+compatible endpoints) and convenient short names for common models.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import warnings
+from typing import Any
+from urllib.parse import urlparse
+
+from langchain.chat_models import init_chat_model
+
+from ..config.settings import (
+    OPENROUTER_DEFAULT_APP_CATEGORIES,
+    OPENROUTER_DEFAULT_APP_TITLE,
+    OPENROUTER_DEFAULT_HTTP_REFERER,
+)
+from .context_window import apply_known_context_window
+from .deepseek import EvoChatDeepSeek
+from .patches import (
+    _patch_anthropic_strip_foreign_reasoning,
+    _patch_anthropic_structured_output,
+    _patch_openai_compat_content,
+    _patch_openai_responses_whole_tool_args,
+    _patch_openrouter_structured_output,
+)
+from .registry import (
+    _ANTHROPIC_ROUTED_PROVIDERS,
+    _MODEL_ENTRIES,
+    _OPENAI_ROUTED_PROVIDERS,
+    _THINKING_CAPABLE_PROVIDERS,
+    DEFAULT_MODEL,
+    MODELS,
+    UnknownModelError,
+    _is_mandatory_thinking_kimi,
+    _openrouter_needs_json_schema,  # noqa: F401 — re-exported
+    get_model_info,  # noqa: F401 — re-exported for existing import sites
+    get_models_for_provider,  # noqa: F401 — re-exported for existing import sites
+    list_model_picker_entries,  # noqa: F401 — re-exported for existing import sites
+    list_models,  # noqa: F401 — re-exported for existing import sites
+    list_models_by_provider,  # noqa: F401 — re-exported for existing import sites
+)
+
+_ANTHROPIC_BASE_URL_OVERRIDE_ENV: dict[str, str] = {
+    "minimax": "MINIMAX_BASE_URL",
+    "xiaomi-token-plan": "MIMO_TOKEN_PLAN_BASE_URL",
+}
+
+
+# Reasoning levels on one scale. One level is stored for every model (main,
+# auxiliary, fallbacks); a route listed here accepts only a slice of the
+# scale, so a level outside it is sent as the nearest one it accepts.
+_REASONING_SCALE = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
+_ROUTE_REASONING_LEVELS: dict[str, tuple[str, ...]] = {
+    "chatgpt": ("low", "medium", "high", "xhigh", "max"),
+}
+
+
+def _resolve_reasoning_effort(default: str, route: str) -> str:
+    """Return the configured reasoning effort (or ``default``) as ``route`` takes it."""
+    effort = os.environ.get("METASCI_SCRIBE_REASONING_EFFORT", "").strip() or default
+    levels = _ROUTE_REASONING_LEVELS.get(route)
+    if not levels or effort in levels or effort not in _REASONING_SCALE:
+        return effort
+    rank = _REASONING_SCALE.index(effort)
+    return min(levels, key=lambda level: abs(_REASONING_SCALE.index(level) - rank))
+
+
+# Qwen 3.8 Max canonical levels and documented OpenAI alias mappings:
+# https://docs.qwencloud.com/api-reference/chat/openai-chat#reasoning-effort
+_DASHSCOPE_QWEN38_REASONING_EFFORTS = frozenset(
+    {"none", "minimal", "low", "medium", "high", "xhigh", "max"}
+)
+
+
+def _validate_dashscope_reasoning_effort(
+    provider: str,
+    model_id: str,
+    effort: str,
+) -> None:
+    """Reject reasoning levels unsupported by DashScope Qwen 3.8 Max."""
+    if effort not in _DASHSCOPE_QWEN38_REASONING_EFFORTS:
+        choices = ", ".join(sorted(_DASHSCOPE_QWEN38_REASONING_EFFORTS))
+        raise ValueError(
+            f"Unsupported METASCI_SCRIBE_REASONING_EFFORT={effort!r} for "
+            f"{provider} model {model_id!r}. Supported values: {choices}."
+        )
+
+
+def _apply_openai_compat_reasoning_config(
+    provider: str,
+    model_id: str,
+    kwargs: dict[str, Any],
+) -> None:
+    """Apply reasoning controls supported by OpenAI-compatible providers.
+
+    Routed providers deliberately skip the native-OpenAI branch in
+    :func:`_apply_auto_config`, because most compatible endpoints reject
+    OpenAI-only ``reasoning`` payloads.  A small subset does support the
+    standard ``reasoning_effort`` field, though:
+
+    * DashScope Qwen 3.8 Max supports ``low`` / ``medium`` / ``xhigh`` and
+      maps the OpenAI aliases (including ``none``).  Its server default is
+      extremely large, so use the standard ``medium`` level unless the user
+      selected another level.
+    * ``custom-openai`` is user-owned.  Forward an *explicit* setting only;
+      with no setting, preserve compatibility with endpoints that reject the
+      field (including many non-reasoning OpenAI-compatible APIs).
+
+    Explicit caller kwargs always win.
+    """
+    configured = os.environ.get("METASCI_SCRIBE_REASONING_EFFORT", "").strip()
+    short_model_id = model_id.rsplit("/", 1)[-1]
+
+    if provider == "dashscope" and short_model_id.startswith("qwen3.8-max"):
+        if "reasoning_effort" not in kwargs:
+            effort = configured or "medium"
+            _validate_dashscope_reasoning_effort(provider, model_id, effort)
+            kwargs["reasoning_effort"] = effort
+        return
+
+    if provider == "opper" and configured:
+        # Opper's compat ChatRequest accepts the standard OpenAI
+        # ``reasoning_effort`` field, but the pool spans reasoning and
+        # non-reasoning models, so forward an explicit setting only rather
+        # than defaulting one on the user's behalf.
+        kwargs.setdefault("reasoning_effort", configured)
+        return
+
+    if provider == "custom-openai" and configured:
+        kwargs.setdefault("reasoning_effort", configured)
+
+
+def _is_deepseek_endpoint(base_url: str | None) -> bool:
+    """Return whether an OpenAI-compatible endpoint is DeepSeek's API."""
+    if not base_url:
+        return False
+    try:
+        return urlparse(base_url).hostname == "api.deepseek.com"
+    except ValueError:
+        return False
+
+
+_TRUTHY_ENV_VALUES = {"1", "true", "yes", "on"}
+_FALSEY_ENV_VALUES = {"0", "false", "no", "off"}
+
+# OpenRouter app attribution (issue #339). Default values are the single source
+# of truth in config/settings.py (imported above); langchain-openrouter maps
+# app_url → HTTP-Referer, app_title → X-Title, app_categories →
+# X-OpenRouter-Categories. OpenRouter honors at most this many categories per
+# request (server-side limit) and silently ignores the rest, so the sent list is
+# capped to this many below. https://openrouter.ai/docs/app-attribution
+_OPENROUTER_MAX_CATEGORIES_PER_REQUEST = 2
+
+
+def _env_flag_enabled(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in _TRUTHY_ENV_VALUES
+
+
+def _env_flag_disabled(name: str) -> bool:
+    value = os.environ.get(name)
+    return value is not None and value.strip().lower() in _FALSEY_ENV_VALUES
+
+
+# Providers for which a placeholder-key warning has already been emitted, so
+# the message is not repeated on every model build (once per process).
+_PLACEHOLDER_WARNED: set[str] = set()
+
+
+def _require_routed_api_key(
+    provider: str,
+    api_key_env: str,
+    kwargs: dict[str, Any],
+    *,
+    allow_placeholder: bool = False,
+) -> str:
+    """Resolve a routed provider's API key, or fail fast.
+
+    A routed provider (one that shares the OpenAI / Anthropic vendor SDK but
+    points at a different ``base_url``) must not silently fall back to the
+    vendor key, which would send the routed provider's requests to the wrong
+    host with the user's vendor credentials.
+
+    Args:
+        provider: Name of the routed provider (e.g. ``"minimax"``).
+        api_key_env: Environment variable name for the provider's own key.
+        kwargs: Keyword arguments passed through to ``get_chat_model``.
+        allow_placeholder: When True, inject ``"not-needed"`` instead of
+            raising (used by ``custom-*`` providers, which cover keyless
+            local servers such as vLLM / LM Studio).
+
+    Returns:
+        The resolved API key (env var, explicit kwarg, or ``"not-needed"``).
+
+    Raises:
+        ValueError: with a clear message naming the missing env var.
+    """
+    # Read the env var once; callers use the returned value and don't re-read it.
+    api_key = os.environ.get(api_key_env, "")
+    if api_key:
+        return api_key
+    if kwargs.get("api_key"):
+        return kwargs["api_key"]
+    if allow_placeholder:
+        # Gateways that used to authenticate with OPENAI_API_KEY /
+        # ANTHROPIC_API_KEY need to set CUSTOM_*_API_KEY explicitly -- users
+        # never see docstrings, so warn once and name the config key.
+        if provider not in _PLACEHOLDER_WARNED:
+            _PLACEHOLDER_WARNED.add(provider)
+            warnings.warn(
+                f"No `{api_key_env.lower()}` is set; sending a placeholder key. "
+                "Set it if your endpoint requires authentication.",
+                UserWarning,
+                stacklevel=3,
+            )
+        return "not-needed"
+    raise ValueError(
+        f"The '{provider}' provider requires an API key. Please set the "
+        f"{api_key_env} environment variable (or configure it in your "
+        "config.yaml / .env) before using this provider."
+    )
+
+
+def _supports_openrouter_anthropic_prompt_cache(
+    provider: str | None, model_id: str
+) -> bool:
+    """Return whether Metasci Scribe should declare Claude caching for a router.
+
+    OpenRouter and Requesty are OpenAI-compatible routers that forward an
+    Anthropic-style ``cache_control`` declaration through to Claude models
+    addressed as ``anthropic/...``. Opper takes the same top-level declaration,
+    but addresses Claude by bare pool id (``claude-sonnet-4-6``) or by a
+    route-pinned ``provider/claude-...`` id, so it matches on the short name.
+    Implicit caching is handled upstream for most providers, but Claude prompt
+    caching needs the explicit declaration.
+    """
+    if provider == "opper":
+        return model_id.rsplit("/", 1)[-1].startswith("claude-")
+    return provider in ("openrouter", "requesty") and model_id.startswith(
+        ("anthropic/", "~anthropic/")
+    )
+
+
+def _has_cache_control_override(kwargs: dict[str, Any]) -> bool:
+    """Return whether the caller already supplied cache-control settings."""
+    if "cache_control" in kwargs:
+        return True
+    model_kwargs = kwargs.get("model_kwargs")
+    if model_kwargs is None:
+        return False
+    if not isinstance(model_kwargs, dict):
+        warnings.warn(
+            "OpenRouter Anthropic prompt caching was not applied because "
+            "`model_kwargs` is not a dict; pass cache_control explicitly or use "
+            "a dict-shaped model_kwargs.",
+            UserWarning,
+            stacklevel=3,
+        )
+        return True
+    return "cache_control" in model_kwargs
+
+
+def _apply_openrouter_anthropic_prompt_cache(
+    provider: str | None,
+    model_id: str,
+    kwargs: dict[str, Any],
+) -> None:
+    """Declare router Claude prompt caching unless explicitly disabled.
+
+    OpenRouter, Requesty and Opper handle implicit caching for most providers,
+    but Claude prompt caching needs an Anthropic-style cache-control
+    declaration. Each router honours its own opt-out env flag
+    (``METASCI_SCRIBE_OPENROUTER_ANTHROPIC_PROMPT_CACHE`` /
+    ``METASCI_SCRIBE_REQUESTY_ANTHROPIC_PROMPT_CACHE`` /
+    ``METASCI_SCRIBE_OPPER_ANTHROPIC_PROMPT_CACHE``).
+    """
+    if provider is None:
+        return
+    disable_flag = {
+        "openrouter": "METASCI_SCRIBE_OPENROUTER_ANTHROPIC_PROMPT_CACHE",
+        "requesty": "METASCI_SCRIBE_REQUESTY_ANTHROPIC_PROMPT_CACHE",
+        "opper": "METASCI_SCRIBE_OPPER_ANTHROPIC_PROMPT_CACHE",
+    }.get(provider)
+    if disable_flag is not None and _env_flag_disabled(disable_flag):
+        return
+    if not _supports_openrouter_anthropic_prompt_cache(provider, model_id):
+        return
+    if _has_cache_control_override(kwargs):
+        return
+    kwargs.setdefault("model_kwargs", {})["cache_control"] = {"type": "ephemeral"}
+
+
+def _enable_openrouter_429_retry(chat_model: Any) -> None:
+    """Add 429 to the OpenRouter SDK's retryable status codes (default ["5XX"]).
+
+    Upstream rate limits ("temporarily rate-limited upstream", whose
+    Retry-After the SDK backoff already honors) otherwise fail the run outright.
+    """
+    sdk_config = getattr(getattr(chat_model, "client", None), "sdk_configuration", None)
+    retry_config: Any = getattr(sdk_config, "retry_config", None)
+    # Skip the UNSET sentinel (max_retries=0) and explicit caller overrides.
+    if not hasattr(retry_config, "status_codes_override"):
+        return
+    if retry_config.status_codes_override:
+        return
+    retry_config.status_codes_override = ["429", "5XX"]
+
+
+# Claude models from before adaptive thinking (4.6). A closed set, so any newer id,
+# including one langchain-anthropic has no profile for yet, counts as current.
+_PRE_ADAPTIVE_CLAUDE = re.compile(
+    r"claude-(3|(haiku|sonnet|opus)-4-[015](-|$)|(sonnet|opus)-4-\d{8})"
+)
+
+
+def _is_current_claude(model_id: str) -> bool:
+    return model_id.startswith("claude-") and not _PRE_ADAPTIVE_CLAUDE.match(model_id)
+
+
+def _fill_claude_structured_output(chat_model: Any, model_id: str) -> None:
+    """Declare native structured output for a current Claude id that
+    langchain-anthropic has no profile for yet; without it agents fall back to
+    forced tool calling, which newer Claude models reject."""
+    if not _is_current_claude(model_id):
+        return
+    profile = getattr(chat_model, "profile", None)
+    if isinstance(profile, dict) and "structured_output" in profile:
+        return
+    base = profile if isinstance(profile, dict) else {}
+    try:
+        chat_model.profile = {**base, "structured_output": True}
+    except Exception:
+        pass
+
+
+def _apply_auto_config(
+    provider: str,
+    model_id: str,
+    is_third_party: bool,
+    kwargs: dict[str, Any],
+    original_provider: str | None = None,
+    *,
+    chatgpt_signin: bool = False,
+) -> None:
+    """Auto-enable provider-specific features (thinking, reasoning, etc.).
+
+    Mutates *kwargs* in place.  Only sets keys that the caller hasn't already
+    provided, so explicit user settings are never overridden.
+    """
+    # Current Claude models all output up to 128K (their profiles agree); without a
+    # profile langchain-anthropic falls back to 4096. Applies on every route.
+    if provider == "anthropic" and _is_current_claude(model_id):
+        kwargs.setdefault("max_tokens", 128000)
+
+    # Anthropic: extended thinking
+    if provider == "anthropic" and "thinking" not in kwargs:
+        _supports_thinking = original_provider in _THINKING_CAPABLE_PROVIDERS
+        # Detect local proxy (e.g. ccproxy): thinking blocks in conversation
+        # history cause 422 errors because the proxy doesn't accept 'thinking'
+        # as a valid content block type on round-trip.
+        if not is_third_party:
+            base_url = os.environ.get("ANTHROPIC_BASE_URL", "")
+            _is_proxy = "127.0.0.1" in base_url or "localhost" in base_url
+        else:
+            _is_proxy = False
+        if _is_proxy or (is_third_party and not _supports_thinking):
+            # Mandatory-thinking Kimi models (K3 / Kimi For Coding) must declare
+            # thinking so with_structured_output avoids forced tool_choice (400).
+            # max_tokens must exceed budget_tokens (default resolves to 4096).
+            if is_third_party and _is_mandatory_thinking_kimi(model_id):
+                kwargs["thinking"] = {"type": "enabled", "budget_tokens": 10000}
+                kwargs.setdefault("max_tokens", 16000)
+        elif _is_current_claude(model_id):
+            kwargs["thinking"] = {"type": "adaptive", "display": "summarized"}
+            kwargs.setdefault("effort", "max")
+        elif original_provider == "minimax":
+            # MiniMax takes only `adaptive` (M3.1 Flash rejects `disabled`), no budget.
+            kwargs["thinking"] = {"type": "adaptive"}
+        else:
+            kwargs["thinking"] = {"type": "enabled", "budget_tokens": 10000}
+
+    # OpenAI (native, not third-party routed): reasoning
+    if provider == "openai" and not is_third_party and "reasoning" not in kwargs:
+        _default_effort = (
+            "xhigh"
+            if (
+                "5.4" in model_id
+                or "5.5" in model_id
+                or "5.6" in model_id
+                or "codex" in model_id
+            )
+            else "high"
+        )
+        _eff = _resolve_reasoning_effort(
+            _default_effort, "chatgpt" if chatgpt_signin else "openai"
+        )
+        kwargs["reasoning"] = {"effort": _eff, "summary": "auto"}
+
+    # Google GenAI: surface thinking traces
+    if provider == "google-genai":
+        kwargs.setdefault("include_thoughts", True)
+
+    # Ollama: separate reasoning content from response for thinking models
+    if provider == "ollama" and "reasoning" not in kwargs:
+        kwargs["reasoning"] = True
+
+
+def get_chat_model(
+    model: str | None = None,
+    provider: str | None = None,
+    **kwargs: Any,
+) -> Any:
+    """Get a chat model instance.
+
+    Args:
+        model: Model name (short name like 'claude-sonnet-5-5' or a full model
+               ID). Defaults to DEFAULT_MODEL.
+        provider: Override the provider (e.g., 'anthropic', 'openai').
+                  If not specified, inferred from model name or defaults to 'anthropic'.
+        **kwargs: Additional arguments passed to init_chat_model (e.g., temperature).
+
+    Returns:
+        A LangChain chat model instance.
+
+    Examples:
+        >>> model = get_chat_model()  # Uses default (claude-sonnet-5-5)
+        >>> model = get_chat_model("claude-opus-5-5")  # Use short name
+        >>> model = get_chat_model("gpt-4o")  # OpenAI model
+        >>> model = get_chat_model("claude-3-opus-20240229", provider="anthropic")  # Full ID
+    """
+    model = model or DEFAULT_MODEL
+
+    # Look up short name in registry (provider-aware)
+    model_id = None
+    if provider:
+        # Try exact match with provider first
+        for name, mid, p in _MODEL_ENTRIES:
+            if name == model and p == provider:
+                model_id = mid
+                break
+    # Routers keep to their own entries: another provider's id may name an
+    # older or different model there.
+    if (
+        model_id is None
+        and model in MODELS
+        and provider not in ("openrouter", "requesty")
+    ):
+        model_id, default_provider = MODELS[model]
+        provider = provider or default_provider
+
+    if model_id is None:
+        # Assume it's a full model ID
+        model_id = model
+        # Try to infer provider from model ID prefix
+        if provider is None:
+            if model_id.startswith(("claude-", "anthropic")):
+                provider = "anthropic"
+            elif model_id.startswith(("gpt-", "o1", "davinci", "text-")):
+                provider = "openai"
+            elif model_id.startswith("gemini"):
+                provider = "google-genai"
+            elif model_id.startswith("ollama:"):
+                provider = "ollama"
+                model_id = model_id.removeprefix("ollama:")
+            else:
+                provider = "anthropic"  # Default fallback
+
+    # Routers address models as ``vendor/model``; a bare id here is a short
+    # name outside this router's list.
+    if provider in ("openrouter", "requesty") and "/" not in model_id:
+        raise UnknownModelError(
+            f"Model {model!r} is not in Metasci Scribe's {provider} model list "
+            "(it may have been removed). Pick one with `/model <name> --save`, "
+            "`metasci-scribe config set model <name>` or `metasci-scribe onboard`, or set the "
+            f"full vendor/model ID as {provider} lists it."
+        )
+
+    # Anthropic base_url override (e.g. ccproxy at localhost:8000/api/v1)
+    _is_third_party = (
+        provider in _OPENAI_ROUTED_PROVIDERS or provider in _ANTHROPIC_ROUTED_PROVIDERS
+    )
+    _chatgpt_signin = False
+    _original_provider: str | None = None
+    if provider == "anthropic":
+        base_url = os.environ.get("ANTHROPIC_BASE_URL", "")
+        if base_url:
+            kwargs["base_url"] = base_url
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if api_key:
+            kwargs["api_key"] = api_key
+
+    # ChatGPT sign-in: the plan's own endpoint and token, so no key or base_url.
+    elif (
+        provider == "openai"
+        and os.environ.get("METASCI_SCRIBE_OPENAI_AUTH_MODE") == "oauth"
+    ):
+        _chatgpt_signin = True
+
+    # Native OpenAI base_url override (e.g. a local OpenAI-compatible server)
+    elif provider == "openai":
+        base_url = os.environ.get("OPENAI_BASE_URL", "")
+        if base_url:
+            kwargs["base_url"] = base_url
+        api_key = os.environ.get("OPENAI_API_KEY", "")
+        if api_key:
+            kwargs["api_key"] = api_key
+
+    elif provider == "deepseek":
+        api_key = os.environ.get("DEEPSEEK_API_KEY", "")
+        if api_key:
+            kwargs["api_key"] = api_key
+
+    # OpenAI-routed providers → route through OpenAI provider with base_url
+    elif provider in _OPENAI_ROUTED_PROVIDERS:
+        _original_provider = provider
+        base_url_default, api_key_env = _OPENAI_ROUTED_PROVIDERS[provider]
+        if provider == "custom-openai":
+            base_url = os.environ.get("CUSTOM_OPENAI_BASE_URL", "")
+            if not base_url:
+                raise ValueError(
+                    "CUSTOM_OPENAI_BASE_URL environment variable is required when using "
+                    "the 'custom-openai' provider. Please set it to your "
+                    "OpenAI-compatible API endpoint URL (e.g. https://api.openai.com/v1)."
+                )
+            base_url = base_url.rstrip("/")
+        else:
+            base_url = base_url_default
+        if base_url:
+            kwargs["base_url"] = base_url
+        kwargs["api_key"] = _require_routed_api_key(
+            provider,
+            api_key_env,
+            kwargs,
+            allow_placeholder=provider == "custom-openai",
+        )
+        _apply_openai_compat_reasoning_config(provider, model_id, kwargs)
+        # SiliconFlow: disable thinking — LangChain drops reasoning_content
+        # from history, causing error 20015 on multi-turn requests.
+        if provider == "siliconflow":
+            kwargs.setdefault("extra_body", {})["enable_thinking"] = False
+        # Moonshot: disable thinking for pre-K3 models (K2.x, still served to
+        # existing users until the end of 2026) so LangChain does not drop
+        # reasoning_content, which causes multi-turn errors (error 20015).
+        # kimi-k3+ is exempt: always-thinking, and Moonshot's K3 guide forbids
+        # the K2.x `thinking` parameter for it.
+        if provider == "moonshot" and not model_id.startswith("kimi-k3"):
+            kwargs.setdefault("extra_body", {})["thinking"] = {"type": "disabled"}
+        provider = "openai"
+
+    # OpenRouter → native ChatOpenRouter via init_chat_model.
+    elif provider == "openrouter":
+        _is_third_party = True
+        api_key = os.environ.get("OPENROUTER_API_KEY", "")
+        if api_key:
+            kwargs["api_key"] = api_key
+        # Reasoning via `effort` + `summary: "auto"` so a readable reasoning
+        # summary is returned for display; langchain-openrouter drops the
+        # ephemeral `rs_` ids before replaying encrypted reasoning items.
+        # Note: mandatory-reasoning endpoints (kimi-k3, grok-4.5, …) reject
+        # effort "none" with HTTP 400 — that error is surfaced to the user
+        # as-is; pick a real effort (low+) for those models.
+        effort = _resolve_reasoning_effort("high", "openrouter")
+        kwargs.setdefault("reasoning", {"effort": effort, "summary": "auto"})
+        # App attribution (issue #339): identify Metasci Scribe to OpenRouter so
+        # usage is credited to the project (app rankings, model app tabs,
+        # analytics) rather than langchain-openrouter's LangChain-branded
+        # defaults. setdefault so an explicit caller kwarg wins; values are
+        # configurable via METASCI_SCRIBE_OPENROUTER_* env (fed from the config
+        # file by apply_config_to_env). Applied only here, so no other provider
+        # ever receives these kwargs.
+        kwargs.setdefault(
+            "app_url",
+            os.environ.get("METASCI_SCRIBE_OPENROUTER_HTTP_REFERER", "").strip()
+            or OPENROUTER_DEFAULT_HTTP_REFERER,
+        )
+        kwargs.setdefault(
+            "app_title",
+            os.environ.get("METASCI_SCRIBE_OPENROUTER_APP_TITLE", "").strip()
+            or OPENROUTER_DEFAULT_APP_TITLE,
+        )
+        # OpenRouter keys app pages by HTTP-Referer and X-Title only renames that
+        # page, so a custom title on the default referer would rename the shared
+        # Metasci Scribe page for everyone. Honor it only with a custom referer.
+        if kwargs["app_url"] == OPENROUTER_DEFAULT_HTTP_REFERER:
+            kwargs["app_title"] = OPENROUTER_DEFAULT_APP_TITLE
+        # app_categories must be a list[str] (langchain-openrouter joins it into
+        # the X-OpenRouter-Categories header); split the comma-separated config
+        # value and drop blanks so a stray comma/space can't emit an empty one.
+        _app_categories_raw = (
+            os.environ.get("METASCI_SCRIBE_OPENROUTER_APP_CATEGORIES", "").strip()
+            or OPENROUTER_DEFAULT_APP_CATEGORIES
+        )
+        _app_categories = [
+            c.strip() for c in _app_categories_raw.split(",") if c.strip()
+        ]
+        # Cap to the per-request limit and warn, so a misconfigured extra is
+        # dropped predictably here (and surfaced to the user) rather than being
+        # silently truncated server-side.
+        _limit = _OPENROUTER_MAX_CATEGORIES_PER_REQUEST
+        if len(_app_categories) > _limit:
+            warnings.warn(
+                f"OpenRouter accepts at most {_limit} app categories per "
+                f"request, so only the first {_limit} are sent: "
+                f"{_app_categories[:_limit]}. Ignoring the rest: "
+                f"{_app_categories[_limit:]}. Set "
+                f"METASCI_SCRIBE_OPENROUTER_APP_CATEGORIES (or the "
+                f"openrouter_app_categories config) to at most {_limit} "
+                f"categories to silence this warning.",
+                UserWarning,
+                stacklevel=2,
+            )
+            _app_categories = _app_categories[:_limit]
+        if _app_categories:
+            kwargs.setdefault("app_categories", _app_categories)
+        _patch_openrouter_structured_output()
+
+    # Anthropic-routed providers → route through Anthropic provider with base_url
+    elif provider in _ANTHROPIC_ROUTED_PROVIDERS:
+        _original_provider = provider
+        base_url_default, api_key_env = _ANTHROPIC_ROUTED_PROVIDERS[provider]
+        if provider == "custom-anthropic":
+            base_url = os.environ.get("CUSTOM_ANTHROPIC_BASE_URL", "")
+            if not base_url:
+                raise ValueError(
+                    "CUSTOM_ANTHROPIC_BASE_URL environment variable is required when using "
+                    "the 'custom-anthropic' provider. Please set it to your "
+                    "Anthropic-compatible API endpoint URL (e.g. https://api.anthropic.com)."
+                )
+            base_url = base_url.rstrip("/")
+        elif provider in _ANTHROPIC_BASE_URL_OVERRIDE_ENV:
+            # A blank override must fall back, or ChatAnthropic defaults to
+            # api.anthropic.com and sends this provider's key there.
+            override = os.environ.get(_ANTHROPIC_BASE_URL_OVERRIDE_ENV[provider], "")
+            base_url = (override.strip() or base_url_default).rstrip("/")
+        else:
+            base_url = base_url_default
+        if base_url:
+            kwargs["base_url"] = base_url
+        kwargs["api_key"] = _require_routed_api_key(
+            provider,
+            api_key_env,
+            kwargs,
+            allow_placeholder=provider == "custom-anthropic",
+        )
+        # Kimi Coding Plan requires claude-code User-Agent header
+        if provider == "kimi-coding":
+            kwargs.setdefault("default_headers", {})["User-Agent"] = "claude-code/0.1.0"
+        # MiMo and MiniMax ids have no langchain profile, so ChatAnthropic would
+        # fall back to 4096; use the 131072 both vendors document instead.
+        if provider in ("xiaomi", "xiaomi-token-plan", "minimax"):
+            kwargs.setdefault("max_tokens", 131072)
+        provider = "anthropic"
+
+    elif provider == "ollama":
+        base_url = os.environ.get("OLLAMA_BASE_URL", "")
+        if base_url:
+            kwargs["base_url"] = base_url
+
+    _apply_auto_config(
+        provider,
+        model_id,
+        _is_third_party,
+        kwargs,
+        _original_provider,
+        chatgpt_signin=_chatgpt_signin,
+    )
+    # OpenAI-routed routers (e.g. Requesty) reassign ``provider`` to "openai"
+    # above, so use the original provider name to detect router-level caching.
+    _cache_provider = _original_provider or provider
+    _apply_openrouter_anthropic_prompt_cache(_cache_provider, model_id, kwargs)
+
+    _uses_native_deepseek = provider == "deepseek" or (
+        provider == "openai"
+        and _original_provider == "custom-openai"
+        and _is_deepseek_endpoint(kwargs.get("base_url"))
+    )
+
+    # User-level override for the OpenAI Responses API vs Chat Completions.
+    # When "false", force Chat Completions and drop reasoning (which triggers
+    # the Responses API path in langchain-openai). Only applies to OpenAI.
+    if _uses_native_deepseek:
+        if kwargs.get("use_responses_api") is True:
+            raise ValueError(
+                "DeepSeek does not support the OpenAI Responses API. "
+                "Remove use_responses_api=True."
+            )
+        kwargs.pop("use_responses_api", None)
+    elif provider == "openai" and not _chatgpt_signin:
+        _responses_api_setting = (
+            os.environ.get("METASCI_SCRIBE_USE_RESPONSES_API", "").strip().lower()
+        )
+        if _responses_api_setting == "false":
+            kwargs["use_responses_api"] = False
+            kwargs.pop("reasoning", None)
+        elif _responses_api_setting == "true":
+            kwargs["use_responses_api"] = True
+
+    # The Codex backend carries reasoning across turns only when asked to.
+    if _chatgpt_signin:
+        reasoning = kwargs.setdefault("reasoning", {})
+        if isinstance(reasoning, dict):
+            reasoning = dict(reasoning)
+            reasoning.setdefault("context", "all_turns")
+            kwargs["reasoning"] = reasoning
+
+    if _uses_native_deepseek:
+        chat_model = EvoChatDeepSeek(model=model_id, **kwargs)
+    elif _chatgpt_signin:
+        from .chatgpt_oauth import build_model
+
+        _patch_openai_responses_whole_tool_args()
+        chat_model = build_model(model_id, **kwargs)
+    else:
+        chat_model = init_chat_model(model=model_id, model_provider=provider, **kwargs)
+
+    # Flatten list content to strings for strict OpenAI-compatible providers
+    # (SiliconFlow, OpenRouter, custom-openai, etc.), to avoid "sequence expected
+    # string" errors.
+    # Moonshot and Kimi Coding support standard format, no patch needed.
+    # Mandatory-thinking Kimi models on Anthropic-routed endpoints are exempt:
+    # flatten drops thinking blocks, which Kimi requires on tool-call turns.
+    _no_patch_providers = {"moonshot", "kimi-coding"}
+    if (
+        _is_third_party
+        and _original_provider not in _no_patch_providers
+        and not _uses_native_deepseek
+        and not (provider == "anthropic" and _is_mandatory_thinking_kimi(model_id))
+        and _original_provider not in _ANTHROPIC_ROUTED_PROVIDERS
+    ):
+        # Anthropic-routed providers accept media in tool results natively;
+        # only OpenAI-compatible providers need tool-media hoisting.
+        _patch_openai_compat_content(chat_model)
+
+    if provider == "openrouter":
+        _enable_openrouter_429_retry(chat_model)
+
+    if provider == "anthropic":
+        _patch_anthropic_strip_foreign_reasoning()
+        _patch_anthropic_structured_output()
+        _fill_claude_structured_output(chat_model, model_id)
+
+    apply_known_context_window(chat_model)
+
+    return chat_model

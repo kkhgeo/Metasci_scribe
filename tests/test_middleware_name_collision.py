@@ -1,5 +1,5 @@
 """deepagents 0.7.0 merges caller middleware into its default stack by `.name`:
-a name match silently REPLACES the built-in. None of EvoScientist's middleware
+a name match silently REPLACES the built-in. None of Metasci Scribe's middleware
 may collide unintentionally. TodoListMiddleware is deliberately absent from
 the forbidden set: we pass it on purpose and replacing a profile-added
 instance (e.g. the Codex harness profile's) with our identical one is
@@ -25,7 +25,7 @@ DEEPAGENTS_BASE_STACK_NAMES = {
 
 
 def test_no_name_collision_with_deepagents_base_stack(workspace):
-    from EvoScientist.EvoScientist import _get_default_middleware
+    from metasci_scribe.agent import _get_default_middleware
 
     ours = {m.name for m in _get_default_middleware(workspace=workspace)}
     assert not ours & DEEPAGENTS_BASE_STACK_NAMES
@@ -38,16 +38,16 @@ def test_no_name_collision_with_deepagents_base_stack(workspace):
 
 
 @patch(
-    "EvoScientist.middleware.create_tool_selector_middleware",
+    "metasci_scribe.middleware.create_tool_selector_middleware",
     return_value=[MagicMock(), MagicMock()],
 )
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
-@patch("EvoScientist.EvoScientist._ensure_config")
+@patch("metasci_scribe.agent._ensure_chat_model")
+@patch("metasci_scribe.agent._ensure_config")
 def test_backend_summarization_is_the_only_deliberate_collision(
     mock_config, mock_model, mock_ts, workspace
 ):
-    from EvoScientist.EvoScientist import _get_default_middleware
-    from EvoScientist.middleware.summarization import (
+    from metasci_scribe.agent import _get_default_middleware
+    from metasci_scribe.middleware.summarization import (
         _PerRunLimitsSummarizationMiddleware,
     )
 

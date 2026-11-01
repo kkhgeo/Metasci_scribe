@@ -11,21 +11,21 @@ from unittest.mock import MagicMock, patch
 import pytest
 from langgraph_sdk.errors import NotFoundError
 
-from EvoScientist.cli.channel import (
+from metasci_scribe.cli.channel import (
     forget_channel_origin,
     get_channel_origin,
     restore_channel_origin,
 )
-from EvoScientist.cli.commands import _serve_turn_metadata
-from EvoScientist.commands.base import ChannelRuntime
-from EvoScientist.paths import SessionDirs
-from EvoScientist.proactive.serve import (
+from metasci_scribe.cli.commands import _serve_turn_metadata
+from metasci_scribe.commands.base import ChannelRuntime
+from metasci_scribe.paths import SessionDirs
+from metasci_scribe.proactive.serve import (
     ORIGIN_METADATA_KEYS,
     ProactiveServe,
     origin_from_row,
     origin_run_metadata,
 )
-from EvoScientist.sessions import AGENT_NAME, latest_origin_checkpoints
+from metasci_scribe.sessions import AGENT_NAME, latest_origin_checkpoints
 
 RESERVED_REQUEST_METADATA_KEYS = {
     "thread_id",
@@ -76,7 +76,7 @@ def test_origin_without_reply_handles_clears_the_metadata_key():
 
 
 def test_an_origin_value_that_does_not_encode_is_dropped_with_a_warning(caplog):
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.proactive.serve"):
+    with caplog.at_level(logging.WARNING, logger="metasci_scribe.proactive.serve"):
         meta = origin_run_metadata(_origin({"thread_ts": object()}))
     assert meta["origin_metadata"] == ""
     assert meta["origin_chat_id"] == "C1"
@@ -163,7 +163,7 @@ def db(tmp_path):
             "CREATE TABLE checkpoints (thread_id TEXT, checkpoint_ns TEXT, "
             "checkpoint_id TEXT, metadata TEXT)"
         )
-    with patch("EvoScientist.sessions.get_db_path", return_value=path):
+    with patch("metasci_scribe.sessions.get_db_path", return_value=path):
         yield path
 
 
@@ -217,7 +217,7 @@ async def test_latest_origin_checkpoints_takes_the_newest_flag(db):
 
 
 async def test_latest_origin_checkpoints_without_a_table_is_empty(tmp_path):
-    with patch("EvoScientist.sessions.get_db_path", return_value=tmp_path / "x.db"):
+    with patch("metasci_scribe.sessions.get_db_path", return_value=tmp_path / "x.db"):
         assert await latest_origin_checkpoints() == []
 
 

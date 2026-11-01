@@ -16,11 +16,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from EvoScientist.subagents.expert_container import build_expert_subagent_specs
-from EvoScientist.subagents.expert_container_async import (
+from metasci_scribe.subagents.expert_container import build_expert_subagent_specs
+from metasci_scribe.subagents.expert_container_async import (
     build_expert_async_subagent_specs,
 )
-from EvoScientist.tools.skills_manager import SkillInfo
+from metasci_scribe.tools.skills_manager import SkillInfo
 
 
 def _skill(name: str) -> SkillInfo:
@@ -44,7 +44,7 @@ class TestBuildExpertAsyncSubagentSpecs:
     def test_empty_when_async_disabled(self, workspace):
         cfg = SimpleNamespace(enable_async_subagents=False)
         with patch(
-            "EvoScientist.tools.skills_manager.list_expert_skills",
+            "metasci_scribe.tools.skills_manager.list_expert_skills",
             return_value=[_skill("literature-review")],
         ):
             specs = build_expert_async_subagent_specs(cfg=cfg, workspace=workspace)
@@ -54,11 +54,11 @@ class TestBuildExpertAsyncSubagentSpecs:
         cfg = SimpleNamespace(enable_async_subagents=True, langgraph_dev_port=6174)
         with (
             patch(
-                "EvoScientist.tools.skills_manager.list_expert_skills",
+                "metasci_scribe.tools.skills_manager.list_expert_skills",
                 return_value=[_skill("literature-review")],
             ),
             patch(
-                "EvoScientist.langgraph_dev.manager.is_async_subagents_available",
+                "metasci_scribe.langgraph_dev.manager.is_async_subagents_available",
                 return_value=False,
             ),
         ):
@@ -75,11 +75,11 @@ class TestBuildExpertAsyncSubagentSpecs:
         ]
         with (
             patch(
-                "EvoScientist.tools.skills_manager.list_expert_skills",
+                "metasci_scribe.tools.skills_manager.list_expert_skills",
                 return_value=skills,
             ),
             patch(
-                "EvoScientist.langgraph_dev.manager.is_async_subagents_available",
+                "metasci_scribe.langgraph_dev.manager.is_async_subagents_available",
                 return_value=True,
             ),
         ):
@@ -109,11 +109,11 @@ class TestBuildExpertAsyncSubagentSpecs:
         skills[1].body = ""
         with (
             patch(
-                "EvoScientist.tools.skills_manager.list_expert_skills",
+                "metasci_scribe.tools.skills_manager.list_expert_skills",
                 return_value=skills,
             ),
             patch(
-                "EvoScientist.langgraph_dev.manager.is_async_subagents_available",
+                "metasci_scribe.langgraph_dev.manager.is_async_subagents_available",
                 return_value=True,
             ),
         ):
@@ -135,11 +135,11 @@ class TestBuildExpertAsyncSubagentSpecs:
         blank_actor.expert_body = "   \n"  # SKILL.md body is fine; actor isn't
         with (
             patch(
-                "EvoScientist.tools.skills_manager.list_expert_skills",
+                "metasci_scribe.tools.skills_manager.list_expert_skills",
                 return_value=[healthy, blank_actor],
             ),
             patch(
-                "EvoScientist.langgraph_dev.manager.is_async_subagents_available",
+                "metasci_scribe.langgraph_dev.manager.is_async_subagents_available",
                 return_value=True,
             ),
         ):
@@ -161,20 +161,20 @@ class TestBuildExpertAsyncSubagentSpecs:
         ]
         with (
             patch(
-                "EvoScientist.tools.skills_manager.list_expert_skills",
+                "metasci_scribe.tools.skills_manager.list_expert_skills",
                 return_value=skills,
             ),
             patch(
-                "EvoScientist.langgraph_dev.manager.is_async_subagents_available",
+                "metasci_scribe.langgraph_dev.manager.is_async_subagents_available",
                 return_value=True,
             ),
             patch(
-                "EvoScientist.subagents.expert_container._reserved_subagent_names",
+                "metasci_scribe.subagents.expert_container._reserved_subagent_names",
                 return_value=frozenset({"writing-agent", "general-purpose"}),
             ),
             caplog.at_level(
                 logging.WARNING,
-                logger="EvoScientist.subagents.expert_container_async",
+                logger="metasci_scribe.subagents.expert_container_async",
             ),
         ):
             specs = build_expert_async_subagent_specs(cfg=cfg, workspace=workspace)
@@ -199,20 +199,20 @@ class TestBuildExpertAsyncSubagentSpecs:
         ]
         with (
             patch(
-                "EvoScientist.tools.skills_manager.list_expert_skills",
+                "metasci_scribe.tools.skills_manager.list_expert_skills",
                 return_value=skills,
             ),
             patch(
-                "EvoScientist.langgraph_dev.manager.is_async_subagents_available",
+                "metasci_scribe.langgraph_dev.manager.is_async_subagents_available",
                 return_value=True,
             ),
             patch(
-                "EvoScientist.subagents.expert_container._reserved_subagent_names",
+                "metasci_scribe.subagents.expert_container._reserved_subagent_names",
                 return_value=frozenset({"general-purpose"}),
             ),
             caplog.at_level(
                 logging.WARNING,
-                logger="EvoScientist.subagents.expert_container_async",
+                logger="metasci_scribe.subagents.expert_container_async",
             ),
         ):
             specs = build_expert_async_subagent_specs(cfg=cfg, workspace=workspace)
@@ -245,7 +245,7 @@ class TestBuildExpertSubagentSpecsCoversEveryExpert:
             _skill("panel-expert"),
         ]
         with patch(
-            "EvoScientist.tools.skills_manager.list_expert_skills",
+            "metasci_scribe.tools.skills_manager.list_expert_skills",
             return_value=skills,
         ):
             specs = build_expert_subagent_specs(tool_registry={}, workspace=workspace)
@@ -278,13 +278,13 @@ class TestRouteAsyncSpecs:
         )
 
     def test_sync_subagents_pass_through(self, workspace):
-        from EvoScientist.EvoScientist import _route_async_specs_through_evo_middleware
+        from metasci_scribe.agent import _route_async_specs_through_evo_middleware
 
         subs = [{"name": "sync-a", "system_prompt": ""}]
         middleware: list = []
         # Disable async path via cfg + patched reachability.
         with patch(
-            "EvoScientist.langgraph_dev.manager.is_async_subagents_available",
+            "metasci_scribe.langgraph_dev.manager.is_async_subagents_available",
             return_value=False,
         ):
             result = _route_async_specs_through_evo_middleware(
@@ -294,8 +294,8 @@ class TestRouteAsyncSpecs:
         assert middleware == []  # no async → no middleware added
 
     def test_async_specs_moved_to_middleware(self, workspace):
-        from EvoScientist.EvoScientist import _route_async_specs_through_evo_middleware
-        from EvoScientist.middleware.expert_async_subagent import (
+        from metasci_scribe.agent import _route_async_specs_through_evo_middleware
+        from metasci_scribe.middleware.expert_async_subagent import (
             EvoAsyncSubAgentMiddleware,
         )
 
@@ -311,7 +311,7 @@ class TestRouteAsyncSpecs:
         middleware: list = []
         # Disable expert-async fold-in to isolate the standard-spec routing.
         with patch(
-            "EvoScientist.langgraph_dev.manager.is_async_subagents_available",
+            "metasci_scribe.langgraph_dev.manager.is_async_subagents_available",
             return_value=False,
         ):
             result = _route_async_specs_through_evo_middleware(
@@ -324,8 +324,8 @@ class TestRouteAsyncSpecs:
         assert isinstance(middleware[0], EvoAsyncSubAgentMiddleware)
 
     def test_expert_async_specs_merged_in(self, workspace):
-        from EvoScientist.EvoScientist import _route_async_specs_through_evo_middleware
-        from EvoScientist.middleware.expert_async_subagent import (
+        from metasci_scribe.agent import _route_async_specs_through_evo_middleware
+        from metasci_scribe.middleware.expert_async_subagent import (
             EvoAsyncSubAgentMiddleware,
         )
 
@@ -335,11 +335,11 @@ class TestRouteAsyncSpecs:
         # Enable expert-async by patching skills list + reachability.
         with (
             patch(
-                "EvoScientist.tools.skills_manager.list_expert_skills",
+                "metasci_scribe.tools.skills_manager.list_expert_skills",
                 return_value=[_skill("literature-review")],
             ),
             patch(
-                "EvoScientist.langgraph_dev.manager.is_async_subagents_available",
+                "metasci_scribe.langgraph_dev.manager.is_async_subagents_available",
                 return_value=True,
             ),
         ):

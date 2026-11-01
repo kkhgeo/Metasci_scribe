@@ -1,7 +1,7 @@
 """Tests for the environment ``start_langgraph_dev`` gives the server.
 
-The server always runs with ``EVOSCIENTIST_SERVER_PROCESS`` set; the parent
-process and a plain ``import EvoScientist`` leave it unset.
+The server always runs with ``METASCI_SCRIBE_SERVER_PROCESS`` set; the parent
+process and a plain ``import metasci_scribe`` leave it unset.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from EvoScientist.langgraph_dev import boundary, manager
+from metasci_scribe.langgraph_dev import boundary, manager
 from tests.fakes.langgraph_dev import PopenAbort, patch_start_prereqs
 
 
@@ -22,22 +22,22 @@ from tests.fakes.langgraph_dev import PopenAbort, patch_start_prereqs
 def test_start_sets_server_process_env(monkeypatch, tmp_path, runtime_paths, inherited):
     """Whatever the caller's shell exports, the server process is marked."""
     if inherited is None:
-        monkeypatch.delenv("EVOSCIENTIST_SERVER_PROCESS", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_SERVER_PROCESS", raising=False)
     else:
-        monkeypatch.setenv("EVOSCIENTIST_SERVER_PROCESS", inherited)
+        monkeypatch.setenv("METASCI_SCRIBE_SERVER_PROCESS", inherited)
     captured = patch_start_prereqs(monkeypatch, tmp_path, runtime_paths)
 
     with pytest.raises(PopenAbort):
         manager.start_langgraph_dev(workspace_dir=tmp_path, port=16174)
 
-    assert captured["env"]["EVOSCIENTIST_SERVER_PROCESS"] == "1"
+    assert captured["env"]["METASCI_SCRIBE_SERVER_PROCESS"] == "1"
 
 
 def test_start_sets_workspace_dir_env(monkeypatch, tmp_path, runtime_paths):
     captured = patch_start_prereqs(monkeypatch, tmp_path, runtime_paths)
     with pytest.raises(PopenAbort):
         manager.start_langgraph_dev(workspace_dir=tmp_path, port=16178)
-    assert captured["env"].get("EVOSCIENTIST_WORKSPACE_DIR") == str(tmp_path)
+    assert captured["env"].get("METASCI_SCRIBE_WORKSPACE_DIR") == str(tmp_path)
 
 
 def test_start_sets_the_browser_boundary(monkeypatch, tmp_path, runtime_paths):
@@ -64,14 +64,14 @@ def test_start_sets_the_browser_boundary(monkeypatch, tmp_path, runtime_paths):
 def test_start_passes_this_process_data_folder(monkeypatch, tmp_path, runtime_paths):
     """The server runs in the workspace and loads its ``.env``; a relative or
     later-changed variable must not give it another folder."""
-    from EvoScientist import paths
+    from metasci_scribe import paths
 
     monkeypatch.setattr(paths, "DATA_DIR", tmp_path / "data")
-    monkeypatch.setenv("EVOSCIENTIST_DATA_DIR", "rel-data")
+    monkeypatch.setenv("METASCI_SCRIBE_DATA_DIR", "rel-data")
     captured = patch_start_prereqs(monkeypatch, tmp_path, runtime_paths)
     with pytest.raises(PopenAbort):
         manager.start_langgraph_dev(workspace_dir=tmp_path, port=16178)
-    assert captured["env"]["EVOSCIENTIST_DATA_DIR"] == str(tmp_path / "data")
+    assert captured["env"]["METASCI_SCRIBE_DATA_DIR"] == str(tmp_path / "data")
 
 
 def test_start_trusts_the_bind_host(monkeypatch, tmp_path, runtime_paths):
@@ -85,7 +85,7 @@ def test_start_trusts_the_bind_host(monkeypatch, tmp_path, runtime_paths):
 
 
 def test_ensure_passes_backend_allowed_origins(monkeypatch, tmp_path, runtime_paths):
-    from EvoScientist.config import EvoScientistConfig
+    from metasci_scribe.config import ScribeConfig
 
     started: dict = {}
     monkeypatch.setattr(manager, "is_langgraph_dev_running", lambda **_kw: False)
@@ -94,7 +94,7 @@ def test_ensure_passes_backend_allowed_origins(monkeypatch, tmp_path, runtime_pa
     monkeypatch.setattr(
         manager, "start_langgraph_dev", lambda *_a, **kw: started.update(kw)
     )
-    config = EvoScientistConfig(
+    config = ScribeConfig(
         langgraph_dev_port=16178, backend_allowed_origins="https://smith.langchain.com"
     )
     manager.ensure_langgraph_dev(config, workspace_dir=tmp_path)
@@ -137,18 +137,18 @@ def test_env_carries_explicit_bind_host(monkeypatch, tmp_path, runtime_paths):
             workspace_dir=tmp_path, port=16178, host="192.168.1.5"
         )
 
-    assert captured["env"].get("EVOSCIENTIST_LANGGRAPH_DEV_HOST") == "192.168.1.5"
+    assert captured["env"].get("METASCI_SCRIBE_LANGGRAPH_DEV_HOST") == "192.168.1.5"
 
 
 def test_env_host_replaces_inherited(monkeypatch, tmp_path, runtime_paths):
     """A stray export in the user's shell must not override the host this
     caller resolved — otherwise the bind and the dispatch URL desync."""
-    monkeypatch.setenv("EVOSCIENTIST_LANGGRAPH_DEV_HOST", "10.0.0.9")
+    monkeypatch.setenv("METASCI_SCRIBE_LANGGRAPH_DEV_HOST", "10.0.0.9")
     captured = patch_start_prereqs(monkeypatch, tmp_path, runtime_paths)
     with pytest.raises(PopenAbort):
         manager.start_langgraph_dev(workspace_dir=tmp_path, port=16178, host="0.0.0.0")
 
-    assert captured["env"].get("EVOSCIENTIST_LANGGRAPH_DEV_HOST") == "0.0.0.0"
+    assert captured["env"].get("METASCI_SCRIBE_LANGGRAPH_DEV_HOST") == "0.0.0.0"
 
 
 # =============================================================================
@@ -157,16 +157,16 @@ def test_env_host_replaces_inherited(monkeypatch, tmp_path, runtime_paths):
 
 
 def test_async_subagents_available_init_true_in_server(monkeypatch):
-    """When ``EVOSCIENTIST_SERVER_PROCESS`` is set in the env at module
+    """When ``METASCI_SCRIBE_SERVER_PROCESS`` is set in the env at module
     import time, ``_ASYNC_SUBAGENTS_AVAILABLE`` initializes to True so the
     deployed main agent's ``_maybe_swap_async_subagents`` swaps eagerly
     without waiting for ``start_langgraph_dev`` to flip the flag (which it
     can't — the server never calls that function on itself)."""
-    monkeypatch.setenv("EVOSCIENTIST_SERVER_PROCESS", "1")
+    monkeypatch.setenv("METASCI_SCRIBE_SERVER_PROCESS", "1")
     # Re-import the module to re-run the module-level initialization.
     import importlib
 
-    import EvoScientist.langgraph_dev.manager as mgr
+    import metasci_scribe.langgraph_dev.manager as mgr
 
     reloaded = importlib.reload(mgr)
     try:
@@ -175,7 +175,7 @@ def test_async_subagents_available_init_true_in_server(monkeypatch):
     finally:
         # Restore: reload again without the env var so subsequent tests
         # see the normal initialization.
-        monkeypatch.delenv("EVOSCIENTIST_SERVER_PROCESS", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_SERVER_PROCESS", raising=False)
         importlib.reload(mgr)
 
 
@@ -183,10 +183,10 @@ def test_async_subagents_available_init_false_without_env(monkeypatch):
     """When the env var is unset, ``_ASYNC_SUBAGENTS_AVAILABLE`` initializes
     to False — the pre-existing safety behavior (fall back to sync if
     langgraph dev isn't reachable)."""
-    monkeypatch.delenv("EVOSCIENTIST_SERVER_PROCESS", raising=False)
+    monkeypatch.delenv("METASCI_SCRIBE_SERVER_PROCESS", raising=False)
     import importlib
 
-    import EvoScientist.langgraph_dev.manager as mgr
+    import metasci_scribe.langgraph_dev.manager as mgr
 
     reloaded = importlib.reload(mgr)
     assert reloaded._ASYNC_SUBAGENTS_AVAILABLE is False
@@ -222,7 +222,7 @@ def test_tunnel_false_default_omits_flag(monkeypatch, tmp_path, runtime_paths):
 def test_node_for_mcp_servers_is_installed_before_the_spawn(
     monkeypatch, tmp_path, runtime_paths
 ):
-    from EvoScientist.mcp import client as mcp_client
+    from metasci_scribe.mcp import client as mcp_client
 
     captured = patch_start_prereqs(monkeypatch, tmp_path, runtime_paths)
     servers = {"fs": {"transport": "stdio", "command": "npx"}}
@@ -241,7 +241,7 @@ def test_node_for_mcp_servers_is_installed_before_the_spawn(
 def test_a_failing_node_check_does_not_block_the_spawn(
     monkeypatch, tmp_path, runtime_paths
 ):
-    from EvoScientist.mcp import client as mcp_client
+    from metasci_scribe.mcp import client as mcp_client
 
     captured = patch_start_prereqs(monkeypatch, tmp_path, runtime_paths)
     monkeypatch.setattr(mcp_client, "load_mcp_config", lambda: {"fs": None})
@@ -257,7 +257,7 @@ def test_start_records_the_agent_python_in_the_sidecar(
     import json
     from types import SimpleNamespace
 
-    from EvoScientist.setup import research_env
+    from metasci_scribe.setup import research_env
 
     patch_start_prereqs(monkeypatch, tmp_path, runtime_paths)
     monkeypatch.setattr(
@@ -356,12 +356,12 @@ def test_start_passes_env_origins_to_the_server_only(
 ):
     """The record of where config variables came from reaches the server's
     environment, never this process's (so no other child inherits it)."""
-    from EvoScientist.config import settings
+    from metasci_scribe.config import settings
 
     monkeypatch.setattr(
         settings, "_ENV_ORIGINS", {"OPENAI_API_KEY": {"source": "file"}}
     )
-    monkeypatch.delenv("EVOSCIENTIST_LANGGRAPH_DEV_PORT", raising=False)
+    monkeypatch.delenv("METASCI_SCRIBE_LANGGRAPH_DEV_PORT", raising=False)
     captured = patch_start_prereqs(monkeypatch, tmp_path, runtime_paths)
     with pytest.raises(PopenAbort):
         manager.start_langgraph_dev(workspace_dir=tmp_path, port=16190)
@@ -369,20 +369,20 @@ def test_start_passes_env_origins_to_the_server_only(
     origins = json.loads(captured["env"][settings.ENV_ORIGINS_VAR])
     assert origins["OPENAI_API_KEY"] == {"source": "file"}
     # Not in the file, not the default port: a --port flag.
-    assert origins["EVOSCIENTIST_LANGGRAPH_DEV_PORT"] == {"source": "cli"}
+    assert origins["METASCI_SCRIBE_LANGGRAPH_DEV_PORT"] == {"source": "cli"}
     assert settings.ENV_ORIGINS_VAR not in os.environ
 
 
 def test_env_origins_leave_the_users_own_export_alone(
     monkeypatch, tmp_path, runtime_paths
 ):
-    from EvoScientist.config import settings
+    from metasci_scribe.config import settings
 
     monkeypatch.setattr(settings, "_ENV_ORIGINS", {})
-    monkeypatch.setenv("EVOSCIENTIST_LANGGRAPH_DEV_PORT", "16191")
+    monkeypatch.setenv("METASCI_SCRIBE_LANGGRAPH_DEV_PORT", "16191")
     captured = patch_start_prereqs(monkeypatch, tmp_path, runtime_paths)
     with pytest.raises(PopenAbort):
         manager.start_langgraph_dev(workspace_dir=tmp_path, port=16191)
 
     origins = json.loads(captured["env"][settings.ENV_ORIGINS_VAR])
-    assert "EVOSCIENTIST_LANGGRAPH_DEV_PORT" not in origins
+    assert "METASCI_SCRIBE_LANGGRAPH_DEV_PORT" not in origins

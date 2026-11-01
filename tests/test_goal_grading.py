@@ -7,7 +7,7 @@ from contextlib import contextmanager
 import pytest
 from langchain_core.messages import AIMessage
 
-from EvoScientist.middleware.goal import new_goal_request
+from metasci_scribe.middleware.goal import new_goal_request
 from tests.fakes.goal import (
     ACCEPT,
     goal_agent,
@@ -54,7 +54,7 @@ def _graded(status, *, grading=_SAME, evidence="e"):
 
 
 def _verdict(state, result="satisfied"):
-    from EvoScientist.middleware.rubric import EvoRubricMiddleware
+    from metasci_scribe.middleware.rubric import EvoRubricMiddleware
 
     middleware = EvoRubricMiddleware.__new__(EvoRubricMiddleware)
     middleware._goal_event = lambda *_args, **_fields: None  # no stream here

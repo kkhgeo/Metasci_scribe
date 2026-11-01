@@ -45,7 +45,7 @@ from typing_extensions import TypedDict
 
 # Apply the upstream-workaround patches (map_cmd + _control_branch) so the
 # tests verify the post-fix behaviour.
-from EvoScientist.llm import patches  # noqa: F401  (side-effect)
+from metasci_scribe.llm import patches  # noqa: F401  (side-effect)
 
 # ---------------------------------------------------------------------------
 # Fixtures

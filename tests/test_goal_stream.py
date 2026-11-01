@@ -10,9 +10,9 @@ from unittest.mock import patch
 import pytest
 from rich.console import Console
 
-from EvoScientist.middleware.goal import new_goal_request
-from EvoScientist.stream.display import create_streaming_display, goal_event_lines
-from EvoScientist.stream.state import StreamState
+from metasci_scribe.middleware.goal import new_goal_request
+from metasci_scribe.stream.display import create_streaming_display, goal_event_lines
+from metasci_scribe.stream.state import StreamState
 from tests.fakes.goal import ACCEPT, CANCEL
 
 pytestmark = pytest.mark.usefixtures("no_mcp")
@@ -55,7 +55,7 @@ class TestLines:
         ]
 
     def test_the_stream_event_carries_the_mark_only_when_set(self):
-        from EvoScientist.stream.emitter import StreamEventEmitter
+        from metasci_scribe.stream.emitter import StreamEventEmitter
 
         plain = StreamEventEmitter.goal_state(change="accepted").data
         assert "unreviewed" not in plain
@@ -159,8 +159,8 @@ class TestDisplay:
 
 class TestDecoder:
     async def _events(self, tmp_path, payloads):
-        from EvoScientist.gateway import GraphTarget, RunRequest
-        from EvoScientist.gateway.local import LocalGraphGateway
+        from metasci_scribe.gateway import GraphTarget, RunRequest
+        from metasci_scribe.gateway.local import LocalGraphGateway
         from tests.fakes.goal import cli_goal_agent
 
         agent, _ = cli_goal_agent(tmp_path)
@@ -199,8 +199,8 @@ class TestDecoder:
     async def test_an_amendment_carries_the_revised_objective(self, tmp_path):
         from langgraph.types import Command
 
-        from EvoScientist.gateway import GraphTarget, RunRequest
-        from EvoScientist.gateway.local import LocalGraphGateway
+        from metasci_scribe.gateway import GraphTarget, RunRequest
+        from metasci_scribe.gateway.local import LocalGraphGateway
         from tests.fakes.goal import cli_goal_agent
 
         agent, _ = cli_goal_agent(
@@ -252,7 +252,7 @@ class TestDecoder:
 
 class TestTallQuestion:
     def test_a_question_that_ends_in_a_newline_stays_one_prompt(self):
-        from EvoScientist.stream import display as display_mod
+        from metasci_scribe.stream import display as display_mod
 
         data = {"questions": [{"question": "Pick a dataset\n", "type": "text"}]}
         out = StringIO()
@@ -274,7 +274,7 @@ class TestTallQuestion:
         assert "Pick a dataset" not in out.getvalue().split("Quick check-in")[-1]
 
     def test_a_long_question_is_printed_above_a_one_line_prompt(self):
-        from EvoScientist.stream import display as display_mod
+        from metasci_scribe.stream import display as display_mod
 
         question = (
             "Proposed acceptance criteria for the goal:\nship it\n\n- a\n- b\n\n"
@@ -316,8 +316,8 @@ class TestEventsArriveWhileWorkGoesOn:
 
     @staticmethod
     async def _stream(agent, seen: list) -> None:
-        from EvoScientist.gateway import GraphTarget, RunRequest
-        from EvoScientist.gateway.local import LocalGraphGateway
+        from metasci_scribe.gateway import GraphTarget, RunRequest
+        from metasci_scribe.gateway.local import LocalGraphGateway
 
         run = RunRequest(
             message="",
@@ -359,15 +359,15 @@ class TestEventsArriveWhileWorkGoesOn:
     ):
         from langgraph.checkpoint.memory import InMemorySaver
 
-        from EvoScientist.config import EvoScientistConfig
-        from EvoScientist.EvoScientist import create_cli_agent
-        from EvoScientist.paths import Workspace
+        from metasci_scribe.agent import create_cli_agent
+        from metasci_scribe.config import ScribeConfig
+        from metasci_scribe.paths import Workspace
         from tests.fakes.goal import AllRoles
 
         hold = threading.Event()
         agent = create_cli_agent(
             workspace=Workspace(tmp_path),
-            config=EvoScientistConfig(
+            config=ScribeConfig(
                 enable_async_subagents=False,
                 memory_workers_enabled=False,
                 auto_mode=True,
@@ -396,9 +396,9 @@ class TestEventsArriveWhileWorkGoesOn:
         from langchain_core.outputs import ChatGenerationChunk
         from langgraph.checkpoint.memory import InMemorySaver
 
-        from EvoScientist.config import EvoScientistConfig
-        from EvoScientist.EvoScientist import create_cli_agent
-        from EvoScientist.paths import Workspace
+        from metasci_scribe.agent import create_cli_agent
+        from metasci_scribe.config import ScribeConfig
+        from metasci_scribe.paths import Workspace
         from tests.fakes.goal import AllRoles
 
         class _Streaming(AllRoles):
@@ -425,7 +425,7 @@ class TestEventsArriveWhileWorkGoesOn:
 
         agent = create_cli_agent(
             workspace=Workspace(tmp_path),
-            config=EvoScientistConfig(
+            config=ScribeConfig(
                 enable_async_subagents=False,
                 memory_workers_enabled=False,
                 auto_mode=True,
@@ -454,8 +454,8 @@ class TestOnlyTheDraftersRunIsHidden:
 
     @staticmethod
     def _processor(registry):
-        from EvoScientist.stream.emitter import StreamEventEmitter
-        from EvoScientist.stream.events import _V3EventProcessor
+        from metasci_scribe.stream.emitter import StreamEventEmitter
+        from metasci_scribe.stream.events import _V3EventProcessor
 
         return _V3EventProcessor(StreamEventEmitter(), registry, None)
 
@@ -467,7 +467,7 @@ class TestOnlyTheDraftersRunIsHidden:
         }
 
     async def test_a_sub_agents_task_of_the_same_name_is_shown(self):
-        from EvoScientist.stream.events import _SubagentRegistry
+        from metasci_scribe.stream.events import _SubagentRegistry
 
         registry = _SubagentRegistry()
         registry.register(("tools:1",), "research-agent")
@@ -493,7 +493,7 @@ class TestOnlyTheDraftersRunIsHidden:
         ],
     )
     async def test_the_drafters_own_run_is_dropped_without_waiting(self, namespace):
-        from EvoScientist.stream.events import _SubagentRegistry
+        from metasci_scribe.stream.events import _SubagentRegistry
 
         processor = self._processor(_SubagentRegistry())
         retry = {"type": "model_retry", "attempt": 1, "wait_seconds": 1.0, "call": "c1"}
@@ -511,7 +511,7 @@ class TestOnlyTheDraftersRunIsHidden:
         ],
     )
     async def test_a_namespace_that_only_looks_like_it_is_not_dropped(self, namespace):
-        from EvoScientist.stream.events import _SubagentRegistry
+        from metasci_scribe.stream.events import _SubagentRegistry
 
         registry = _SubagentRegistry()
         registry.register(namespace[:1], "some-agent")

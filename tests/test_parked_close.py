@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 from langchain_core.messages import AIMessage, ToolMessage
 
-from EvoScientist.backends import (
+from metasci_scribe.backends import (
     _ASKED_RESULT,
     _MAY_HAVE_RUN,
     _NO_RETRY,
@@ -19,8 +19,8 @@ from EvoScientist.backends import (
     abandoned_tool_messages,
     close_parked_checkpoint,
 )
-from EvoScientist.gateway import GraphTarget
-from EvoScientist.gateway.server import (
+from metasci_scribe.gateway import GraphTarget
+from metasci_scribe.gateway.server import (
     LangGraphServerGateway,
     LangGraphServerThreadStore,
 )
@@ -282,7 +282,7 @@ async def test_a_pause_without_a_position_gets_the_cautious_sentence():
 def test_every_reason_has_its_sentences():
     from typing import get_args
 
-    from EvoScientist.backends import _ASKED_RESULT, _TURN_ENDED, ParkedCloseReason
+    from metasci_scribe.backends import _ASKED_RESULT, _TURN_ENDED, ParkedCloseReason
 
     reasons = set(get_args(ParkedCloseReason))
     assert set(_ASKED_RESULT) == reasons
@@ -386,7 +386,7 @@ async def test_a_server_that_refuses_the_write_fails_the_close_with_one_short_li
             )
 
     threads = _Busy(threads=[], states={"t-busy": _parked_server_state()})
-    with caplog.at_level(logging.DEBUG, logger="EvoScientist"):
+    with caplog.at_level(logging.DEBUG, logger="metasci-scribe"):
         with pytest.raises(
             RuntimeError, match="Could not close parked HITL checkpoint"
         ):
@@ -436,14 +436,14 @@ async def test_a_half_closed_thread_is_reported_not_called_clean():
 async def test_crash_recovery_does_not_apply_the_close_checks(caplog):
     """Only a close reports a call left without a result; recovery after a
     crash answers as before."""
-    from EvoScientist.stream.events import _recover_interrupted_graph_state
+    from metasci_scribe.stream.events import _recover_interrupted_graph_state
 
     config = {"configurable": {"thread_id": "t1"}}
     messages = [_ai(_call("c1", "execute", command="ls"))]
     clean = FakeCheckpointAgent(next=(), values={"messages": list(messages)})
     crashed = _LosesTheResults(next=("tools",), values={"messages": list(messages)})
     crashed.interrupts = ()
-    with caplog.at_level(logging.WARNING, logger="EvoScientist"):
+    with caplog.at_level(logging.WARNING, logger="metasci-scribe"):
         assert await _recover_interrupted_graph_state(clean, config) is True
         assert await _recover_interrupted_graph_state(crashed, config) is True
     assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
@@ -489,7 +489,7 @@ async def test_a_failing_close_logs_one_short_line(caplog):
         values={"messages": [_ai(_call("c1", "execute", command="ls"))]},
         update_error=RuntimeError("409 conflict\nrun kwargs:\n" + "x" * 5000),
     )
-    with caplog.at_level(logging.DEBUG, logger="EvoScientist"):
+    with caplog.at_level(logging.DEBUG, logger="metasci-scribe"):
         with pytest.raises(RuntimeError):
             await _close(agent)
     warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
@@ -516,7 +516,7 @@ async def test_a_thread_that_stays_stuck_is_reported_in_one_short_line(caplog):
     agent.tasks = (
         SimpleNamespace(name="tools", interrupts=(), payload="line\n" + "y" * 5000),
     )
-    with caplog.at_level(logging.DEBUG, logger="EvoScientist"):
+    with caplog.at_level(logging.DEBUG, logger="metasci-scribe"):
         with pytest.raises(RuntimeError):
             await _close(agent)
     warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
@@ -527,7 +527,7 @@ async def test_a_thread_that_stays_stuck_is_reported_in_one_short_line(caplog):
 
 async def test_crash_recovery_keeps_its_full_stuck_report(caplog):
     """Only the close shortens the line; recovery after a crash reports as before."""
-    from EvoScientist.stream.events import _recover_interrupted_graph_state
+    from metasci_scribe.stream.events import _recover_interrupted_graph_state
 
     agent = _NeverClears(
         next=BEFORE_TOOLS,
@@ -538,7 +538,7 @@ async def test_crash_recovery_keeps_its_full_stuck_report(caplog):
         SimpleNamespace(name="tools", interrupts=(), payload="line\n" + "y" * 5000),
     )
     agent.interrupts = ()  # a crash, not a pause: recovery acts on it
-    with caplog.at_level(logging.WARNING, logger="EvoScientist"):
+    with caplog.at_level(logging.WARNING, logger="metasci-scribe"):
         ok = await _recover_interrupted_graph_state(
             agent, {"configurable": {"thread_id": "t1"}}
         )
@@ -554,7 +554,7 @@ async def test_a_cancelled_close_says_so_once(caplog):
         values={"messages": [_ai(_call("c1", "execute", command="ls"))]},
         update_error=asyncio.CancelledError(),
     )
-    with caplog.at_level(logging.DEBUG, logger="EvoScientist"):
+    with caplog.at_level(logging.DEBUG, logger="metasci-scribe"):
         with pytest.raises(asyncio.CancelledError):
             await _close(agent)
     warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
@@ -564,7 +564,7 @@ async def test_a_cancelled_close_says_so_once(caplog):
 
 
 async def test_a_cancelled_crash_recovery_logs_nothing(caplog):
-    from EvoScientist.stream.events import _recover_interrupted_graph_state
+    from metasci_scribe.stream.events import _recover_interrupted_graph_state
 
     agent = FakeCheckpointAgent(
         next=("tools",),
@@ -572,7 +572,7 @@ async def test_a_cancelled_crash_recovery_logs_nothing(caplog):
         update_error=asyncio.CancelledError(),
     )
     agent.interrupts = ()
-    with caplog.at_level(logging.WARNING, logger="EvoScientist"):
+    with caplog.at_level(logging.WARNING, logger="metasci-scribe"):
         with pytest.raises(asyncio.CancelledError):
             await _recover_interrupted_graph_state(
                 agent, {"configurable": {"thread_id": "t1"}}

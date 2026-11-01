@@ -11,9 +11,9 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
 from langgraph.runtime import ExecutionInfo, Runtime
 
-from EvoScientist.memory import scheduler as memory_scheduler
-from EvoScientist.memory import source_context
-from EvoScientist.memory.observations import MemoryScope, MemorySourceType, MemoryType
+from metasci_scribe.memory import scheduler as memory_scheduler
+from metasci_scribe.memory import source_context
+from metasci_scribe.memory.observations import MemoryScope, MemorySourceType, MemoryType
 
 
 def fake_execution_info(thread_id: str | None = None) -> ExecutionInfo:
@@ -35,7 +35,7 @@ def memory_source_context(
     workspace_dir,
     source_type: MemorySourceType = MemorySourceType.TURN,
     project_id: str = "P-project",
-    source_agent: str = "EvoScientist",
+    source_agent: str = "metasci-scribe",
     session_id: str = "thread-1",
     trajectory: list[source_context.CompactMessage] | None = None,
 ) -> source_context.MemorySourceContext:

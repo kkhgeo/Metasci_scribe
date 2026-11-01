@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from EvoScientist.gateway import (
+from metasci_scribe.gateway import (
     GraphGateway,
     LangGraphServerGateway,
     LocalGraphGateway,
@@ -17,11 +17,11 @@ from EvoScientist.gateway import (
     create_runtime_gateways,
     create_runtime_gateways_for_config,
 )
-from EvoScientist.gateway.composite import (
+from metasci_scribe.gateway.composite import (
     CompositeGraphGateway,
     LegacyThreadServerExecutionError,
 )
-from EvoScientist.gateway.types import ThreadResolution
+from metasci_scribe.gateway.types import ThreadResolution
 
 UUID = "11111111-1111-1111-1111-111111111111"
 LEGACY = "abcd1234"  # 8-hex, pre-migration CLI id (not a UUID)
@@ -281,7 +281,7 @@ async def test_stream_json_sink_emits_error_line_for_legacy_thread():
     import io
     import json as _json
 
-    from EvoScientist.stream.json_sink import write_events_as_json
+    from metasci_scribe.stream.json_sink import write_events_as_json
 
     comp = _composite(RecordingGateway("r"), RecordingGateway("e"))
     out = io.StringIO()
@@ -333,8 +333,8 @@ async def test_close_parked_checkpoint_through_composite():
     """
     from langchain_core.messages import AIMessage
 
-    from EvoScientist.backends import close_parked_checkpoint
-    from EvoScientist.gateway import GraphTarget
+    from metasci_scribe.backends import close_parked_checkpoint
+    from metasci_scribe.gateway import GraphTarget
     from tests.fakes.common import FakeCheckpointAgent, FakeGraphGateway
 
     agent = FakeCheckpointAgent(
@@ -508,8 +508,8 @@ def _stub_dev_server_up(monkeypatch, *, available: bool = True) -> None:
     The factory only builds the composite when ``is_async_subagents_available()``
     is True (the dev server actually came up); otherwise it falls back to local.
     """
-    import EvoScientist.langgraph_dev.manager as manager
-    import EvoScientist.langgraph_dev.sdk as sdk
+    import metasci_scribe.langgraph_dev.manager as manager
+    import metasci_scribe.langgraph_dev.sdk as sdk
 
     monkeypatch.setattr(
         sdk, "configured_langgraph_dev_url", lambda: "http://localhost:2024"

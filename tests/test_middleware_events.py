@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 import pytest
 
-from EvoScientist.middleware.events import (
+from metasci_scribe.middleware.events import (
     MIDDLEWARE_EVENT_TAG,
     NO_OP_SINK,
     NoOpSink,
@@ -52,29 +52,29 @@ class _RecordingSink:
 
 class TestResolveMiddlewareEventSink:
     def test_subagent_stacks_always_get_noop(self, monkeypatch):
-        monkeypatch.setenv("EVOSCIENTIST_SERVER_PROCESS", "1")
+        monkeypatch.setenv("METASCI_SCRIBE_SERVER_PROCESS", "1")
         sink = resolve_middleware_event_sink(_RecordingSink(), for_async_subagent=True)
         assert sink is NO_OP_SINK
 
     def test_local_main_stack_keeps_caller_sink_unwrapped(self, monkeypatch):
-        monkeypatch.delenv("EVOSCIENTIST_SERVER_PROCESS", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_SERVER_PROCESS", raising=False)
         caller = _RecordingSink()
         sink = resolve_middleware_event_sink(caller, for_async_subagent=False)
         assert sink is caller
 
     def test_local_main_stack_defaults_to_run_scoped(self, monkeypatch):
-        monkeypatch.delenv("EVOSCIENTIST_SERVER_PROCESS", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_SERVER_PROCESS", raising=False)
         sink = resolve_middleware_event_sink(None, for_async_subagent=False)
         assert isinstance(sink, RunScopedEventSink)
 
     def test_server_subprocess_wraps_in_broadcast(self, monkeypatch):
-        monkeypatch.setenv("EVOSCIENTIST_SERVER_PROCESS", "1")
+        monkeypatch.setenv("METASCI_SCRIBE_SERVER_PROCESS", "1")
         sink = resolve_middleware_event_sink(None, for_async_subagent=False)
         assert isinstance(sink, StreamBroadcastSink)
         assert isinstance(sink._sink, RunScopedEventSink)
 
     def test_server_subprocess_wraps_caller_sink(self, monkeypatch):
-        monkeypatch.setenv("EVOSCIENTIST_SERVER_PROCESS", "1")
+        monkeypatch.setenv("METASCI_SCRIBE_SERVER_PROCESS", "1")
         caller = _RecordingSink()
         sink = resolve_middleware_event_sink(caller, for_async_subagent=False)
         assert isinstance(sink, StreamBroadcastSink)
@@ -132,7 +132,7 @@ class TestStreamBroadcastSink:
         inner = _RecordingSink()
         broadcast = StreamBroadcastSink(inner)
         with (
-            caplog.at_level(logging.DEBUG, logger="EvoScientist.middleware.events"),
+            caplog.at_level(logging.DEBUG, logger="metasci_scribe.middleware.events"),
             patch("langgraph.config.get_stream_writer", _raising_writer_factory),
         ):
             # Must not raise — the bridge can never break a model call.
@@ -159,7 +159,7 @@ class TestMiddlewareEventWire:
     """to_wire/from_wire round-trips and the dispatch mapping."""
 
     def test_round_trip_each_kind(self):
-        from EvoScientist.middleware.events import (
+        from metasci_scribe.middleware.events import (
             FallbackNotice,
             MiddlewareEvent,
             ToolSelection,
@@ -177,13 +177,13 @@ class TestMiddlewareEventWire:
             assert MiddlewareEvent.from_wire(event.to_wire()) == event
 
     def test_unknown_kind_is_silence_not_error(self):
-        from EvoScientist.middleware.events import MiddlewareEvent
+        from metasci_scribe.middleware.events import MiddlewareEvent
 
         assert MiddlewareEvent.from_wire({"kind": "someone_elses_event"}) is None
         assert MiddlewareEvent.from_wire({}) is None
 
     def test_malformed_known_kind_raises(self):
-        from EvoScientist.middleware.events import MiddlewareEvent
+        from metasci_scribe.middleware.events import MiddlewareEvent
 
         with pytest.raises(ValueError, match="selected"):
             MiddlewareEvent.from_wire({"kind": "tool_selection", "selected": "nope"})
@@ -192,7 +192,7 @@ class TestMiddlewareEventWire:
             MiddlewareEvent.from_wire({"kind": "tool_selection_started"})
 
     def test_dispatch_maps_each_kind_to_its_sink_method(self):
-        from EvoScientist.middleware.events import (
+        from metasci_scribe.middleware.events import (
             FallbackNotice,
             ToolSelection,
             ToolSelectionEnded,

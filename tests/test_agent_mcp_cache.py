@@ -1,8 +1,8 @@
-"""Tests for MCP tool caching in EvoScientist.EvoScientist."""
+"""Tests for MCP tool caching in metasci_scribe.agent."""
 
 from __future__ import annotations
 
-import EvoScientist.EvoScientist as agent_module
+import metasci_scribe.agent as agent_module
 
 
 def _reset_mcp_cache() -> None:
@@ -19,7 +19,7 @@ class TestMcpToolCaching:
         tool = object()
 
         monkeypatch.setattr(
-            "EvoScientist.mcp.client.load_mcp_config",
+            "metasci_scribe.mcp.client.load_mcp_config",
             lambda: {"srv": {"transport": "stdio", "command": "demo"}},
         )
 
@@ -27,7 +27,7 @@ class TestMcpToolCaching:
             calls["load"] += 1
             return {"main": [tool]}
 
-        monkeypatch.setattr("EvoScientist.mcp.load_mcp_tools", fake_load_mcp_tools)
+        monkeypatch.setattr("metasci_scribe.mcp.load_mcp_tools", fake_load_mcp_tools)
 
         first = agent_module._load_mcp_tools_cached()
         second = agent_module._load_mcp_tools_cached()
@@ -48,8 +48,10 @@ class TestMcpToolCaching:
             calls["load"] += 1
             return {"main": [f"tool-v{calls['load']}"]}
 
-        monkeypatch.setattr("EvoScientist.mcp.client.load_mcp_config", fake_load_config)
-        monkeypatch.setattr("EvoScientist.mcp.load_mcp_tools", fake_load_mcp_tools)
+        monkeypatch.setattr(
+            "metasci_scribe.mcp.client.load_mcp_config", fake_load_config
+        )
+        monkeypatch.setattr("metasci_scribe.mcp.load_mcp_tools", fake_load_mcp_tools)
 
         first = agent_module._load_mcp_tools_cached()
         state["cfg"] = {"srv": {"transport": "stdio", "command": "v2"}}
@@ -68,10 +70,10 @@ class TestMcpToolCaching:
             return {"srv": {"transport": "stdio", "command": "demo"}}
 
         monkeypatch.setattr(
-            "EvoScientist.mcp.client.load_mcp_config", counting_load_config
+            "metasci_scribe.mcp.client.load_mcp_config", counting_load_config
         )
         monkeypatch.setattr(
-            "EvoScientist.mcp.load_mcp_tools",
+            "metasci_scribe.mcp.load_mcp_tools",
             lambda config=None, **_kwargs: {"main": []},
         )
 
@@ -89,8 +91,10 @@ class TestMcpToolCaching:
             received["config"] = config
             return {"main": []}
 
-        monkeypatch.setattr("EvoScientist.mcp.client.load_mcp_config", fake_load_config)
-        monkeypatch.setattr("EvoScientist.mcp.load_mcp_tools", fake_load_mcp_tools)
+        monkeypatch.setattr(
+            "metasci_scribe.mcp.client.load_mcp_config", fake_load_config
+        )
+        monkeypatch.setattr("metasci_scribe.mcp.load_mcp_tools", fake_load_mcp_tools)
 
         agent_module._load_mcp_tools_cached()
         assert received["config"] == {"srv": {"transport": "stdio", "command": "demo"}}

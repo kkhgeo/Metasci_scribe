@@ -1,15 +1,15 @@
-# Using EvoScientist with Your AI Subscriptions (Claude OAuth + ChatGPT sign-in)
+# Using Metasci Scribe with Your AI Subscriptions (Claude OAuth + ChatGPT sign-in)
 
-Run EvoScientist on the subscriptions you already pay for — **Claude Pro/Max** and/or **ChatGPT Plus/Pro** — with no API keys and no per-token billing.
+Run Metasci Scribe on the subscriptions you already pay for — **Claude Pro/Max** and/or **ChatGPT Plus/Pro** — with no API keys and no per-token billing.
 
-The two providers connect differently: Claude requests go through [ccproxy](https://pypi.org/project/ccproxy-api/), a local proxy that reuses your Claude Code OAuth login; ChatGPT needs no proxy, because EvoScientist signs in to your ChatGPT account itself.
+The two providers connect differently: Claude requests go through [ccproxy](https://pypi.org/project/ccproxy-api/), a local proxy that reuses your Claude Code OAuth login; ChatGPT needs no proxy, because Metasci Scribe signs in to your ChatGPT account itself.
 
 ---
 
 ## How it works
 
 ```txt
-EvoScientist (LangChain client)
+Metasci Scribe (LangChain client)
     │
     ├─ Claude:   ANTHROPIC_BASE_URL=http://127.0.0.1:8000/claude
     │            ▼
@@ -17,25 +17,25 @@ EvoScientist (LangChain client)
     │            ▼
     │        api.anthropic.com
     │
-    └─ ChatGPT:  token from ~/.evoscientist/auth/chatgpt.json
+    └─ ChatGPT:  token from ~/.metasci-scribe/auth/chatgpt.json
                  ▼
              chatgpt.com/backend-api/codex
 
     (both billed against your subscription quota, not API credits)
 ```
 
-- **Claude** (`anthropic_auth_mode: oauth`): `EvoSci` starts ccproxy automatically (or reuses a running instance on `ccproxy_port`) and points the Anthropic base URL at it.
-- **ChatGPT** (`openai_auth_mode: oauth`): EvoScientist opens OpenAI's sign-in page once, stores the token under `~/.evoscientist/auth/chatgpt.json`, and calls the Codex backend with it. No proxy and no Codex CLI are involved.
+- **Claude** (`anthropic_auth_mode: oauth`): `metasci-scribe` starts ccproxy automatically (or reuses a running instance on `ccproxy_port`) and points the Anthropic base URL at it.
+- **ChatGPT** (`openai_auth_mode: oauth`): Metasci Scribe opens OpenAI's sign-in page once, stores the token under `~/.metasci-scribe/auth/chatgpt.json`, and calls the Codex backend with it. No proxy and no Codex CLI are involved.
 
 ---
 
 ## Prerequisites
 
 - An active **Claude Pro/Max** subscription (for Claude models) and/or an active **ChatGPT Plus/Pro** subscription (for GPT models)
-- For Claude only, EvoScientist installed with the OAuth extra (ChatGPT sign-in needs nothing extra):
+- For Claude only, Metasci Scribe installed with the OAuth extra (ChatGPT sign-in needs nothing extra):
 
 ```bash
-pip install 'evoscientist[oauth]'
+pip install 'metasci-scribe[oauth]'
 # or, editable install:
 uv sync --extra oauth
 ```
@@ -62,20 +62,20 @@ A browser window opens; log in with your Claude subscription account. Verify:
 ccproxy auth status claude_api   # shows email, subscription tier, status
 ```
 
-### 2. Configure EvoScientist
+### 2. Configure Metasci Scribe
 
 ```bash
-EvoSci config set anthropic_auth_mode oauth
-EvoSci config set provider          anthropic
-EvoSci config set model             claude-sonnet-5-5
+metasci-scribe config set anthropic_auth_mode oauth
+metasci-scribe config set provider          anthropic
+metasci-scribe config set model             claude-sonnet-5-5
 ```
 
 Any Anthropic model ID your subscription serves works here — including IDs
-not in EvoScientist's short-name registry (they pass through verbatim).
+not in Metasci Scribe's short-name registry (they pass through verbatim).
 
 ### 3. Done
 
-Run `EvoSci` normally. No `ANTHROPIC_API_KEY` needed; EvoScientist sets a
+Run `metasci-scribe` normally. No `ANTHROPIC_API_KEY` needed; Metasci Scribe sets a
 placeholder key and routes through ccproxy's `/claude` endpoint.
 
 > **Note:** extended thinking is automatically disabled on this route —
@@ -92,30 +92,30 @@ This uses the ChatGPT sign-in that ships with `langchain-openai`, the same kind 
 Either run the wizard:
 
 ```bash
-EvoSci onboard
+metasci-scribe onboard
 ```
 
 pick **OpenAI**, then **ChatGPT sign-in (no API key needed)**, and confirm `Log in to ChatGPT now?`.
 
-Or set the mode yourself and start EvoScientist in a terminal, which asks `Sign in with ChatGPT now?`:
+Or set the mode yourself and start Metasci Scribe in a terminal, which asks `Sign in with ChatGPT now?`:
 
 ```bash
-EvoSci config set openai_auth_mode oauth
-EvoSci
+metasci-scribe config set openai_auth_mode oauth
+metasci-scribe
 ```
 
 Your browser opens OpenAI's sign-in page and returns to a local callback on `localhost:1455`. You stay signed in afterwards: the token refreshes itself before a request needs it.
 
-### 2. Configure EvoScientist
+### 2. Configure Metasci Scribe
 
 ```bash
-EvoSci config set openai_auth_mode oauth
-EvoSci config set provider         openai
-EvoSci config set model            gpt-6-sol
-EvoSci config set reasoning_effort high     # optional; see note below
+metasci-scribe config set openai_auth_mode oauth
+metasci-scribe config set provider         openai
+metasci-scribe config set model            gpt-6-sol
+metasci-scribe config set reasoning_effort high     # optional; see note below
 ```
 
-In this mode every `openai` model uses your plan: the main model, the auxiliary model and any OpenAI entry in the fallback chain. `OPENAI_API_KEY`, `OPENAI_BASE_URL` and `EVOSCIENTIST_USE_RESPONSES_API` are ignored while it is on.
+In this mode every `openai` model uses your plan: the main model, the auxiliary model and any OpenAI entry in the fallback chain. `OPENAI_API_KEY`, `OPENAI_BASE_URL` and `METASCI_SCRIBE_USE_RESPONSES_API` are ignored while it is on.
 
 ### 3. Models depend on your plan
 
@@ -125,13 +125,13 @@ Which model IDs the backend serves depends on your ChatGPT plan, and the lineup 
 The '<model>' model is not supported when using Codex with a ChatGPT account.
 ```
 
-EvoScientist counts a 272K context window for models on this route, so a conversation whose main model is one of them is summarized before it reaches that size (as a fallback model, it gets the main model's budget). The backend accepts longer input, but every turn resends the whole context against your plan's usage limits; 272K is Codex's own default for most of these models.
+Metasci Scribe counts a 272K context window for models on this route, so a conversation whose main model is one of them is summarized before it reaches that size (as a fallback model, it gets the main model's budget). The backend accepts longer input, but every turn resends the whole context against your plan's usage limits; 272K is Codex's own default for most of these models.
 
-> **`reasoning_effort`:** these models take `low`, `medium`, `high`, `xhigh` or `max` (`EvoSci onboard` offers the list after you pick a model, plus `default`, which keeps EvoScientist's level for each model); a configured `none` or `minimal` is sent as `low`. Higher effort costs more latency and more of your subscription quota per request.
+> **`reasoning_effort`:** these models take `low`, `medium`, `high`, `xhigh` or `max` (`metasci-scribe onboard` offers the list after you pick a model, plus `default`, which keeps Metasci Scribe's level for each model); a configured `none` or `minimal` is sent as `low`. Higher effort costs more latency and more of your subscription quota per request.
 
 ### 4. Machines without a browser
 
-Over SSH, EvoScientist prints the sign-in link instead of opening a browser. Forward the callback port from your own computer, then open the link there:
+Over SSH, Metasci Scribe prints the sign-in link instead of opening a browser. Forward the callback port from your own computer, then open the link there:
 
 ```bash
 ssh -L 1455:localhost:1455 <host>
@@ -139,7 +139,7 @@ ssh -L 1455:localhost:1455 <host>
 
 ### 5. Docker
 
-Sign in on a machine with a browser, then copy `~/.evoscientist/auth/chatgpt.json` into the container's data volume at `/home/evosci/.evoscientist/auth/chatgpt.json`. Stop EvoScientist in the container before you replace the file, and make sure the file and its `auth/` directory belong to the container user (`evosci`): EvoScientist rewrites the file whenever the token refreshes. Then sign in again on the machine with the browser (`EvoSci onboard`, ChatGPT sign-in, re-authenticate) before you use EvoSci there, so each side holds its own sign-in: OpenAI replaces the stored token on every refresh, and two machines sharing one token sign each other out. If the container later reports `ChatGPT sign-in required`, repeat both steps: copy a fresh file in, then sign in again on the machine with the browser.
+Sign in on a machine with a browser, then copy `~/.metasci-scribe/auth/chatgpt.json` into the container's data volume at `/home/metasci-scribe/.metasci-scribe/auth/chatgpt.json`. Stop Metasci Scribe in the container before you replace the file, and make sure the file and its `auth/` directory belong to the container user (`metasci-scribe`): Metasci Scribe rewrites the file whenever the token refreshes. Then sign in again on the machine with the browser (`metasci-scribe onboard`, ChatGPT sign-in, re-authenticate) before you use metasci-scribe there, so each side holds its own sign-in: OpenAI replaces the stored token on every refresh, and two machines sharing one token sign each other out. If the container later reports `ChatGPT sign-in required`, repeat both steps: copy a fresh file in, then sign in again on the machine with the browser.
 
 ---
 
@@ -156,7 +156,7 @@ End-to-end Claude probe:
 ```bash
 ANTHROPIC_BASE_URL=http://127.0.0.1:8000/claude ANTHROPIC_API_KEY=ccproxy-oauth \
 python -c "
-from EvoScientist.llm import get_chat_model
+from metasci_scribe.llm import get_chat_model
 print(get_chat_model('claude-sonnet-5-5', provider='anthropic').invoke('Reply with exactly: OK').content)
 "
 ```
@@ -164,9 +164,9 @@ print(get_chat_model('claude-sonnet-5-5', provider='anthropic').invoke('Reply wi
 End-to-end ChatGPT probe (after signing in):
 
 ```bash
-EVOSCIENTIST_OPENAI_AUTH_MODE=oauth \
+METASCI_SCRIBE_OPENAI_AUTH_MODE=oauth \
 python -c "
-from EvoScientist.llm import get_chat_model
+from metasci_scribe.llm import get_chat_model
 print(get_chat_model('gpt-6-sol', provider='openai').invoke('Reply with exactly: OK').text)
 "
 ```
@@ -177,13 +177,13 @@ print(get_chat_model('gpt-6-sol', provider='openai').invoke('Reply with exactly:
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `ChatGPT sign-in required (openai_auth_mode is "oauth"). Start EvoSci in a terminal to sign in.` | No ChatGPT token on this machine, or OpenAI no longer accepts the stored one | Start `EvoSci` in a terminal and confirm the sign-in prompt |
-| `ChatGPT sign-in required (openai_auth_mode is "oauth"). Run EvoSci again to sign in, ...` | The sign-in prompt was declined or did not complete | Run `EvoSci` again and confirm the prompt, or switch to an API key with `EvoSci config set openai_auth_mode api_key` |
+| `ChatGPT sign-in required (openai_auth_mode is "oauth"). Start metasci-scribe in a terminal to sign in.` | No ChatGPT token on this machine, or OpenAI no longer accepts the stored one | Start `metasci-scribe` in a terminal and confirm the sign-in prompt |
+| `ChatGPT sign-in required (openai_auth_mode is "oauth"). Run metasci-scribe again to sign in, ...` | The sign-in prompt was declined or did not complete | Run `metasci-scribe` again and confirm the prompt, or switch to an API key with `metasci-scribe config set openai_auth_mode api_key` |
 | `Port 1455 is in use (another sign-in may be running). Close it and try again.` | Another sign-in, or a Codex CLI login, holds the callback port | Finish or close it, then retry |
 | `The '<model>' model is not supported when using Codex with a ChatGPT account.` | Your ChatGPT plan does not include that model | Pick a model your plan serves |
-| OpenAI requests fail with a connection error to `127.0.0.1` right after upgrading | A background server started before the upgrade still routes OpenAI through ccproxy | `EvoSci server stop`, then start again |
+| OpenAI requests fail with a connection error to `127.0.0.1` right after upgrading | A background server started before the upgrade still routes OpenAI through ccproxy | `metasci-scribe server stop`, then start again |
 | `Run: ccproxy auth login claude_api` on startup | No Claude OAuth credentials on this machine | Run the login command shown |
-| `ccproxy is required for OAuth mode but not found` | OAuth extra not installed (Claude only) | `pip install 'evoscientist[oauth]'` |
+| `ccproxy is required for OAuth mode but not found` | OAuth extra not installed (Claude only) | `pip install 'metasci-scribe[oauth]'` |
 | ccproxy config change has no effect | A long-running ccproxy instance predates the config, or a higher-precedence `.ccproxy.toml`/`ccproxy.toml` shadows it | Restart that ccproxy instance; check for a shadowing config file |
 
 **Debugging tip (Claude):** `ccproxy serve --port 8001 --log-level debug` on a spare port shows exactly what is forwarded upstream. **Warning:** debug logs print `Authorization` bearer tokens — never paste raw log lines anywhere. The same goes for `chatgpt.json`: it holds your ChatGPT tokens.
@@ -193,4 +193,4 @@ print(get_chat_model('gpt-6-sol', provider='openai').invoke('Reply with exactly:
 ## Quota and billing notes
 
 - Subscription routing consumes your **subscription's** usage limits (the same pool as Claude Code / the Codex app). Nothing is billed to an API key, but heavy agent workloads can exhaust subscription rate limits faster than chat use.
-- Tokens refresh on their own: Claude's via ccproxy (re-run `ccproxy auth login claude_api` only if status shows expired/not authenticated), ChatGPT's by EvoScientist before a request.
+- Tokens refresh on their own: Claude's via ccproxy (re-run `ccproxy auth login claude_api` only if status shows expired/not authenticated), ChatGPT's by Metasci Scribe before a request.

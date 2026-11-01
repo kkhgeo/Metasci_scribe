@@ -8,13 +8,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from EvoScientist.langgraph_dev.folder_check import (
+from metasci_scribe.langgraph_dev.folder_check import (
     RunFolderMismatchError,
     check_run_folders,
     folder_checked,
 )
-from EvoScientist.paths import SessionDirs, Workspace
-from EvoScientist.sessions import FOLDER_GRAPH_IDS
+from metasci_scribe.paths import SessionDirs, Workspace
+from metasci_scribe.sessions import FOLDER_GRAPH_IDS
 
 RUN = "20260930_120000"
 
@@ -24,7 +24,7 @@ def served(workspace, monkeypatch) -> SessionDirs:
     """A server pinned to a run folder of ``workspace``."""
     dirs = SessionDirs(workspace, workspace.runs_dir / RUN)
     monkeypatch.setattr(
-        "EvoScientist.langgraph_dev.folder_check.process_session_dirs", lambda: dirs
+        "metasci_scribe.langgraph_dev.folder_check.process_session_dirs", lambda: dirs
     )
     return dirs
 
@@ -134,7 +134,7 @@ def test_factory_checks_runs_only_and_returns_the_prebuilt_graph(served, tmp_pat
 
 def _launch(workspace: Workspace, work_dir=None) -> dict:
     """Start an async sub-agent and return the ``configurable`` it was sent."""
-    from EvoScientist.middleware.expert_async_subagent import (
+    from metasci_scribe.middleware.expert_async_subagent import (
         EvoAsyncSubAgentMiddleware,
     )
 
@@ -155,7 +155,7 @@ def _launch(workspace: Workspace, work_dir=None) -> dict:
     client.threads.create.return_value = {"thread_id": "t1"}
     client.runs.create.return_value = {"run_id": "r1"}
     with patch(
-        "EvoScientist.middleware.expert_async_subagent._ClientCache.get_sync",
+        "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_sync",
         return_value=client,
     ):
         start.func(
@@ -180,7 +180,7 @@ def test_daemon_async_tasks_forward_the_root_only(workspace):
 
 
 def test_memory_workers_and_the_linker_forward_the_root(workspace, tmp_path):
-    from EvoScientist.memory.launch import (
+    from metasci_scribe.memory.launch import (
         _memory_worker_run_payload,
         _observation_linker_run_payload,
     )
@@ -205,7 +205,7 @@ def test_memory_workers_and_the_linker_forward_the_root(workspace, tmp_path):
 
 
 def test_manual_autoskills_runs_forward_the_root(workspace, monkeypatch):
-    import EvoScientist.memory.autoskills.schedule as schedule
+    import metasci_scribe.memory.autoskills.schedule as schedule
 
     client = MagicMock()
     client.threads.create.return_value = {"thread_id": "t1"}
@@ -233,10 +233,10 @@ def test_registered_graphs_check_the_folders_they_work_in(served, monkeypatch, r
     import sys
     from pathlib import Path
 
-    import EvoScientist.EvoScientist as evo
-    import EvoScientist.memory.agents as memory_agents
-    import EvoScientist.subagents._factory as factory_mod
-    import EvoScientist.subagents.expert_container_async as expert_async
+    import metasci_scribe.agent as evo
+    import metasci_scribe.memory.agents as memory_agents
+    import metasci_scribe.subagents._factory as factory_mod
+    import metasci_scribe.subagents.expert_container_async as expert_async
 
     for module, name in (
         (factory_mod, "build_async_subagent_graph"),
@@ -248,8 +248,8 @@ def test_registered_graphs_check_the_folders_they_work_in(served, monkeypatch, r
         monkeypatch.setattr(module, name, lambda *a, **k: object())
     monkeypatch.setattr(evo, "_get_default_agent", lambda: MagicMock())
     for name in (
-        "EvoScientist.langgraph_dev.graphs",
-        "EvoScientist.langgraph_dev.main_graph",
+        "metasci_scribe.langgraph_dev.graphs",
+        "metasci_scribe.langgraph_dev.main_graph",
     ):
         monkeypatch.delitem(sys.modules, name, raising=False)
         # Built below from stubbed graphs: later imports must build their own.
@@ -282,7 +282,7 @@ def test_async_task_check_reports_why_a_run_was_refused(workspace):
     shows it to the agent instead of a generic failure."""
     import json
 
-    from EvoScientist.middleware.expert_async_subagent import (
+    from metasci_scribe.middleware.expert_async_subagent import (
         EvoAsyncSubAgentMiddleware,
     )
 
@@ -307,7 +307,7 @@ def test_async_task_check_reports_why_a_run_was_refused(workspace):
     client.threads.get.return_value = {
         "error": {
             "error": "RunFolderMismatchError",
-            "message": "This EvoScientist server serves workspace /a",
+            "message": "This Metasci Scribe server serves workspace /a",
         }
     }
     task = {
@@ -322,7 +322,7 @@ def test_async_task_check_reports_why_a_run_was_refused(workspace):
     }
     runtime = SimpleNamespace(state={"async_tasks": {"t1": task}}, tool_call_id="tc1")
     with patch(
-        "EvoScientist.middleware.expert_async_subagent._ClientCache.get_sync",
+        "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_sync",
         return_value=client,
     ):
         first = check.func(task_id="t1", runtime=runtime)
@@ -340,7 +340,7 @@ def test_new_run_folders_never_reuse_an_existing_one(workspace, monkeypatch):
     """Two sessions starting in the same second get different run folders."""
     from datetime import datetime
 
-    import EvoScientist.cli.agent as agent
+    import metasci_scribe.cli.agent as agent
 
     class _SameSecond(datetime):
         @classmethod
@@ -357,7 +357,7 @@ def test_new_run_folders_never_reuse_an_existing_one(workspace, monkeypatch):
 
 
 def test_create_run_dir_skips_dangling_symlink(workspace):
-    import EvoScientist.cli.agent as agent
+    import metasci_scribe.cli.agent as agent
 
     workspace.runs_dir.mkdir(parents=True)
     (workspace.runs_dir / "exp").symlink_to(workspace.root / "does-not-exist")
@@ -372,7 +372,7 @@ def test_create_run_dir_skips_dangling_symlink(workspace):
 
 def test_run_errors_keep_exception_type():
     """langgraph-api stores a placeholder text for most exception types."""
-    from EvoScientist.llm.patches import _RunErrors
+    from metasci_scribe.llm.patches import _RunErrors
 
     failed = {"status": "error", "thread_id": "t1", "run_id": "r1"}
     attached = _RunErrors().attach(
@@ -383,7 +383,7 @@ def test_run_errors_keep_exception_type():
 
 
 def test_run_errors_return_run_without_id_unchanged():
-    from EvoScientist.llm.patches import _RunErrors
+    from metasci_scribe.llm.patches import _RunErrors
 
     run = {"status": "error", "thread_id": "t1"}
     thread = {"error": {"error": "RuntimeError", "message": "boom"}}
@@ -395,7 +395,7 @@ async def test_acheck_async_task_reports_failure_reason(workspace):
     import json
     from unittest.mock import AsyncMock
 
-    from EvoScientist.middleware.expert_async_subagent import (
+    from metasci_scribe.middleware.expert_async_subagent import (
         EvoAsyncSubAgentMiddleware,
     )
 
@@ -443,7 +443,7 @@ async def test_acheck_async_task_reports_failure_reason(workspace):
         tool_call_id="tc1",
     )
     with patch(
-        "EvoScientist.middleware.expert_async_subagent._ClientCache.get_async",
+        "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_async",
         return_value=client,
     ):
         refused = await check.coroutine(task_id="t1", runtime=runtime)
@@ -458,10 +458,10 @@ async def test_acheck_async_task_reports_failure_reason(workspace):
 
 def test_merge_runs_config_replaces_caller_folders():
     """The launching graph's folders win over a caller's stale ones."""
-    from EvoScientist.llm.patches import _merge_runs_config_kwargs
+    from metasci_scribe.llm.patches import _merge_runs_config_kwargs
 
     caller = {"workspace_dir": "/c", "run_dir": "/c/runs/r", "thread_id": "t1"}
-    with patch("EvoScientist.llm.patches._read_cfg_configurable", lambda: {}):
+    with patch("metasci_scribe.llm.patches._read_cfg_configurable", lambda: {}):
         merged = _merge_runs_config_kwargs(
             {"config": {"configurable": caller}}, {"workspace_dir": "/ws"}
         )
@@ -474,9 +474,9 @@ def test_merge_runs_config_replaces_caller_folders():
 def test_server_gateway_run_config_forwards_target_folders(monkeypatch):
     """The gateway's own main-agent runs carry their folders like child runs,
     over any a caller put in ``configurable_extra``."""
-    import EvoScientist.EvoScientist as evo
-    from EvoScientist.gateway.server import LangGraphServerGateway
-    from EvoScientist.gateway.types import GraphTarget
+    import metasci_scribe.agent as evo
+    from metasci_scribe.gateway.server import LangGraphServerGateway
+    from metasci_scribe.gateway.types import GraphTarget
 
     monkeypatch.setattr(
         evo,
@@ -484,7 +484,7 @@ def test_server_gateway_run_config_forwards_target_folders(monkeypatch):
         lambda: SimpleNamespace(model="m", provider="p", recursion_limit=None),
     )
     monkeypatch.setattr(
-        "EvoScientist.backends.hitl_suppressed_for_run", lambda _cfg: False
+        "metasci_scribe.backends.hitl_suppressed_for_run", lambda _cfg: False
     )
     gateway = object.__new__(LangGraphServerGateway)
     stale = {"workspace_dir": "/b", "run_dir": "/b/runs/y", "active_teams": ["t"]}
@@ -512,7 +512,7 @@ def test_server_gateway_run_config_forwards_target_folders(monkeypatch):
 
 async def _sync_order(workspace, *, pinned_elsewhere: bool) -> list[str]:
     """Sync the server to ``workspace`` and return what ran, in order."""
-    from EvoScientist.cli import commands
+    from metasci_scribe.cli import commands
 
     order: list[str] = []
     with (
@@ -520,11 +520,11 @@ async def _sync_order(workspace, *, pinned_elsewhere: bool) -> list[str]:
             commands, "_wait_for_memory_workers", lambda **_k: order.append("memory")
         ),
         patch(
-            "EvoScientist.langgraph_dev.manager.owned_server_pinned_elsewhere",
+            "metasci_scribe.langgraph_dev.manager.owned_server_pinned_elsewhere",
             lambda *a, **k: pinned_elsewhere,
         ),
         patch(
-            "EvoScientist.langgraph_dev.manager.ensure_langgraph_dev",
+            "metasci_scribe.langgraph_dev.manager.ensure_langgraph_dev",
             lambda *a, **k: order.append("move"),
         ),
         patch.object(commands, "_reconcile_autoskill_schedule", lambda *a, **k: None),
@@ -548,7 +548,7 @@ async def test_server_sync_to_served_folders_skips_memory_wait(workspace):
 
 
 def test_owned_server_pinned_elsewhere_compares_folder_pair(workspace, monkeypatch):
-    from EvoScientist.langgraph_dev import manager
+    from metasci_scribe.langgraph_dev import manager
 
     alive = SimpleNamespace(poll=lambda: None)
     run = workspace.runs_dir / RUN
@@ -566,8 +566,8 @@ def test_ensure_async_subagent_server_refused_removes_run_dir(workspace):
     """A session refused by another one's server leaves no empty run folder."""
     import typer
 
-    from EvoScientist.cli import commands
-    from EvoScientist.langgraph_dev.manager import WorkspaceMismatchError
+    from metasci_scribe.cli import commands
+    from metasci_scribe.langgraph_dev.manager import WorkspaceMismatchError
 
     run = workspace.runs_dir / RUN
     run.mkdir(parents=True)
@@ -576,7 +576,7 @@ def test_ensure_async_subagent_server_refused_removes_run_dir(workspace):
         raise WorkspaceMismatchError("held by another session")
 
     with (
-        patch("EvoScientist.langgraph_dev.manager.ensure_langgraph_dev", _refuse),
+        patch("metasci_scribe.langgraph_dev.manager.ensure_langgraph_dev", _refuse),
         pytest.raises(typer.Exit),
     ):
         commands._ensure_async_subagent_server(
@@ -592,7 +592,7 @@ async def test_restore_thread_dirs_removes_unused_run_dir(workspace, tmp_path):
     folder made at startup goes."""
     from unittest.mock import AsyncMock
 
-    from EvoScientist.cli import commands
+    from metasci_scribe.cli import commands
 
     started = SessionDirs(workspace, workspace.runs_dir / RUN)
     started.run_dir.mkdir(parents=True)
@@ -616,8 +616,8 @@ async def test_restore_thread_dirs_removes_unused_run_dir(workspace, tmp_path):
 
 async def _new_session(workspace, sync) -> SessionDirs:
     """Run the Rich CLI ``/new`` folder switch of a ``--mode=run`` session."""
-    from EvoScientist.cli import commands
-    from EvoScientist.cli.interactive import _new_session_dirs
+    from metasci_scribe.cli import commands
+    from metasci_scribe.cli.interactive import _new_session_dirs
 
     with patch.object(commands, "_sync_background_agent_server_workspace", sync):
         return await _new_session_dirs(
@@ -645,7 +645,7 @@ async def test_new_session_dirs_refused_removes_run_dir(workspace):
     keeps its folders, with no empty run folder left behind."""
     from unittest.mock import AsyncMock
 
-    from EvoScientist.langgraph_dev.manager import WorkspaceMismatchError
+    from metasci_scribe.langgraph_dev.manager import WorkspaceMismatchError
 
     sync = AsyncMock(side_effect=WorkspaceMismatchError("held by another session"))
     with pytest.raises(WorkspaceMismatchError):

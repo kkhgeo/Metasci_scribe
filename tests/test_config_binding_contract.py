@@ -1,4 +1,4 @@
-"""Binding contract between ``EvoScientistConfig`` fields and the served graphs.
+"""Binding contract between ``ScribeConfig`` fields and the served graphs.
 
 Every config field must fall into exactly one of two binding regimes:
 
@@ -25,8 +25,8 @@ from __future__ import annotations
 
 from dataclasses import fields as dataclass_fields
 
-from EvoScientist.config.settings import EvoScientistConfig, save_config
-from EvoScientist.langgraph_dev.manager import (
+from metasci_scribe.config.settings import ScribeConfig, save_config
+from metasci_scribe.langgraph_dev.manager import (
     _FINGERPRINT_EXCLUDED_FIELDS,
     _FINGERPRINT_EXCLUDED_PREFIXES,
     _FINGERPRINT_FILE_FIELDS,
@@ -47,7 +47,7 @@ FIELD_CHANNELS: dict[str, str] = {
     "log_level": "CLI-process logging",
     "default_mode": "client-side startup mode selection",
     "default_workdir": "client-side run-dir selection; workspace reaches the"
-    " server via GraphTarget / EVOSCIENTIST_WORKSPACE_DIR",
+    " server via GraphTarget / METASCI_SCRIBE_WORKSPACE_DIR",
     "webui_port": "WebUI client process",
     "webui_host": "WebUI client process",
     "langgraph_dev_keepalive": "server lifecycle flag consumed at spawn time,"
@@ -80,7 +80,7 @@ PREFIX_CHANNELS: dict[str, str] = {
 
 
 def _config_field_names() -> set[str]:
-    return {f.name for f in dataclass_fields(EvoScientistConfig)}
+    return {f.name for f in dataclass_fields(ScribeConfig)}
 
 
 def _excluded_field_names() -> set[str]:
@@ -163,17 +163,17 @@ class TestFingerprintCoverage:
     """Fingerprint-covered fields drive the hash; excluded ones never do."""
 
     def test_baseline_fingerprint_is_deterministic(self):
-        assert _server_config_fingerprint(
-            EvoScientistConfig()
-        ) == _server_config_fingerprint(EvoScientistConfig())
+        assert _server_config_fingerprint(ScribeConfig()) == _server_config_fingerprint(
+            ScribeConfig()
+        )
 
     def test_covered_fields_change_fingerprint(self):
-        baseline = _server_config_fingerprint(EvoScientistConfig())
+        baseline = _server_config_fingerprint(ScribeConfig())
         offenders = []
         for field_name in _covered_field_names():
             if field_name in _FINGERPRINT_FILE_FIELDS:
                 continue  # covered through the file, below
-            cfg = EvoScientistConfig()
+            cfg = ScribeConfig()
             setattr(cfg, field_name, _mutate(getattr(cfg, field_name)))
             if _server_config_fingerprint(cfg) == baseline:
                 offenders.append(field_name)
@@ -186,30 +186,30 @@ class TestFingerprintCoverage:
     def test_file_fields_change_fingerprint_through_the_file_only(self):
         """A command-line override of these fields never reaches the server,
         which reads them from config.yaml; a change in the file does."""
-        baseline = _server_config_fingerprint(EvoScientistConfig())
+        baseline = _server_config_fingerprint(ScribeConfig())
         for field_name in sorted(_FINGERPRINT_FILE_FIELDS):
-            overridden = EvoScientistConfig()
+            overridden = ScribeConfig()
             setattr(overridden, field_name, _mutate(getattr(overridden, field_name)))
             assert _server_config_fingerprint(overridden) == baseline, field_name
 
-            saved = EvoScientistConfig()
+            saved = ScribeConfig()
             setattr(saved, field_name, _mutate(getattr(saved, field_name)))
             save_config(saved)
             try:
-                assert _server_config_fingerprint(EvoScientistConfig()) != baseline, (
+                assert _server_config_fingerprint(ScribeConfig()) != baseline, (
                     field_name
                 )
             finally:
-                save_config(EvoScientistConfig())
+                save_config(ScribeConfig())
 
     def test_file_fields_are_covered_not_excluded(self):
         assert _FINGERPRINT_FILE_FIELDS <= set(_covered_field_names())
 
     def test_excluded_fields_leave_fingerprint_unchanged(self):
-        baseline = _server_config_fingerprint(EvoScientistConfig())
+        baseline = _server_config_fingerprint(ScribeConfig())
         offenders = []
         for field_name in sorted(_excluded_field_names()):
-            cfg = EvoScientistConfig()
+            cfg = ScribeConfig()
             setattr(cfg, field_name, _mutate(getattr(cfg, field_name)))
             if _server_config_fingerprint(cfg) != baseline:
                 offenders.append(

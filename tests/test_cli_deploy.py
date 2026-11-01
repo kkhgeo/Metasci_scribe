@@ -1,4 +1,4 @@
-"""Tests for ``EvoSci deploy`` command flow.
+"""Tests for ``metasci-scribe deploy`` command flow.
 
 Verifies the orchestration:
 - workspace resolution (CLI > config > cwd)
@@ -19,7 +19,7 @@ from typing import Any
 import pytest
 import typer
 
-from EvoScientist.deploy import server as deploy_server
+from metasci_scribe.deploy import server as deploy_server
 
 
 @pytest.fixture(autouse=True)
@@ -90,7 +90,7 @@ def _run_deploy_once(
 ):
     """Run ``deploy()`` end-to-end with all external dependencies mocked.
     Returns a ``captured`` dict with observation points."""
-    import EvoScientist.config as config_mod
+    import metasci_scribe.config as config_mod
 
     captured: dict[str, Any] = {
         "ccproxy_started": False,
@@ -116,7 +116,7 @@ def _run_deploy_once(
     monkeypatch.setattr(deploy_server, "console", _SilentConsole(captured["printed"]))
 
     # langgraph_dev.manager mocks
-    from EvoScientist.langgraph_dev import manager as lgm
+    from metasci_scribe.langgraph_dev import manager as lgm
 
     def _fake_is_port_occupied(_p, *_a, **_kw):
         if on_port_check is not None:
@@ -162,7 +162,7 @@ def _run_deploy_once(
     )
 
     # ccproxy mocks
-    from EvoScientist import ccproxy_manager as ccp
+    from metasci_scribe import ccproxy_manager as ccp
 
     def _fake_maybe_start_ccproxy(_cfg):
         captured["ccproxy_started"] = True
@@ -406,7 +406,7 @@ def test_deploy_host_is_stripped(monkeypatch, tmp_path):
 def test_deploy_bind_flags_are_config_overrides(
     monkeypatch, tmp_path, host, port, overrides
 ):
-    """As ``EvoSci --host`` passes it, so the config fingerprint recorded for
+    """As ``metasci-scribe --host`` passes it, so the config fingerprint recorded for
     the server matches a session started with the same bind."""
     config = _make_config(default_workdir=str(tmp_path))
     captured = _run_deploy_once(monkeypatch, config, host=host, port=port)
@@ -416,7 +416,7 @@ def test_deploy_bind_flags_are_config_overrides(
 
 def test_deploy_config_host_is_stripped(monkeypatch, tmp_path):
     """Stripping must not depend on the value arriving via --host.
-    ``EvoScientistConfig.__post_init__`` normalizes these fields, but deploy()
+    ``ScribeConfig.__post_init__`` normalizes these fields, but deploy()
     reads through ``getattr`` and is handed duck-typed config objects that
     never run it — an unstripped value would reach socket.bind()."""
     config = _make_config(
@@ -496,10 +496,10 @@ def test_deploy_starts_ccproxy_when_anthropic_oauth(monkeypatch, tmp_path):
 
 
 def test_deploy_needs_no_ccproxy_for_openai_oauth(monkeypatch, tmp_path):
-    from EvoScientist.llm.chatgpt_oauth import ChatGPTLogin
+    from metasci_scribe.llm.chatgpt_oauth import ChatGPTLogin
 
     monkeypatch.setattr(
-        "EvoScientist.llm.chatgpt_oauth.status",
+        "metasci_scribe.llm.chatgpt_oauth.status",
         lambda: ChatGPTLogin(signed_in=True, plan="plus"),
     )
     config = _make_config(default_workdir=str(tmp_path), openai_auth_mode="oauth")
@@ -510,10 +510,10 @@ def test_deploy_needs_no_ccproxy_for_openai_oauth(monkeypatch, tmp_path):
 
 
 def test_deploy_refuses_openai_oauth_without_sign_in(monkeypatch, tmp_path):
-    from EvoScientist.llm.chatgpt_oauth import ChatGPTLogin
+    from metasci_scribe.llm.chatgpt_oauth import ChatGPTLogin
 
     monkeypatch.setattr(
-        "EvoScientist.llm.chatgpt_oauth.status",
+        "metasci_scribe.llm.chatgpt_oauth.status",
         lambda: ChatGPTLogin(signed_in=False),
     )
     config = _make_config(default_workdir=str(tmp_path), openai_auth_mode="oauth")
@@ -540,8 +540,8 @@ def test_describe_auth(anthropic, openai, expected):
     assert deploy_server._describe_auth(config) == expected
 
 
-def test_deploy_refuses_when_port_occupied_by_evosci(monkeypatch, tmp_path):
-    """If port is occupied AND it's serving an EvoSci langgraph dev,
+def test_deploy_refuses_when_port_occupied_by_scribe(monkeypatch, tmp_path):
+    """If port is occupied AND it's serving an metasci-scribe langgraph dev,
     refuse with exit code 1."""
     config = _make_config(default_workdir=str(tmp_path))
     with pytest.raises(typer.Exit) as exc:
@@ -549,7 +549,7 @@ def test_deploy_refuses_when_port_occupied_by_evosci(monkeypatch, tmp_path):
             monkeypatch,
             config,
             port_occupied=True,
-            langgraph_dev_running=True,  # /ok responds → existing EvoSci instance
+            langgraph_dev_running=True,  # /ok responds → existing metasci-scribe instance
         )
     assert exc.value.exit_code == 1
 
@@ -576,7 +576,7 @@ def test_deploy_waits_for_another_start_before_the_port_check(monkeypatch, tmp_p
 
     from filelock import FileLock
 
-    from EvoScientist.langgraph_dev import manager as lgm
+    from metasci_scribe.langgraph_dev import manager as lgm
     from tests.fakes.langgraph_dev import LockHolder
 
     holder = LockHolder()
@@ -596,7 +596,7 @@ def test_deploy_waits_for_another_start_before_the_port_check(monkeypatch, tmp_p
 
 
 def test_deploy_gives_up_on_a_start_lock_held_too_long(monkeypatch, tmp_path):
-    from EvoScientist.langgraph_dev import manager as lgm
+    from metasci_scribe.langgraph_dev import manager as lgm
     from tests.fakes.langgraph_dev import LockHolder
 
     monkeypatch.setattr(lgm, "_FILE_LOCK_TIMEOUT", 0.2)
@@ -617,7 +617,7 @@ def test_deploy_gives_up_on_a_start_lock_held_too_long(monkeypatch, tmp_path):
 
 
 def test_deploy_starts_under_the_start_lock(monkeypatch, tmp_path):
-    from EvoScientist.langgraph_dev import manager as lgm
+    from metasci_scribe.langgraph_dev import manager as lgm
     from tests.fakes.langgraph_dev import start_lock_is_held
 
     held: list[bool] = []
@@ -715,13 +715,13 @@ def test_handle_shutdown_sigterm_sets_shutdown_event(monkeypatch, tmp_path):
     )
 
 
-@pytest.mark.parametrize("hint", [None, "Run `EvoSci setup`, then restart."])
+@pytest.mark.parametrize("hint", [None, "Run `metasci-scribe setup`, then restart."])
 def test_deploy_prints_the_setup_hint(monkeypatch, tmp_path, hint):
-    from EvoScientist import agent_shell
+    from metasci_scribe import agent_shell
 
     monkeypatch.setattr(agent_shell, "setup_hint", lambda: hint)
     captured = _run_deploy_once(
         monkeypatch, _make_config(default_workdir=str(tmp_path))
     )
-    shown = any("EvoSci setup" in line for line in captured["printed"])
+    shown = any("metasci-scribe setup" in line for line in captured["printed"])
     assert shown is (hint is not None)

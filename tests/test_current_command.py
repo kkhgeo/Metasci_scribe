@@ -3,14 +3,14 @@
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from EvoScientist.paths import SessionDirs
+from metasci_scribe.paths import SessionDirs
 from tests.fakes.common import TEST_WORKSPACE
 
 
 class TestCurrentCommand:
     async def test_prints_thread_workspace_and_memory(self):
-        from EvoScientist.commands.base import CommandContext
-        from EvoScientist.commands.implementation.general import CurrentCommand
+        from metasci_scribe.commands.base import CommandContext
+        from metasci_scribe.commands.implementation.general import CurrentCommand
 
         ui = MagicMock()
         ctx = CommandContext(
@@ -28,8 +28,8 @@ class TestCurrentCommand:
         assert any("Memory dir:" in s for s in calls)
 
     async def test_skips_run_folder_when_none(self):
-        from EvoScientist.commands.base import CommandContext
-        from EvoScientist.commands.implementation.general import CurrentCommand
+        from metasci_scribe.commands.base import CommandContext
+        from metasci_scribe.commands.implementation.general import CurrentCommand
 
         ui = MagicMock()
         ctx = CommandContext(

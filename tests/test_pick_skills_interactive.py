@@ -6,7 +6,7 @@ can distinguish "picker handled the no-op case" from "user cancelled".
 
 from unittest.mock import MagicMock, patch
 
-from EvoScientist.paths import SessionDirs
+from metasci_scribe.paths import SessionDirs
 
 _INDEX = [
     {
@@ -29,14 +29,14 @@ class TestPickSkillsInteractive:
         """Pre-filter with no matches → [] (not None). Caller should
         suppress its own "cancelled" message since the picker already
         printed a specific one."""
-        from EvoScientist.cli.skills_cmd import _pick_skills_interactive
+        from metasci_scribe.cli.skills_cmd import _pick_skills_interactive
 
         result = _pick_skills_interactive(_INDEX, set(), "nonexistent-tag")
         assert result == []
 
     def test_all_installed_returns_empty_list(self):
         """If every skill matching the tag is already installed → []."""
-        from EvoScientist.cli.skills_cmd import _pick_skills_interactive
+        from metasci_scribe.cli.skills_cmd import _pick_skills_interactive
 
         installed = {"paper-writing", "research-ideation"}
         # Pre-filter skips tag picker; directly hits all-installed guard
@@ -45,7 +45,7 @@ class TestPickSkillsInteractive:
 
     def test_tag_picker_cancel_returns_none(self, monkeypatch):
         """User cancels tag picker (Esc) → None."""
-        from EvoScientist.cli import skills_cmd
+        from metasci_scribe.cli import skills_cmd
 
         select_prompt = MagicMock()
         select_prompt.ask.return_value = None
@@ -56,7 +56,7 @@ class TestPickSkillsInteractive:
 
     def test_checkbox_cancel_returns_none(self, monkeypatch):
         """User cancels checkbox (Esc) → None."""
-        from EvoScientist.cli import skills_cmd
+        from metasci_scribe.cli import skills_cmd
 
         # Skip tag picker by pre-filtering
         checkbox_prompt = MagicMock()
@@ -68,7 +68,7 @@ class TestPickSkillsInteractive:
 
     def test_checkbox_confirmed_with_selection(self, monkeypatch):
         """User confirms with selections → list of install sources."""
-        from EvoScientist.cli import skills_cmd
+        from metasci_scribe.cli import skills_cmd
 
         checkbox_prompt = MagicMock()
         checkbox_prompt.ask.return_value = ["repo@paper-writing"]
@@ -86,8 +86,8 @@ class TestInstallSkillsHandlesEmpty:
         (the picker already printed its own message)."""
         from unittest.mock import AsyncMock
 
-        from EvoScientist.commands.base import CommandContext
-        from EvoScientist.commands.implementation.skills import InstallSkills
+        from metasci_scribe.commands.base import CommandContext
+        from metasci_scribe.commands.implementation.skills import InstallSkills
 
         ui = MagicMock()
         ui.supports_interactive = True
@@ -97,7 +97,7 @@ class TestInstallSkillsHandlesEmpty:
         )
 
         with patch(
-            "EvoScientist.tools.skills_manager.fetch_remote_skill_index",
+            "metasci_scribe.tools.skills_manager.fetch_remote_skill_index",
             return_value=_INDEX,
         ):
             await InstallSkills().execute(ctx, [])
@@ -109,8 +109,8 @@ class TestInstallSkillsHandlesEmpty:
         """When picker returns None (actual cancel), user sees the message."""
         from unittest.mock import AsyncMock
 
-        from EvoScientist.commands.base import CommandContext
-        from EvoScientist.commands.implementation.skills import InstallSkills
+        from metasci_scribe.commands.base import CommandContext
+        from metasci_scribe.commands.implementation.skills import InstallSkills
 
         ui = MagicMock()
         ui.supports_interactive = True
@@ -120,7 +120,7 @@ class TestInstallSkillsHandlesEmpty:
         )
 
         with patch(
-            "EvoScientist.tools.skills_manager.fetch_remote_skill_index",
+            "metasci_scribe.tools.skills_manager.fetch_remote_skill_index",
             return_value=_INDEX,
         ):
             await InstallSkills().execute(ctx, [])

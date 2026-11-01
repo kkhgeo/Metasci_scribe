@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from langchain_core.messages import HumanMessage, convert_to_messages
 
-from EvoScientist.message_meta import (
+from metasci_scribe.message_meta import (
     is_pinned_skill,
     message_source,
     message_text,
@@ -123,7 +123,7 @@ def test_skill_label():
 def test_this_run_messages_starts_at_the_latest_typed_message():
     from langchain_core.messages import AIMessage, HumanMessage
 
-    from EvoScientist.message_meta import this_run_messages
+    from metasci_scribe.message_meta import this_run_messages
 
     history = [
         HumanMessage("old task"),
@@ -146,7 +146,7 @@ def test_this_run_messages_starts_at_the_latest_typed_message():
 def test_this_run_messages_keeps_everything_without_a_typed_message():
     from langchain_core.messages import AIMessage
 
-    from EvoScientist.message_meta import this_run_messages
+    from metasci_scribe.message_meta import this_run_messages
 
     history = [AIMessage("only an answer")]
     assert this_run_messages(history) == history
@@ -155,7 +155,7 @@ def test_this_run_messages_keeps_everything_without_a_typed_message():
 def test_rubric_feedback_is_recognised_by_its_source_tag():
     from langchain_core.messages import HumanMessage
 
-    from EvoScientist.message_meta import RUBRIC_FEEDBACK_LABEL, is_rubric_feedback
+    from metasci_scribe.message_meta import RUBRIC_FEEDBACK_LABEL, is_rubric_feedback
 
     feedback = HumanMessage("revise", additional_kwargs={"lc_source": "rubric_grader"})
     summary = HumanMessage("summary", additional_kwargs={"lc_source": "summarization"})
@@ -169,7 +169,7 @@ def test_rubric_feedback_is_recognised_by_its_source_tag():
 def test_harness_label_names_what_replaces_the_message():
     from langchain_core.messages import HumanMessage
 
-    from EvoScientist.message_meta import harness_label
+    from metasci_scribe.message_meta import harness_label
 
     pinned = HumanMessage(
         "body",
@@ -189,6 +189,6 @@ def test_harness_label_names_what_replaces_the_message():
 def test_the_grader_source_is_upstreams():
     from deepagents.middleware.rubric import RUBRIC_GRADER_MESSAGE_SOURCE
 
-    from EvoScientist.message_meta import RUBRIC_GRADER_SOURCE
+    from metasci_scribe.message_meta import RUBRIC_GRADER_SOURCE
 
     assert RUBRIC_GRADER_SOURCE == RUBRIC_GRADER_MESSAGE_SOURCE

@@ -15,7 +15,7 @@ from langchain_core.language_models.fake_chat_models import (
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
-from EvoScientist.middleware.skills_reload import SkillsReloadMiddleware
+from metasci_scribe.middleware.skills_reload import SkillsReloadMiddleware
 from tests.fakes.common import build_default_middleware
 
 _SEEN: list[list[BaseMessage]] = []

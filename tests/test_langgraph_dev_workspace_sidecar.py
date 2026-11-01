@@ -7,7 +7,7 @@ mismatch we raise ``WorkspaceMismatchError`` so callers can surface a
 clear refuse-with-hint error rather than silently operating on the wrong
 project's files.
 
-Background: ``EvoSci deploy --workdir /A`` running + ``EvoSci`` (TUI) in
+Background: ``metasci-scribe deploy --workdir /A`` running + ``metasci-scribe`` (TUI) in
 /B previously took the "reuse externally-managed langgraph dev" branch
 in ``ensure_langgraph_dev`` and only logged a warning. The deployed
 sub-agents stayed pinned to /A while the TUI's main agent ran in /B,
@@ -23,8 +23,8 @@ import time
 import psutil
 import pytest
 
-from EvoScientist import paths
-from EvoScientist.langgraph_dev import manager
+from metasci_scribe import paths
+from metasci_scribe.langgraph_dev import manager
 
 
 def _wait_for_child_argv(pid: int, needle: str, timeout: float = 5.0) -> bool:
@@ -164,11 +164,11 @@ def test_write_workspace_sidecar_records_the_data_and_config_folders(
         dataclasses.replace(runtime_paths, workspace_sidecar=tmp_path / "ws.json"),
     )
     monkeypatch.setattr(paths, "DATA_DIR", tmp_path / "data dir é")
-    monkeypatch.setattr(paths, "CONFIG_DIR", tmp_path / "config" / "evoscientist")
+    monkeypatch.setattr(paths, "CONFIG_DIR", tmp_path / "config" / "metasci-scribe")
     manager._write_workspace_sidecar(workspace_dir=tmp_path / "ws", pid=7)
     data = manager._read_workspace_sidecar()
     assert data["data_dir"] == str(tmp_path / "data dir é")
-    assert data["config_dir"] == str(tmp_path / "config" / "evoscientist")
+    assert data["config_dir"] == str(tmp_path / "config" / "metasci-scribe")
 
 
 def test_workspace_mismatch_error_is_runtime_error_subclass():
@@ -192,7 +192,7 @@ def test_ensure_langgraph_dev_refuses_on_workspace_mismatch(
     monkeypatch.setattr(manager, "_PROCESS", None)
     monkeypatch.setattr(manager, "_PROCESS_WORKSPACE", None)
 
-    cfg = manager.EvoScientistConfig()
+    cfg = manager.ScribeConfig()
     cfg.enable_async_subagents = True
     with pytest.raises(manager.WorkspaceMismatchError) as exc:
         manager.ensure_langgraph_dev(cfg, workspace_dir=ws_b)
@@ -200,14 +200,14 @@ def test_ensure_langgraph_dev_refuses_on_workspace_mismatch(
     assert str(ws_b) in str(exc.value)
     # Without keepalive a mismatch means a live session — no stop suggestion,
     # keeping the message identical to pre-keepalive behavior.
-    assert "EvoSci server stop" not in str(exc.value)
+    assert "metasci-scribe server stop" not in str(exc.value)
 
 
 def test_mismatch_error_suggests_server_stop_under_keepalive(
     tmp_path, monkeypatch, runtime_paths
 ):
     """With keepalive on, the leftover may be ownerless — the error points at
-    `EvoSci server stop`, which kills AND cleans the records (a raw kill
+    `metasci-scribe server stop`, which kills AND cleans the records (a raw kill
     would leave stale files behind)."""
     ws_a = tmp_path / "A"
     ws_b = tmp_path / "B"
@@ -222,12 +222,12 @@ def test_mismatch_error_suggests_server_stop_under_keepalive(
     monkeypatch.setattr(manager, "_PROCESS", None)
     monkeypatch.setattr(manager, "_PROCESS_WORKSPACE", None)
 
-    cfg = manager.EvoScientistConfig()
+    cfg = manager.ScribeConfig()
     cfg.enable_async_subagents = True
     cfg.langgraph_dev_keepalive = True
     with pytest.raises(manager.WorkspaceMismatchError) as exc:
         manager.ensure_langgraph_dev(cfg, workspace_dir=ws_b)
-    assert "EvoSci server stop" in str(exc.value)
+    assert "metasci-scribe server stop" in str(exc.value)
 
 
 def test_ensure_langgraph_dev_refuses_on_mismatch_with_stale_process(
@@ -255,7 +255,7 @@ def test_ensure_langgraph_dev_refuses_on_mismatch_with_stale_process(
     # also gates on _PROCESS.poll() is None) doesn't fire on this dead handle.
     monkeypatch.setattr(manager, "_PROCESS_WORKSPACE", ws_b)
 
-    cfg = manager.EvoScientistConfig()
+    cfg = manager.ScribeConfig()
     cfg.enable_async_subagents = True
     with pytest.raises(manager.WorkspaceMismatchError):
         manager.ensure_langgraph_dev(cfg, workspace_dir=ws_b)
@@ -277,7 +277,7 @@ def test_ensure_langgraph_dev_reuses_when_workspace_matches(
     monkeypatch.setattr(manager, "_PROCESS", None)
     monkeypatch.setattr(manager, "_PROCESS_WORKSPACE", None)
 
-    cfg = manager.EvoScientistConfig()
+    cfg = manager.ScribeConfig()
     cfg.enable_async_subagents = True
     # Should NOT raise.
     manager.ensure_langgraph_dev(cfg, workspace_dir=ws_a)
@@ -297,7 +297,7 @@ def test_ensure_langgraph_dev_reuses_when_sidecar_missing(
     monkeypatch.setattr(manager, "_PROCESS", None)
     monkeypatch.setattr(manager, "_PROCESS_WORKSPACE", None)
 
-    cfg = manager.EvoScientistConfig()
+    cfg = manager.ScribeConfig()
     cfg.enable_async_subagents = True
     # Should NOT raise — degrades to the prior reuse-with-warning branch.
     manager.ensure_langgraph_dev(cfg, workspace_dir=tmp_path / "B")
@@ -352,7 +352,7 @@ def test_keepalive_skips_atexit_registration(tmp_path, monkeypatch, runtime_path
         manager.atexit, "register", lambda *a, **kw: registered.append(a)
     )
 
-    cfg = manager.EvoScientistConfig()
+    cfg = manager.ScribeConfig()
     assert cfg.langgraph_dev_keepalive is False, "keepalive must default to off"
     cfg.enable_async_subagents = True
     cfg.langgraph_dev_keepalive = True
@@ -397,7 +397,7 @@ def test_sidecar_records_config_fingerprint_when_passed(
 
 
 def test_server_config_fingerprint_tracks_relevant_fields():
-    cfg = manager.EvoScientistConfig()
+    cfg = manager.ScribeConfig()
     base = manager._server_config_fingerprint(cfg)
     assert base == manager._server_config_fingerprint(cfg), "must be deterministic"
     cfg.model = "some-other-model"
@@ -416,7 +416,7 @@ def _reuse_setup(tmp_path, monkeypatch, runtime_paths, fingerprint):
     monkeypatch.setattr(manager, "is_langgraph_dev_running", lambda **_kw: True)
     monkeypatch.setattr(manager, "_PROCESS", None)
     monkeypatch.setattr(manager, "_PROCESS_WORKSPACE", None)
-    cfg = manager.EvoScientistConfig()
+    cfg = manager.ScribeConfig()
     cfg.enable_async_subagents = True
     return cfg
 
@@ -460,7 +460,7 @@ def test_reuse_sets_drift_flag_on_version_change(tmp_path, monkeypatch, runtime_
     reuses it and warns, and the server is not stopped."""
     import importlib.metadata
 
-    cfg = manager.EvoScientistConfig()
+    cfg = manager.ScribeConfig()
     cfg.enable_async_subagents = True
     monkeypatch.setattr(importlib.metadata, "version", lambda _name: "0.3.4")
     old_fp = manager._server_config_fingerprint(cfg)
@@ -478,12 +478,12 @@ def test_reuse_sets_drift_flag_on_version_change(tmp_path, monkeypatch, runtime_
 
 def test_started_server_recorded_for_next_version(tmp_path, monkeypatch, runtime_paths):
     """A server the CLI starts records what the next version compares: the
-    marker, the PID file for ``EvoSci server stop`` and the fingerprint."""
+    marker, the PID file for ``metasci-scribe server stop`` and the fingerprint."""
     import importlib.metadata
     import subprocess
     from types import SimpleNamespace
 
-    from EvoScientist.mcp import client as mcp_client
+    from metasci_scribe.mcp import client as mcp_client
 
     up = {"running": False}
     spawned = []
@@ -501,13 +501,13 @@ def test_started_server_recorded_for_next_version(tmp_path, monkeypatch, runtime
     monkeypatch.setattr(subprocess, "Popen", _popen)
     monkeypatch.setattr(manager, "_PROCESS", None)
     monkeypatch.setattr(manager, "_PROCESS_WORKSPACE", None)
-    cfg = manager.EvoScientistConfig()
+    cfg = manager.ScribeConfig()
     cfg.enable_async_subagents = True
     cfg.langgraph_dev_keepalive = True
 
     monkeypatch.setattr(importlib.metadata, "version", lambda _name: "0.3.5")
     manager.ensure_langgraph_dev(cfg, workspace_dir=tmp_path / "A")
-    assert spawned[0]["EVOSCIENTIST_SERVER_PROCESS"] == "1"
+    assert spawned[0]["METASCI_SCRIBE_SERVER_PROCESS"] == "1"
     assert runtime_paths.pid_file.read_text() == "4242"
 
     monkeypatch.setattr(manager, "_PROCESS", None)
@@ -520,7 +520,7 @@ def test_started_server_recorded_for_next_version(tmp_path, monkeypatch, runtime
 def test_reuse_clears_drift_flag_on_matching_fingerprint(
     tmp_path, monkeypatch, runtime_paths
 ):
-    cfg = manager.EvoScientistConfig()
+    cfg = manager.ScribeConfig()
     cfg.enable_async_subagents = True
     fp = manager._server_config_fingerprint(cfg)
     cfg2 = _reuse_setup(tmp_path, monkeypatch, runtime_paths, fp)
@@ -531,9 +531,9 @@ def test_reuse_clears_drift_flag_on_matching_fingerprint(
 def test_server_config_fingerprint_ignores_the_agent_python(monkeypatch):
     """The fingerprint covers launch settings only; a PATH difference is
     reported on its own (``AGENT_SHELL_DRIFT``)."""
-    from EvoScientist.setup import research_env
+    from metasci_scribe.setup import research_env
 
-    cfg = manager.EvoScientistConfig()
+    cfg = manager.ScribeConfig()
     monkeypatch.setattr(research_env, "agent_python", lambda: None)
     base = manager._server_config_fingerprint(cfg)
     monkeypatch.setattr(research_env, "agent_python", lambda: "/env/bin/python")
@@ -572,14 +572,14 @@ def test_sidecar_records_the_agent_bash_only_when_passed(
 def test_reuse_warns_when_the_server_shell_differs(
     tmp_path, monkeypatch, runtime_paths
 ):
-    """A server started before `EvoSci setup` recorded Git Bash keeps cmd.exe
+    """A server started before `metasci-scribe setup` recorded Git Bash keeps cmd.exe
     for its agents; this session runs bash."""
     from types import SimpleNamespace
 
-    from EvoScientist import agent_shell
-    from EvoScientist.setup import research_env
+    from metasci_scribe import agent_shell
+    from metasci_scribe.setup import research_env
 
-    cfg = manager.EvoScientistConfig()
+    cfg = manager.ScribeConfig()
     cfg.enable_async_subagents = True
     fp = manager._server_config_fingerprint(cfg)
     cfg2 = _reuse_setup(tmp_path, monkeypatch, runtime_paths, fp)
@@ -602,9 +602,9 @@ def test_reuse_warns_when_the_server_shell_differs(
 def _reuse_with_agent_python(tmp_path, monkeypatch, runtime_paths, recorded):
     """Reuse a server whose sidecar records ``recorded`` (or nothing, when
     ``recorded`` is ``...``) from a session that resolves the research env."""
-    from EvoScientist.setup import research_env
+    from metasci_scribe.setup import research_env
 
-    cfg = manager.EvoScientistConfig()
+    cfg = manager.ScribeConfig()
     cfg.enable_async_subagents = True
     fp = manager._server_config_fingerprint(cfg)
     cfg2 = _reuse_setup(tmp_path, monkeypatch, runtime_paths, fp)
@@ -793,7 +793,7 @@ def test_stop_recorded_server_cleans_corrupt_pid_file(
 
 
 def test_server_config_fingerprint_tracks_dangerous_mode():
-    cfg = manager.EvoScientistConfig()
+    cfg = manager.ScribeConfig()
     base = manager._server_config_fingerprint(cfg)
     cfg.dangerous_mode = True
     assert manager._server_config_fingerprint(cfg) != base
@@ -828,7 +828,7 @@ def test_server_config_fingerprint_covers_new_fields_by_default():
     """The fingerprint iterates the dataclass minus an exclusion set, so
     server-affecting values din0s called out — reasoning effort, provider
     keys/base URLs — count without per-field registration."""
-    cfg = manager.EvoScientistConfig()
+    cfg = manager.ScribeConfig()
     base = manager._server_config_fingerprint(cfg)
     cfg.reasoning_effort = "definitely-different"
     after_effort = manager._server_config_fingerprint(cfg)
@@ -839,7 +839,7 @@ def test_server_config_fingerprint_covers_new_fields_by_default():
 
 def test_server_config_fingerprint_ignores_cli_only_fields():
     """Channel/UI-side fields never reach the server — no spurious drift."""
-    cfg = manager.EvoScientistConfig()
+    cfg = manager.ScribeConfig()
     base = manager._server_config_fingerprint(cfg)
     cfg.show_thinking = not cfg.show_thinking
     cfg.telegram_bot_token = "tg-token"
@@ -850,7 +850,7 @@ def test_server_config_fingerprint_ignores_cli_only_fields():
 def test_server_config_fingerprint_ignores_shell_allow_list():
     """shell_allow_list is read only by CLI/channel approval resolvers —
     it never reaches the subprocess, so it must not cause drift."""
-    cfg = manager.EvoScientistConfig()
+    cfg = manager.ScribeConfig()
     base = manager._server_config_fingerprint(cfg)
     cfg.shell_allow_list = "git status,ls"
     assert manager._server_config_fingerprint(cfg) == base
@@ -859,7 +859,7 @@ def test_server_config_fingerprint_ignores_shell_allow_list():
 def test_server_config_fingerprint_ignores_gateway_backend():
     """The gateway settings only decide, in the CLI, whether a server is
     needed; nothing in the server reads them, so they must not cause drift."""
-    cfg = manager.EvoScientistConfig()
+    cfg = manager.ScribeConfig()
     base = manager._server_config_fingerprint(cfg)
     cfg.gateway_backend_serve = "langgraph_server"
     cfg.gateway_backend_tui = "langgraph_server"
@@ -867,10 +867,10 @@ def test_server_config_fingerprint_ignores_gateway_backend():
 
 
 def test_server_config_fingerprint_tracks_mcp_yaml_content(tmp_path, monkeypatch):
-    from EvoScientist.config import settings as settings_mod
+    from metasci_scribe.config import settings as settings_mod
 
     monkeypatch.setattr(settings_mod, "get_config_dir", lambda: tmp_path)
-    cfg = manager.EvoScientistConfig()
+    cfg = manager.ScribeConfig()
     base = manager._server_config_fingerprint(cfg)
     (tmp_path / "mcp.yaml").write_text("server-a:\n  transport: stdio\n")
     changed = manager._server_config_fingerprint(cfg)
@@ -884,7 +884,7 @@ def test_server_config_fingerprint_tracks_subagent_yaml_content(tmp_path, monkey
     fake_dir.mkdir()
     (fake_dir / "research.yaml").write_text("name: research\nprompt: v1\n")
     monkeypatch.setattr(manager, "_SUBAGENTS_DIR", fake_dir)
-    cfg = manager.EvoScientistConfig()
+    cfg = manager.ScribeConfig()
     base = manager._server_config_fingerprint(cfg)
     (fake_dir / "research.yaml").write_text("name: research\nprompt: v2\n")
     assert manager._server_config_fingerprint(cfg) != base

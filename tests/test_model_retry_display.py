@@ -6,7 +6,7 @@ import io
 
 from rich.console import Console
 
-from EvoScientist.stream.display import create_streaming_display, model_retry_text
+from metasci_scribe.stream.display import create_streaming_display, model_retry_text
 
 
 def _render(**kwargs) -> str:
@@ -38,7 +38,7 @@ def test_final_frame_lists_each_retry():
 
 
 def test_state_display_args_carry_the_retries():
-    from EvoScientist.stream.state import StreamState
+    from metasci_scribe.stream.state import StreamState
 
     state = StreamState()
     state.handle_event(
@@ -58,7 +58,7 @@ def test_state_display_args_carry_the_retries():
 
 
 def test_retry_line_names_the_subagent_or_grader():
-    from EvoScientist.stream.display import model_retry_text
+    from metasci_scribe.stream.display import model_retry_text
 
     event = {"reason": "503: down", "wait_seconds": 8.0, "attempt": 2}
     assert model_retry_text({**event, "subagent": ""}) == (

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from langchain.agents.middleware import ContextEditingMiddleware
 from langchain_core.messages import HumanMessage
 
-from EvoScientist.middleware.context_editing import compute_context_editing_trigger
+from metasci_scribe.middleware.context_editing import compute_context_editing_trigger
 
 # ---------------------------------------------------------------------------
 # compute_context_editing_trigger tests
@@ -73,7 +73,7 @@ def test_compute_trigger_custom_fallback():
 
 
 def test_create_middleware_configuration():
-    from EvoScientist.middleware.context_editing import (
+    from metasci_scribe.middleware.context_editing import (
         create_context_editing_middleware,
     )
 
@@ -86,9 +86,9 @@ def test_create_middleware_configuration():
     assert "think_tool" in edit.exclude_tools
 
 
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
+@patch("metasci_scribe.agent._ensure_chat_model")
 def test_create_middleware_model_none_fallback(mock_model):
-    from EvoScientist.middleware.context_editing import (
+    from metasci_scribe.middleware.context_editing import (
         create_context_editing_middleware,
     )
 
@@ -115,7 +115,7 @@ async def test_trigger_resizes_per_run_model():
     ContextEditingMiddleware runs (ConfigurableModelMiddleware sits earlier),
     so a smaller-window model must get the smaller trigger on that run.
     """
-    from EvoScientist.middleware.context_editing import (
+    from metasci_scribe.middleware.context_editing import (
         create_context_editing_middleware,
     )
 
@@ -143,7 +143,7 @@ async def test_trigger_recompute_is_cached_for_unhashable_models():
     """Real chat models are unhashable pydantic objects; the trigger cache
     must key on the resolved context window, not the model object, and
     alternating runs compute each window's trigger once."""
-    from EvoScientist.middleware.context_editing import (
+    from metasci_scribe.middleware.context_editing import (
         create_context_editing_middleware,
     )
 
@@ -171,7 +171,7 @@ async def test_trigger_recompute_is_cached_for_unhashable_models():
         return real(model, *a, **kw)
 
     with patch(
-        "EvoScientist.middleware.context_editing.compute_context_editing_trigger",
+        "metasci_scribe.middleware.context_editing.compute_context_editing_trigger",
         side_effect=_counting,
     ):
         # Alternating models defeat the identity short-circuit, so only the
@@ -190,11 +190,11 @@ async def test_trigger_recompute_is_cached_for_unhashable_models():
 
 
 @patch(
-    "EvoScientist.middleware.create_tool_selector_middleware",
+    "metasci_scribe.middleware.create_tool_selector_middleware",
     return_value=[MagicMock(), MagicMock()],
 )
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
-@patch("EvoScientist.EvoScientist._ensure_config")
+@patch("metasci_scribe.agent._ensure_chat_model")
+@patch("metasci_scribe.agent._ensure_config")
 def test_default_middleware_includes_context_editing(
     mock_config, mock_model, mock_ts, workspace
 ):
@@ -206,7 +206,7 @@ def test_default_middleware_includes_context_editing(
     cfg.auxiliary_provider = ""
     mock_config.return_value = cfg
 
-    from EvoScientist.EvoScientist import _get_default_middleware
+    from metasci_scribe.agent import _get_default_middleware
 
     mw = _get_default_middleware(workspace=workspace)
     # ContextEditingMiddleware is present (its absolute position depends on
@@ -214,11 +214,11 @@ def test_default_middleware_includes_context_editing(
     assert any(isinstance(m, ContextEditingMiddleware) for m in mw)
 
 
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
+@patch("metasci_scribe.agent._ensure_chat_model")
 def test_inject_subagent_includes_context_editing(mock_model, workspace):
     mock_model.return_value = MagicMock(profile={"max_input_tokens": 200_000})
 
-    from EvoScientist.EvoScientist import _inject_subagent_middleware
+    from metasci_scribe.agent import _inject_subagent_middleware
 
     subs = [{"name": "test-agent"}]
     _inject_subagent_middleware(subs, workspace=workspace)
@@ -227,7 +227,7 @@ def test_inject_subagent_includes_context_editing(mock_model, workspace):
     assert any(isinstance(m, ContextEditingMiddleware) for m in subs[0]["middleware"])
     # Per-run model channel reaches sync subagents too (mirrors the main
     # agent's stack so configurable.model swaps the subagent's model).
-    from EvoScientist.middleware import ConfigurableModelMiddleware
+    from metasci_scribe.middleware import ConfigurableModelMiddleware
 
     assert any(
         isinstance(m, ConfigurableModelMiddleware) for m in subs[0]["middleware"]
@@ -241,11 +241,11 @@ def test_inject_subagent_includes_context_editing(mock_model, workspace):
 
 
 @patch(
-    "EvoScientist.middleware.create_tool_selector_middleware",
+    "metasci_scribe.middleware.create_tool_selector_middleware",
     return_value=[MagicMock(), MagicMock()],
 )
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
-@patch("EvoScientist.EvoScientist._ensure_config")
+@patch("metasci_scribe.agent._ensure_chat_model")
+@patch("metasci_scribe.agent._ensure_config")
 def test_context_editing_before_overflow_mapper(
     mock_config, mock_model, mock_ts, workspace
 ):
@@ -257,7 +257,7 @@ def test_context_editing_before_overflow_mapper(
     cfg.auxiliary_provider = ""
     mock_config.return_value = cfg
 
-    from EvoScientist.EvoScientist import _get_default_middleware
+    from metasci_scribe.agent import _get_default_middleware
 
     mw = _get_default_middleware(workspace=workspace)
     type_names = [type(m).__name__ for m in mw]

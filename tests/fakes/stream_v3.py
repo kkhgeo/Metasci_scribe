@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 from langgraph.types import Interrupt
 
-from EvoScientist.stream.events import stream_agent_events
+from metasci_scribe.stream.events import stream_agent_events
 
 
 async def async_iter(items: Iterable[Any]) -> AsyncIterator[Any]:

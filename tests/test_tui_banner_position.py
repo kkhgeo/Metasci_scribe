@@ -168,8 +168,8 @@ async def test_clear_chat_then_full_user_turn_keeps_banner_at_top(
         # ``container.scroll_end(animate=False)`` (line 1305 in the
         # real code).  In a tall viewport this still lands at scroll_y
         # == 0 because content fits.
-        from EvoScientist.cli.widgets.assistant_message import AssistantMessage
-        from EvoScientist.cli.widgets.user_message import UserMessage
+        from metasci_scribe.cli.widgets.assistant_message import AssistantMessage
+        from metasci_scribe.cli.widgets.user_message import UserMessage
 
         await chat.mount(UserMessage("hello"))
         chat.scroll_end(animate=False)
@@ -212,8 +212,8 @@ async def test_short_turn_keeps_banner_at_top_after_layout_refresh(
     from textual.containers import VerticalScroll
     from textual.widgets import Static
 
-    from EvoScientist.cli.widgets.assistant_message import AssistantMessage
-    from EvoScientist.cli.widgets.user_message import UserMessage
+    from metasci_scribe.cli.widgets.assistant_message import AssistantMessage
+    from metasci_scribe.cli.widgets.user_message import UserMessage
 
     app = await capture_app(monkeypatch, workspace)
     # Tall terminal: welcome + a short exchange fits with room to spare,
@@ -304,9 +304,9 @@ def _assert_banner_at_top(chat, welcome, label: str = "") -> None:
 async def test_agent_shell_notices_are_shown_in_the_app(monkeypatch, workspace):
     """Textual hides terminal output while the app runs, so the hint and the
     server-python warning must reach the user as notifications."""
-    from EvoScientist.cli import tui_interactive as tui_mod
+    from metasci_scribe.cli import tui_interactive as tui_mod
 
-    notice = "Run `EvoSci setup` [/x]"
+    notice = "Run `metasci-scribe setup` [/x]"
     monkeypatch.setattr(tui_mod, "_agent_shell_notices", lambda: [notice])
     app = await capture_app(monkeypatch, workspace)
     async with app.run_test(size=(80, 24)) as pilot:

@@ -6,7 +6,7 @@ import threading
 
 import pytest
 
-from EvoScientist.cli import interactive
+from metasci_scribe.cli import interactive
 
 
 @pytest.mark.asyncio

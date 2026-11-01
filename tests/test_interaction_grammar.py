@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from EvoScientist.channels import interaction as I
+from metasci_scribe.channels import interaction as I
 
 # ═══════════════════════════════════════════════════════════════════════
 # Stop / cancel grammar
@@ -155,7 +155,7 @@ class TestApprovalPolicy:
         cfg = MagicMock()
         cfg.auto_approve = True
         cfg.dangerous_mode = False
-        with patch("EvoScientist.EvoScientist._ensure_config", return_value=cfg):
+        with patch("metasci_scribe.agent._ensure_config", return_value=cfg):
             reqs = [{"name": "execute", "args": {"command": "rm -rf /"}}]
             assert p.auto_decision("tg:c1", reqs) == [{"type": "approve"}]
 
@@ -165,7 +165,7 @@ class TestApprovalPolicy:
         cfg.auto_approve = False
         cfg.shell_allow_list = ""
         cfg.dangerous_mode = False
-        with patch("EvoScientist.EvoScientist._ensure_config", return_value=cfg):
+        with patch("metasci_scribe.agent._ensure_config", return_value=cfg):
             reqs = [{"name": "execute", "args": {"command": "rm -rf /"}}]
             assert p.auto_decision("tg:c1", reqs) is None
 
@@ -189,7 +189,7 @@ class TestAutoDecisionConfigPolicy:
         cfg.auto_approve = False
         cfg.shell_allow_list = ""
         cfg.dangerous_mode = False
-        with patch("EvoScientist.EvoScientist._ensure_config", return_value=cfg):
+        with patch("metasci_scribe.agent._ensure_config", return_value=cfg):
             assert (
                 self._p().auto_decision(
                     "tg:c1", [{"name": "execute", "args": {"command": "rm -rf /"}}]
@@ -202,7 +202,7 @@ class TestAutoDecisionConfigPolicy:
         cfg.auto_approve = False
         cfg.shell_allow_list = "ls,python"
         cfg.dangerous_mode = False
-        with patch("EvoScientist.EvoScientist._ensure_config", return_value=cfg):
+        with patch("metasci_scribe.agent._ensure_config", return_value=cfg):
             assert self._p().auto_decision(
                 "tg:c1", [{"name": "execute", "args": {"command": "ls -la"}}]
             ) == [{"type": "approve"}]
@@ -212,7 +212,7 @@ class TestAutoDecisionConfigPolicy:
         cfg.auto_approve = False
         cfg.shell_allow_list = "ls,cat"
         cfg.dangerous_mode = False
-        with patch("EvoScientist.EvoScientist._ensure_config", return_value=cfg):
+        with patch("metasci_scribe.agent._ensure_config", return_value=cfg):
             assert (
                 self._p().auto_decision(
                     "tg:c1",
@@ -223,7 +223,7 @@ class TestAutoDecisionConfigPolicy:
 
     def test_fail_closed_on_config_error(self):
         with patch(
-            "EvoScientist.EvoScientist._ensure_config", side_effect=RuntimeError("boom")
+            "metasci_scribe.agent._ensure_config", side_effect=RuntimeError("boom")
         ):
             assert (
                 self._p().auto_decision(

@@ -9,8 +9,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from EvoScientist.channels.base import ChannelError
-from EvoScientist.channels.telegram.channel import TelegramChannel, TelegramConfig
+from metasci_scribe.channels.base import ChannelError
+from metasci_scribe.channels.telegram.channel import TelegramChannel, TelegramConfig
 
 
 class TestTelegramConfig:
@@ -91,7 +91,7 @@ class TestTelegramChannel:
         assert channel._app is None
 
     async def test_send_returns_false_without_app(self):
-        from EvoScientist.channels.base import OutboundMessage
+        from metasci_scribe.channels.base import OutboundMessage
 
         config = TelegramConfig(bot_token="test")
         channel = TelegramChannel(config)
@@ -289,7 +289,7 @@ class TestTelegramChannel:
             ("paper.bad suffix", "application/pdf", ".pdf"),
             (None, None, ""),
             ("a." + "x" * 20, "application/pdf", ".pdf"),
-            (None, "application/x-unknown-evosci", ""),
+            (None, "application/x-unknown-metasci-scribe", ""),
             ("../../paper.pdf", "application/pdf", ".pdf"),
             ("C:\\uploads\\paper.pdf", "application/pdf", ".pdf"),
             ("paper.pdf\\escape", "application/pdf", ".pdf"),

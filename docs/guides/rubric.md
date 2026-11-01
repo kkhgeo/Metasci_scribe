@@ -3,10 +3,10 @@
 A rubric is a checklist of acceptance criteria. Each time the agent stops, a separate grader checks the work against it; if a criterion is not met, the agent gets the gaps back and keeps working. `--rubric` grades one single-shot run; `/rubric` grades the turns of a thread in the TUI or the interactive CLI (see [Interactive sessions](#interactive-sessions)).
 
 ```bash
-EvoSci -p "Reproduce table 2 and plot the ablation" --auto-mode --rubric "- results/table2.csv has one row per baseline
+metasci-scribe -p "Reproduce table 2 and plot the ablation" --auto-mode --rubric "- results/table2.csv has one row per baseline
 - figures/ablation.png exists"
 
-EvoSci -p "Reproduce table 2" --auto-mode --rubric @criteria.md
+metasci-scribe -p "Reproduce table 2" --auto-mode --rubric @criteria.md
 ```
 
 `@path` reads the checklist from a file (relative to the current directory; `~` works). `--rubric` needs `-p`.
@@ -50,7 +50,7 @@ The text can span lines; quotes inside it are kept as typed. `@file` is relative
 - The status bar shows `rubric: on`, `rubric: next` or `rubric: on+next`.
 - A thread's [goal](goal.md) keeps its criteria in the place of the `/rubric set` checklist, so `/rubric set` and `/rubric clear` cancel the goal (the command says so).
 - Approvals work as usual; revisions can bring more of them, within the existing per-turn limits.
-- Not graded: single-shot runs without `--rubric`, the WebUI, `EvoSci serve`, and a notification turn for a thread other than the current one. `/rubric` is refused in channel sessions and when the session executes its runs on the `langgraph_server` gateway.
+- Not graded: single-shot runs without `--rubric`, the WebUI, `metasci-scribe serve`, and a notification turn for a thread other than the current one. `/rubric` is refused in channel sessions and when the session executes its runs on the `langgraph_server` gateway.
 
 ## Limits
 

@@ -18,8 +18,8 @@ from langchain_openai.chatgpt_oauth import (
     _FileChatGPTOAuthTokenProvider,
 )
 
-from EvoScientist.llm import chatgpt_oauth
-from EvoScientist.llm.chatgpt_oauth import (
+from metasci_scribe.llm import chatgpt_oauth
+from metasci_scribe.llm.chatgpt_oauth import (
     DEFAULT_INSTRUCTIONS,
     PORT_FORWARD_HINT,
     PORT_IN_USE,
@@ -32,7 +32,7 @@ from EvoScientist.llm.chatgpt_oauth import (
     status,
     token_path,
 )
-from EvoScientist.middleware.utils import disable_streaming, disable_thinking
+from metasci_scribe.middleware.utils import disable_streaming, disable_thinking
 
 RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses"
 REASONING = {"effort": "high", "summary": "auto", "context": "all_turns"}
@@ -65,7 +65,7 @@ def _write_token(path: Path) -> None:
 @pytest.fixture
 def data_dir(tmp_path, monkeypatch):
     """An empty data dir: nobody is signed in."""
-    monkeypatch.setattr("EvoScientist.paths.DATA_DIR", tmp_path)
+    monkeypatch.setattr("metasci_scribe.paths.DATA_DIR", tmp_path)
     return tmp_path
 
 
@@ -348,7 +348,7 @@ def test_build_model_emits_no_experimental_warning(signed_in, monkeypatch):
 
 @pytest.mark.parametrize("model_id", ["gpt-6.1-sol", "gpt-6-luna", "gpt-9-unlisted"])
 def test_build_model_uses_the_route_context_window(signed_in, model_id):
-    from EvoScientist.llm.context_window import get_context_window
+    from metasci_scribe.llm.context_window import get_context_window
 
     model = build_model(model_id)
 
@@ -359,9 +359,9 @@ def test_build_model_uses_the_route_context_window(signed_in, model_id):
 def test_sign_in_model_keeps_the_route_context_window(
     signed_in, whole_tool_args_patch, monkeypatch
 ):
-    from EvoScientist.llm import get_chat_model
+    from metasci_scribe.llm import get_chat_model
 
-    monkeypatch.setenv("EVOSCIENTIST_OPENAI_AUTH_MODE", "oauth")
+    monkeypatch.setenv("METASCI_SCRIBE_OPENAI_AUTH_MODE", "oauth")
 
     assert (
         get_chat_model("gpt-6.1-sol", provider="openai").profile["max_input_tokens"]
@@ -966,7 +966,7 @@ _UPSTREAM_CONVERT = _openai_base._convert_responses_chunk_to_generation_chunk
 
 @pytest.fixture
 def whole_tool_args_patch(monkeypatch):
-    from EvoScientist.llm.patches import _patch_openai_responses_whole_tool_args
+    from metasci_scribe.llm.patches import _patch_openai_responses_whole_tool_args
 
     monkeypatch.setattr(
         _openai_base, "_convert_responses_chunk_to_generation_chunk", _UPSTREAM_CONVERT
@@ -1033,7 +1033,7 @@ def test_streamed_arguments_are_whole_and_not_doubled(
 def test_whole_tool_args_patch_is_applied_once(whole_tool_args_patch):
     import langchain_openai.chat_models.base as base
 
-    from EvoScientist.llm.patches import _patch_openai_responses_whole_tool_args
+    from metasci_scribe.llm.patches import _patch_openai_responses_whole_tool_args
 
     first = base._convert_responses_chunk_to_generation_chunk
     _patch_openai_responses_whole_tool_args()
@@ -1044,7 +1044,7 @@ def test_whole_tool_args_patch_is_applied_once(whole_tool_args_patch):
 def test_whole_tool_args_patch_survives_an_upstream_rename(monkeypatch):
     import langchain_openai.chat_models.base as base
 
-    from EvoScientist.llm.patches import _patch_openai_responses_whole_tool_args
+    from metasci_scribe.llm.patches import _patch_openai_responses_whole_tool_args
 
     monkeypatch.delattr(base, "_convert_responses_chunk_to_generation_chunk")
 
@@ -1054,7 +1054,7 @@ def test_whole_tool_args_patch_survives_an_upstream_rename(monkeypatch):
 
 
 def test_provider_tag_is_openai(signed_in):
-    from EvoScientist.llm.errors import _provider_from_model
+    from metasci_scribe.llm.errors import _provider_from_model
 
     assert _provider_from_model(build_model("gpt-6-sol")) == "openai"
 
@@ -1073,7 +1073,7 @@ def test_upstream_names_this_module_relies_on_exist():
 def test_a_call_dropped_from_the_record_is_left_to_upstream(monkeypatch):
     from types import SimpleNamespace
 
-    from EvoScientist.llm import patches
+    from metasci_scribe.llm import patches
 
     seen = []
     monkeypatch.setattr(
@@ -1106,7 +1106,7 @@ def test_a_call_dropped_from_the_record_is_left_to_upstream(monkeypatch):
 def test_a_reopened_call_starts_a_fresh_record(monkeypatch):
     from types import SimpleNamespace
 
-    from EvoScientist.llm import patches
+    from metasci_scribe.llm import patches
 
     seen = []
     monkeypatch.setattr(
@@ -1142,7 +1142,7 @@ def test_a_reopened_call_starts_a_fresh_record(monkeypatch):
 def test_later_deltas_of_a_dropped_call_are_not_recorded(monkeypatch):
     from types import SimpleNamespace
 
-    from EvoScientist.llm import patches
+    from metasci_scribe.llm import patches
 
     seen = []
     monkeypatch.setattr(

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install EvoScientist on macOS or Linux with nothing else installed.
+# Install Metasci Scribe on macOS or Linux with nothing else installed.
 #
 #   curl -fsSL https://raw.githubusercontent.com/EvoScientist/EvoScientist/main/scripts/install.sh | bash
 #   curl -fsSL https://cdn.jsdelivr.net/gh/EvoScientist/EvoScientist@main/scripts/install.sh | bash -s -- --cn
@@ -8,18 +8,18 @@
 #   --cn               use mainland China mirrors (uv, Python, PyPI, Node, WebUI)
 #   --version <ver>    install this release instead of the newest one
 #   --no-modify-path   do not put uv's tool bin directory on PATH
-#   --no-setup         stop after installing the package, before `EvoSci setup`
+#   --no-setup         stop after installing the package, before `metasci-scribe setup`
 #
 # Steps: download a pinned uv and check its SHA-256, keep it under
-# <data dir>/tools, install EvoScientist as a uv tool with the release's
+# <data dir>/tools, install Metasci Scribe as a uv tool with the release's
 # constraints.txt on uv's own Python (3.12, or on a re-run the one the existing
 # install asked for), put the tool bin directory on PATH,
-# then run `EvoSci setup`. The data dir is $EVOSCIENTIST_DATA_DIR when set and
-# not empty, else ~/.evoscientist. A uv installed by the user is never touched.
+# then run `metasci-scribe setup`. The data dir is $METASCI_SCRIBE_DATA_DIR when set and
+# not empty, else ~/.metasci-scribe. A uv installed by the user is never touched.
 #
-# Test-only variables (the installer smoke workflow): EVOSCI_INSTALL_SOURCE
+# Test-only variables (the installer smoke workflow): METASCI_SCRIBE_INSTALL_SOURCE
 # installs this wheel instead of the release from the index, and
-# EVOSCI_INSTALL_CONSTRAINTS uses this local constraints file instead of the
+# METASCI_SCRIBE_INSTALL_CONSTRAINTS uses this local constraints file instead of the
 # one at the release tag.
 #
 # Everything runs inside main, called on the last line, so a download cut off
@@ -41,7 +41,7 @@ CN_RAW_BASE="https://cdn.jsdelivr.net/gh/EvoScientist/EvoScientist"
 # Reads an existing uv-receipt.toml (argv[1]) with the old tool environment's
 # own Python and prints what a reinstall needs to keep, one tab-separated line
 # each: "python<TAB><request>" for the receipt's Python (else this
-# interpreter's X.Y), "extras<TAB>a,b" for EvoScientist's extras, "with<TAB><requirement>"
+# interpreter's X.Y), "extras<TAB>a,b" for Metasci Scribe's extras, "with<TAB><requirement>"
 # and "with-editable<TAB><path>" for the other requirements (added with --with,
 # e.g. by the MCP installer), "warn<TAB><text>" for anything it cannot keep.
 # Same code as install.ps1; tests/test_install_scripts.py runs both on the
@@ -99,7 +99,7 @@ print("python\t" + (python if isinstance(python, str) else "%d.%d" % sys.version
 own_extras = []
 for entry in entries:
     try:
-        if norm(entry["name"]) == "evoscientist":
+        if norm(entry["name"]) == "metasci-scribe":
             # Several entries when an extra was added with --with: all extras.
             own_extras += [x for x in entry.get("extras") or [] if x not in own_extras]
             continue
@@ -128,13 +128,13 @@ cleanup() {
 
 usage() {
   cat <<'EOF'
-Install EvoScientist on macOS or Linux.
+Install Metasci Scribe on macOS or Linux.
 
 Options:
   --cn               use mainland China mirrors (uv, Python, PyPI, Node, WebUI)
   --version <ver>    install this release instead of the newest one
   --no-modify-path   do not put uv's tool bin directory on PATH
-  --no-setup         stop after installing the package, before `EvoSci setup`
+  --no-setup         stop after installing the package, before `metasci-scribe setup`
 EOF
 }
 
@@ -172,7 +172,7 @@ download() {
 }
 
 # Sets OS_NAME, UV_TARGET, UV_SHA256, UV_WHEEL_PATH and UV_WHEEL_SHA256, or
-# stops on a platform that EvoScientist does not support.
+# stops on a platform that Metasci Scribe does not support.
 detect_platform() {
   local os arch glibc
   os=$(uname -s)
@@ -188,11 +188,11 @@ detect_platform() {
     Linux)
       OS_NAME=linux
       if ! glibc=$(getconf GNU_LIBC_VERSION 2>/dev/null); then
-        die "This Linux has no glibc (musl, as on Alpine). EvoScientist supports Linux with glibc 2.28 or newer."
+        die "This Linux has no glibc (musl, as on Alpine). Metasci Scribe supports Linux with glibc 2.28 or newer."
       fi
       glibc=${glibc##* }
       if version_le "$glibc" 2.27; then
-        die "This Linux has glibc $glibc. EvoScientist supports Linux with glibc 2.28 or newer."
+        die "This Linux has glibc $glibc. Metasci Scribe supports Linux with glibc 2.28 or newer."
       fi
       ;;
     *)
@@ -233,12 +233,12 @@ detect_platform() {
   fi
 }
 
-# The data dir rule of EvoScientist's paths module: $EVOSCIENTIST_DATA_DIR when
-# set and not empty (with ~ expanded), else ~/.evoscientist; made absolute.
+# The data dir rule of Metasci Scribe's paths module: $METASCI_SCRIBE_DATA_DIR when
+# set and not empty (with ~ expanded), else ~/.metasci-scribe; made absolute.
 resolve_data_dir() {
-  local dir="${EVOSCIENTIST_DATA_DIR:-}"
+  local dir="${METASCI_SCRIBE_DATA_DIR:-}"
   if [ -z "$dir" ]; then
-    dir="$HOME/.evoscientist"
+    dir="$HOME/.metasci-scribe"
   fi
   case "$dir" in
     \~) dir="$HOME" ;;
@@ -258,9 +258,9 @@ choose_version() {
     fi
     return
   fi
-  if [ -n "${EVOSCI_INSTALL_SOURCE:-}" ]; then
-    VERSION=$(basename "$EVOSCI_INSTALL_SOURCE" | sed -nE 's/^[Ee]vo[Ss]cientist-([^-]+)-.*\.whl$/\1/p')
-    [ -n "$VERSION" ] || die "Cannot read the version from EVOSCI_INSTALL_SOURCE: $EVOSCI_INSTALL_SOURCE"
+  if [ -n "${METASCI_SCRIBE_INSTALL_SOURCE:-}" ]; then
+    VERSION=$(basename "$METASCI_SCRIBE_INSTALL_SOURCE" | sed -nE 's/^[Ee]vo[Ss]cientist-([^-]+)-.*\.whl$/\1/p')
+    [ -n "$VERSION" ] || die "Cannot read the version from METASCI_SCRIBE_INSTALL_SOURCE: $METASCI_SCRIBE_INSTALL_SOURCE"
     return
   fi
   local index="$PYPI_SIMPLE"
@@ -268,8 +268,8 @@ choose_version() {
     index="$CN_SIMPLE"
   fi
   local listing
-  listing=$(curl -fsSL --retry 3 -H 'Accept: application/vnd.pypi.simple.v1+json' "$index/evoscientist/") ||
-    die "Cannot read the EvoScientist versions from $index/evoscientist/"
+  listing=$(curl -fsSL --retry 3 -H 'Accept: application/vnd.pypi.simple.v1+json' "$index/metasci-scribe/") ||
+    die "Cannot read the Metasci Scribe versions from $index/metasci-scribe/"
   # The mirror sorts the list as strings, so filter to final releases and sort
   # numerically; never take the last entry as it comes.
   VERSION=$(printf '%s' "$listing" | tr -d '\n' |
@@ -277,12 +277,12 @@ choose_version() {
     tr ',' '\n' | tr -d ' "' |
     { grep -E '^[0-9]+(\.[0-9]+)*$' || true; } |
     sort -t. -k1,1n -k2,2n -k3,3n -k4,4n | tail -n 1)
-  [ -n "$VERSION" ] || die "No EvoScientist release found on $index"
+  [ -n "$VERSION" ] || die "No Metasci Scribe release found on $index"
 }
 
 check_version_floor() {
   if version_le "$VERSION" "$LAST_UNSUPPORTED"; then
-    die "EvoScientist $VERSION cannot be installed with this script: $LAST_UNSUPPORTED is the last release without constraints.txt, and every older release lacks it too. Choose a newer version."
+    die "Metasci Scribe $VERSION cannot be installed with this script: $LAST_UNSUPPORTED is the last release without constraints.txt, and every older release lacks it too. Choose a newer version."
   fi
 }
 
@@ -322,33 +322,33 @@ install_uv() {
 
 fetch_constraints() {
   CONSTRAINTS="$TMP_DIR/constraints.txt"
-  if [ -n "${EVOSCI_INSTALL_CONSTRAINTS:-}" ]; then
-    cp "$EVOSCI_INSTALL_CONSTRAINTS" "$CONSTRAINTS"
+  if [ -n "${METASCI_SCRIBE_INSTALL_CONSTRAINTS:-}" ]; then
+    cp "$METASCI_SCRIBE_INSTALL_CONSTRAINTS" "$CONSTRAINTS"
     return
   fi
   local base="$RAW_BASE/v$VERSION"
   if [ "$CN" = 1 ]; then
     base="$CN_RAW_BASE@v$VERSION"
   fi
-  info "Downloading the constraints of EvoScientist $VERSION..."
+  info "Downloading the constraints of Metasci Scribe $VERSION..."
   curl -fsSL --retry 3 -o "$CONSTRAINTS" "$base/constraints.txt" ||
-    die "Cannot download $base/constraints.txt, so EvoScientist $VERSION cannot be installed with its tested dependencies."
+    die "Cannot download $base/constraints.txt, so Metasci Scribe $VERSION cannot be installed with its tested dependencies."
 }
 
-# When EvoScientist is already a uv tool, fills WITH_ARGS and EXTRAS from its
+# When Metasci Scribe is already a uv tool, fills WITH_ARGS and EXTRAS from its
 # receipt so that the reinstall keeps them, and sets FORCE. Stops when the bin
-# dir already holds an EvoScientist command that is not a uv tool's (pipx and
+# dir already holds an Metasci Scribe command that is not a uv tool's (pipx and
 # pip --user use ~/.local/bin too): uv would refuse to overwrite it.
 read_existing_install() {
   local tool_dir env receipt python kind value name
   tool_dir=$("$UV" tool dir </dev/null)
-  env="$tool_dir/evoscientist"
+  env="$tool_dir/metasci-scribe"
   receipt="$env/uv-receipt.toml"
   python="$env/bin/python"
   if [ ! -d "$env" ]; then
-    for name in EvoSci EvoScientist evosci evoscientist; do
+    for name in metasci-scribe Metasci Scribe metasci-scribe metasci-scribe; do
       if [ -e "$BIN_DIR/$name" ]; then
-        die "$BIN_DIR/$name exists but was not installed by uv; pipx or pip --user may have put it there. Remove that install (for example pipx uninstall EvoScientist or pip uninstall EvoScientist), then run this script again."
+        die "$BIN_DIR/$name exists but was not installed by uv; pipx or pip --user may have put it there. Remove that install (for example pipx uninstall Metasci Scribe or pip uninstall Metasci Scribe), then run this script again."
       fi
     done
     return 0
@@ -387,17 +387,17 @@ exclude_newer_hint() {
   local file
   for file in "${UV_CONFIG_FILE:-}" "${XDG_CONFIG_HOME:-$HOME/.config}/uv/uv.toml" /etc/uv/uv.toml; do
     if [ -n "$file" ] && [ -f "$file" ] && grep -Eq '^[[:space:]]*exclude-newer[[:space:]]*=' "$file"; then
-      warn "$file sets exclude-newer: uv ignores releases uploaded after its cutoff, so a newer EvoScientist cannot install. Remove that line, or wait until the release is older than the cutoff."
+      warn "$file sets exclude-newer: uv ignores releases uploaded after its cutoff, so a newer Metasci Scribe cannot install. Remove that line, or wait until the release is older than the cutoff."
     fi
   done
 }
 
 install_package() {
-  local spec="EvoScientist$EXTRAS==$VERSION"
-  if [ -n "${EVOSCI_INSTALL_SOURCE:-}" ]; then
+  local spec="Metasci Scribe$EXTRAS==$VERSION"
+  if [ -n "${METASCI_SCRIBE_INSTALL_SOURCE:-}" ]; then
     local wheel
-    wheel=$(cd "$(dirname "$EVOSCI_INSTALL_SOURCE")" && pwd -P)/$(basename "$EVOSCI_INSTALL_SOURCE")
-    spec="EvoScientist$EXTRAS @ file://$wheel"
+    wheel=$(cd "$(dirname "$METASCI_SCRIBE_INSTALL_SOURCE")" && pwd -P)/$(basename "$METASCI_SCRIBE_INSTALL_SOURCE")
+    spec="Metasci Scribe$EXTRAS @ file://$wheel"
   fi
   # uv splits a -c path at spaces (astral-sh/uv#12639), so uv runs from the
   # file's directory and gets its bare name.
@@ -405,10 +405,10 @@ install_package() {
   if [ "$FORCE" = 1 ]; then
     args+=(--force)
   fi
-  info "Installing EvoScientist $VERSION..."
+  info "Installing Metasci Scribe $VERSION..."
   if ! (cd "$(dirname "$CONSTRAINTS")" && "$UV" "${args[@]}" ${WITH_ARGS[@]+"${WITH_ARGS[@]}"} "$spec" </dev/null); then
     exclude_newer_hint
-    die "uv could not install EvoScientist $VERSION (see uv's output above)."
+    die "uv could not install Metasci Scribe $VERSION (see uv's output above)."
   fi
 }
 
@@ -419,7 +419,7 @@ update_path() {
     *":$BIN_DIR:"*) return 0 ;;
   esac
   if [ "$NO_MODIFY_PATH" = 1 ]; then
-    info "Not changing PATH (--no-modify-path). Add $BIN_DIR to PATH to run EvoSci."
+    info "Not changing PATH (--no-modify-path). Add $BIN_DIR to PATH to run metasci-scribe."
     return 0
   fi
   local rc=0 out
@@ -448,17 +448,17 @@ update_path() {
   esac
 }
 
-# Warns when another EvoSci comes first on PATH (pip, conda). Compares the
+# Warns when another metasci-scribe comes first on PATH (pip, conda). Compares the
 # directories that hold the commands, resolved as pwd -P does, not the entry
 # point's link target, which lies inside the tool environment.
 check_shadowing() {
   local found found_dir bin_dir
-  found=$(command -v EvoSci 2>/dev/null || true)
+  found=$(command -v metasci-scribe 2>/dev/null || true)
   [ -n "$found" ] || return 0
   found_dir=$(cd "$(dirname "$found")" 2>/dev/null && pwd -P) || return 0
   bin_dir=$(cd "$BIN_DIR" 2>/dev/null && pwd -P) || return 0
   if [ "$found_dir" != "$bin_dir" ]; then
-    warn "Another EvoSci comes first on PATH: $found. It will run instead of this install; remove it (for example pip uninstall EvoScientist) or put $BIN_DIR earlier on PATH."
+    warn "Another metasci-scribe comes first on PATH: $found. It will run instead of this install; remove it (for example pip uninstall Metasci Scribe) or put $BIN_DIR earlier on PATH."
   fi
 }
 
@@ -492,7 +492,7 @@ main() {
   choose_version
   check_version_floor
 
-  TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/evosci-install.XXXXXX")
+  TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/metasci-scribe-install.XXXXXX")
   trap cleanup EXIT
   resolve_data_dir
 
@@ -518,28 +518,28 @@ main() {
   update_path
 
   if [ "$NO_SETUP" = 1 ]; then
-    info "Skipping EvoSci setup (--no-setup)."
+    info "Skipping metasci-scribe setup (--no-setup)."
   else
     local setup_args=(setup)
     if [ "$CN" = 1 ]; then
       setup_args+=(--cn)
     fi
     # By absolute path: this shell does not see the PATH change yet.
-    "$BIN_DIR/EvoSci" "${setup_args[@]}" </dev/null ||
-      die "EvoScientist $VERSION is installed, but EvoSci setup failed (see above). Run it again with: $BIN_DIR/EvoSci setup"
+    "$BIN_DIR/metasci-scribe" "${setup_args[@]}" </dev/null ||
+      die "Metasci Scribe $VERSION is installed, but metasci-scribe setup failed (see above). Run it again with: $BIN_DIR/metasci-scribe setup"
   fi
 
   check_shadowing
 
   info ""
-  info "EvoScientist $VERSION is installed."
+  info "Metasci Scribe $VERSION is installed."
   if [ "$PATH_CHANGED" = 1 ]; then
     info "Your shell profile puts $BIN_DIR on PATH (uv tool update-shell); open a new terminal first."
   fi
   info "Next steps:"
-  info "  EvoSci onboard          set up your model provider and API keys"
-  info "  EvoSci                  start the terminal UI"
-  info "  EvoSci --ui webui       start the WebUI"
+  info "  metasci-scribe onboard          set up your model provider and API keys"
+  info "  metasci-scribe                  start the terminal UI"
+  info "  metasci-scribe --ui webui       start the WebUI"
 }
 
 main "$@"

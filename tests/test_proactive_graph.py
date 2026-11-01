@@ -10,10 +10,10 @@ import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph_sdk.errors import NotFoundError
 
-from EvoScientist.proactive import cron as proactive_cron
-from EvoScientist.proactive import graph as proactive_graph
-from EvoScientist.proactive.commit import build_proactive_tag
-from EvoScientist.proactive.gate import ProactiveGateSettings
+from metasci_scribe.proactive import cron as proactive_cron
+from metasci_scribe.proactive import graph as proactive_graph
+from metasci_scribe.proactive.commit import build_proactive_tag
+from metasci_scribe.proactive.gate import ProactiveGateSettings
 
 # ---- settings ---------------------------------------------------------------
 
@@ -91,7 +91,7 @@ def test_list_proactive_crons_keeps_only_this_workspace(workspace, tmp_path):
 
 
 def test_sessions_prunes_the_same_graph_id():
-    from EvoScientist import sessions
+    from metasci_scribe import sessions
 
     assert sessions.PROACTIVE_GRAPH_ID == proactive_cron.PROACTIVE_GRAPH_ID
 
@@ -164,11 +164,11 @@ def tick(monkeypatch, workspace):
             raise reply["always_error"]
         return reply["text"]
 
-    monkeypatch.setattr("EvoScientist.proactive.shadow.run_shadow_turn", fake_shadow)
+    monkeypatch.setattr("metasci_scribe.proactive.shadow.run_shadow_turn", fake_shadow)
     fake_client = MagicMock()
     fake_client.threads = _FakeThreads(threads)
     monkeypatch.setattr(
-        "EvoScientist.langgraph_dev.sdk.get_langgraph_async_client",
+        "metasci_scribe.langgraph_dev.sdk.get_langgraph_async_client",
         lambda **kwargs: fake_client,
     )
 
@@ -420,7 +420,7 @@ def test_a_decision_is_stamped_when_it_is_made(tick, workspace, monkeypatch):
         returned_at.append(datetime.now(UTC))
         return "The benchmark finished: all green."
 
-    monkeypatch.setattr("EvoScientist.proactive.shadow.run_shadow_turn", slow_shadow)
+    monkeypatch.setattr("metasci_scribe.proactive.shadow.run_shadow_turn", slow_shadow)
 
     [decision] = run(_candidates("t1"))["decisions"]
 

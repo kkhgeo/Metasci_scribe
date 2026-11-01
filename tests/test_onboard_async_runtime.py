@@ -3,9 +3,9 @@
 import asyncio
 import threading
 
-from EvoScientist.config import EvoScientistConfig
-from EvoScientist.config.onboard.channels import _probe_channel
-from EvoScientist.runtime import AsyncRuntime
+from metasci_scribe.config import ScribeConfig
+from metasci_scribe.config.onboard.channels import _probe_channel
+from metasci_scribe.runtime import AsyncRuntime
 
 
 def test_channel_probes_reuse_the_provided_runtime(monkeypatch):
@@ -20,18 +20,18 @@ def test_channel_probes_reuse_the_provided_runtime(monkeypatch):
         return True, "discord ok"
 
     monkeypatch.setattr(
-        "EvoScientist.channels.telegram.probe.validate_telegram_token",
+        "metasci_scribe.channels.telegram.probe.validate_telegram_token",
         validate_telegram,
     )
     monkeypatch.setattr(
-        "EvoScientist.channels.discord.probe.validate_discord_token",
+        "metasci_scribe.channels.discord.probe.validate_discord_token",
         validate_discord,
     )
     monkeypatch.setattr(
-        "EvoScientist.config.onboard.channels.console.print", lambda *_a, **_k: None
+        "metasci_scribe.config.onboard.channels.console.print", lambda *_a, **_k: None
     )
 
-    config = EvoScientistConfig()
+    config = ScribeConfig()
     updates = {
         "telegram_bot_token": "telegram-token",
         "discord_bot_token": "discord-token",

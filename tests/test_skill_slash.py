@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
-from EvoScientist.commands.skill_slash import skill_slash_names
-from EvoScientist.tools import skills_manager
+from metasci_scribe.commands.skill_slash import skill_slash_names
+from metasci_scribe.tools import skills_manager
 
 
 @pytest.fixture(autouse=True)
@@ -15,7 +15,7 @@ def _isolated_global_skills(tmp_path, monkeypatch):
     """Keep the developer's real global skills out of the index."""
     global_dir = tmp_path / "global_skills"
     global_dir.mkdir()
-    monkeypatch.setattr("EvoScientist.paths.GLOBAL_SKILLS_DIR", global_dir)
+    monkeypatch.setattr("metasci_scribe.paths.GLOBAL_SKILLS_DIR", global_dir)
     skills_manager._skill_index_cache.clear()
     yield
     skills_manager._skill_index_cache.clear()

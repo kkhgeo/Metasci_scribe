@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.14' and platform_machine == 'x86_64' and sys_platform == 'darwin'",
@@ -1227,197 +1227,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/f5/22/900cb125c76b7aaa450ce02fd727f452243f2e91a61af068b40adba60ea9/email_validator-2.3.0.tar.gz", hash = "sha256:9fc05c37f2f6cf439ff414f8fc46d917929974a82244c20eb10231ba60c54426", size = 51238, upload-time = "2025-08-26T13:09:06.831Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/de/15/545e2b6cf2e3be84bc1ed85613edd75b8aea69807a71c26f4ca6a9258e82/email_validator-2.3.0-py3-none-any.whl", hash = "sha256:80f13f623413e6b197ae73bb10bf4eb0908faf509ad8362c5edeb0be7fd450b4", size = 35604, upload-time = "2025-08-26T13:09:05.858Z" },
-]
-
-[[package]]
-name = "evoscientist"
-version = "0.3.8"
-source = { editable = "." }
-dependencies = [
-    { name = "cryptography", version = "48.0.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-    { name = "cryptography", version = "50.0.2", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
-    { name = "deepagents", extra = ["quickjs"] },
-    { name = "filelock" },
-    { name = "httpx" },
-    { name = "langchain" },
-    { name = "langchain-anthropic" },
-    { name = "langchain-deepseek" },
-    { name = "langchain-google-genai" },
-    { name = "langchain-mcp-adapters" },
-    { name = "langchain-nvidia-ai-endpoints" },
-    { name = "langchain-ollama" },
-    { name = "langchain-openai" },
-    { name = "langchain-openrouter" },
-    { name = "langchain-quickjs" },
-    { name = "langgraph-api", version = "0.13.3", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-    { name = "langgraph-api", version = "0.15.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
-    { name = "langgraph-checkpoint-sqlite" },
-    { name = "langgraph-cli", extra = ["inmem"] },
-    { name = "langgraph-sdk" },
-    { name = "lazy-loader" },
-    { name = "markdownify" },
-    { name = "openrouter" },
-    { name = "packaging" },
-    { name = "prompt-toolkit" },
-    { name = "psutil" },
-    { name = "python-dotenv" },
-    { name = "pyyaml" },
-    { name = "questionary" },
-    { name = "rich" },
-    { name = "tavily-python" },
-    { name = "textual" },
-    { name = "typer" },
-    { name = "tzlocal" },
-]
-
-[package.optional-dependencies]
-all-channels = [
-    { name = "aiohttp" },
-    { name = "certifi" },
-    { name = "cryptography", version = "48.0.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-    { name = "cryptography", version = "50.0.2", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
-    { name = "discord-py" },
-    { name = "lark-oapi" },
-    { name = "pycryptodome" },
-    { name = "python-telegram-bot" },
-    { name = "qq-botpy" },
-    { name = "qrcode" },
-    { name = "slack-sdk" },
-]
-dev = [
-    { name = "build" },
-    { name = "pre-commit" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "pytest-timeout" },
-    { name = "pytest-xdist" },
-    { name = "ruff" },
-]
-discord = [
-    { name = "discord-py" },
-]
-feishu = [
-    { name = "lark-oapi" },
-]
-oauth = [
-    { name = "ccproxy-api" },
-]
-qq = [
-    { name = "cryptography", version = "48.0.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-    { name = "cryptography", version = "50.0.2", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
-    { name = "qq-botpy" },
-    { name = "qrcode" },
-]
-slack = [
-    { name = "aiohttp" },
-    { name = "slack-sdk" },
-]
-stt = [
-    { name = "faster-whisper" },
-]
-telegram = [
-    { name = "python-telegram-bot" },
-]
-wechat = [
-    { name = "aiohttp" },
-    { name = "certifi" },
-    { name = "pycryptodome" },
-    { name = "qrcode" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "build" },
-    { name = "pre-commit" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "pytest-timeout" },
-    { name = "pytest-xdist" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "aiohttp", marker = "extra == 'all-channels'", specifier = ">=3.9" },
-    { name = "aiohttp", marker = "extra == 'slack'", specifier = ">=3.9" },
-    { name = "aiohttp", marker = "extra == 'wechat'", specifier = ">=3.9" },
-    { name = "build", marker = "extra == 'dev'", specifier = ">=1.0" },
-    { name = "ccproxy-api", marker = "extra == 'oauth'", specifier = ">=0.2.10" },
-    { name = "certifi", marker = "extra == 'all-channels'", specifier = ">=2024.0" },
-    { name = "certifi", marker = "extra == 'wechat'", specifier = ">=2024.0" },
-    { name = "cryptography", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
-    { name = "cryptography", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'", specifier = "<49" },
-    { name = "cryptography", marker = "extra == 'all-channels'", specifier = ">=41.0" },
-    { name = "cryptography", marker = "extra == 'qq'", specifier = ">=41.0" },
-    { name = "deepagents", extras = ["quickjs"], specifier = "~=0.7.32" },
-    { name = "discord-py", marker = "extra == 'all-channels'", specifier = ">=2.3" },
-    { name = "discord-py", marker = "extra == 'discord'", specifier = ">=2.3" },
-    { name = "faster-whisper", marker = "extra == 'stt'", specifier = ">=1.0" },
-    { name = "filelock", specifier = ">=3.16" },
-    { name = "httpx", specifier = ">=0.28" },
-    { name = "langchain", specifier = ">=1.4.6" },
-    { name = "langchain-anthropic", specifier = ">=1.7.6" },
-    { name = "langchain-deepseek", specifier = ">=1.1.1" },
-    { name = "langchain-google-genai", specifier = ">=4.4.2" },
-    { name = "langchain-mcp-adapters", specifier = ">=0.3.2" },
-    { name = "langchain-nvidia-ai-endpoints", specifier = ">=1.5.0" },
-    { name = "langchain-ollama", specifier = ">=1.1.0" },
-    { name = "langchain-openai", specifier = ">=1.7.2" },
-    { name = "langchain-openrouter", specifier = ">=0.2.9" },
-    { name = "langchain-quickjs", specifier = ">=0.3.9" },
-    { name = "langgraph-api", specifier = ">=0.7.30" },
-    { name = "langgraph-checkpoint-sqlite", specifier = ">=3.0" },
-    { name = "langgraph-cli", extras = ["inmem"], specifier = ">=0.4" },
-    { name = "langgraph-sdk", specifier = ">=0.4" },
-    { name = "lark-oapi", marker = "extra == 'all-channels'", specifier = ">=1.4.0" },
-    { name = "lark-oapi", marker = "extra == 'feishu'", specifier = ">=1.4.0" },
-    { name = "lazy-loader", specifier = ">=0.5" },
-    { name = "markdownify", specifier = ">=1.2" },
-    { name = "openrouter", specifier = ">=0.10.8,<0.11.0" },
-    { name = "packaging", specifier = ">=24.0" },
-    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.5.0" },
-    { name = "prompt-toolkit", specifier = ">=3.0" },
-    { name = "psutil", specifier = ">=6.0" },
-    { name = "pycryptodome", marker = "extra == 'all-channels'", specifier = ">=3.20" },
-    { name = "pycryptodome", marker = "extra == 'wechat'", specifier = ">=3.20" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.0" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
-    { name = "pytest-timeout", marker = "extra == 'dev'", specifier = ">=2.4" },
-    { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.6" },
-    { name = "python-dotenv", specifier = ">=1.0" },
-    { name = "python-telegram-bot", marker = "extra == 'all-channels'", specifier = ">=21.0" },
-    { name = "python-telegram-bot", marker = "extra == 'telegram'", specifier = ">=21.0" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "qq-botpy", marker = "extra == 'all-channels'", specifier = ">=1.0" },
-    { name = "qq-botpy", marker = "extra == 'qq'", specifier = ">=1.0" },
-    { name = "qrcode", marker = "extra == 'all-channels'", specifier = ">=7.4" },
-    { name = "qrcode", marker = "extra == 'qq'", specifier = ">=7.4" },
-    { name = "qrcode", marker = "extra == 'wechat'", specifier = ">=7.4" },
-    { name = "questionary", specifier = ">=2.1" },
-    { name = "rich", specifier = ">=15.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5" },
-    { name = "slack-sdk", marker = "extra == 'all-channels'", specifier = ">=3.27" },
-    { name = "slack-sdk", marker = "extra == 'slack'", specifier = ">=3.27" },
-    { name = "tavily-python", specifier = ">=0.7" },
-    { name = "textual", specifier = ">=8.0,<8.2.7" },
-    { name = "typer", specifier = ">=0.24" },
-    { name = "tzlocal", specifier = ">=5.0" },
-]
-provides-extras = ["dev", "telegram", "discord", "slack", "wechat", "feishu", "qq", "stt", "oauth", "all-channels"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "build", specifier = ">=1.0" },
-    { name = "pre-commit", specifier = ">=3.5.0" },
-    { name = "pytest", specifier = ">=8.0" },
-    { name = "pytest-asyncio", specifier = ">=1.0" },
-    { name = "pytest-cov", specifier = ">=5.0" },
-    { name = "pytest-timeout", specifier = ">=2.4" },
-    { name = "pytest-xdist", specifier = ">=3.6" },
-    { name = "ruff", specifier = ">=0.5" },
 ]
 
 [[package]]
@@ -3171,6 +2980,197 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec958cb99bd3efefba235e65cdeb9c84d24a8293ba1d90/mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba", size = 8729, upload-time = "2022-08-14T12:40:10.846Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
+]
+
+[[package]]
+name = "metasci-scribe"
+version = "0.1.0.dev0"
+source = { editable = "." }
+dependencies = [
+    { name = "cryptography", version = "48.0.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
+    { name = "cryptography", version = "50.0.2", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "deepagents", extra = ["quickjs"] },
+    { name = "filelock" },
+    { name = "httpx" },
+    { name = "langchain" },
+    { name = "langchain-anthropic" },
+    { name = "langchain-deepseek" },
+    { name = "langchain-google-genai" },
+    { name = "langchain-mcp-adapters" },
+    { name = "langchain-nvidia-ai-endpoints" },
+    { name = "langchain-ollama" },
+    { name = "langchain-openai" },
+    { name = "langchain-openrouter" },
+    { name = "langchain-quickjs" },
+    { name = "langgraph-api", version = "0.13.3", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
+    { name = "langgraph-api", version = "0.15.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "langgraph-checkpoint-sqlite" },
+    { name = "langgraph-cli", extra = ["inmem"] },
+    { name = "langgraph-sdk" },
+    { name = "lazy-loader" },
+    { name = "markdownify" },
+    { name = "openrouter" },
+    { name = "packaging" },
+    { name = "prompt-toolkit" },
+    { name = "psutil" },
+    { name = "python-dotenv" },
+    { name = "pyyaml" },
+    { name = "questionary" },
+    { name = "rich" },
+    { name = "tavily-python" },
+    { name = "textual" },
+    { name = "typer" },
+    { name = "tzlocal" },
+]
+
+[package.optional-dependencies]
+all-channels = [
+    { name = "aiohttp" },
+    { name = "certifi" },
+    { name = "cryptography", version = "48.0.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
+    { name = "cryptography", version = "50.0.2", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "discord-py" },
+    { name = "lark-oapi" },
+    { name = "pycryptodome" },
+    { name = "python-telegram-bot" },
+    { name = "qq-botpy" },
+    { name = "qrcode" },
+    { name = "slack-sdk" },
+]
+dev = [
+    { name = "build" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "pytest-timeout" },
+    { name = "pytest-xdist" },
+    { name = "ruff" },
+]
+discord = [
+    { name = "discord-py" },
+]
+feishu = [
+    { name = "lark-oapi" },
+]
+oauth = [
+    { name = "ccproxy-api" },
+]
+qq = [
+    { name = "cryptography", version = "48.0.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
+    { name = "cryptography", version = "50.0.2", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "qq-botpy" },
+    { name = "qrcode" },
+]
+slack = [
+    { name = "aiohttp" },
+    { name = "slack-sdk" },
+]
+stt = [
+    { name = "faster-whisper" },
+]
+telegram = [
+    { name = "python-telegram-bot" },
+]
+wechat = [
+    { name = "aiohttp" },
+    { name = "certifi" },
+    { name = "pycryptodome" },
+    { name = "qrcode" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "build" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "pytest-timeout" },
+    { name = "pytest-xdist" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aiohttp", marker = "extra == 'all-channels'", specifier = ">=3.9" },
+    { name = "aiohttp", marker = "extra == 'slack'", specifier = ">=3.9" },
+    { name = "aiohttp", marker = "extra == 'wechat'", specifier = ">=3.9" },
+    { name = "build", marker = "extra == 'dev'", specifier = ">=1.0" },
+    { name = "ccproxy-api", marker = "extra == 'oauth'", specifier = ">=0.2.10" },
+    { name = "certifi", marker = "extra == 'all-channels'", specifier = ">=2024.0" },
+    { name = "certifi", marker = "extra == 'wechat'", specifier = ">=2024.0" },
+    { name = "cryptography", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "cryptography", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'", specifier = "<49" },
+    { name = "cryptography", marker = "extra == 'all-channels'", specifier = ">=41.0" },
+    { name = "cryptography", marker = "extra == 'qq'", specifier = ">=41.0" },
+    { name = "deepagents", extras = ["quickjs"], specifier = "~=0.7.32" },
+    { name = "discord-py", marker = "extra == 'all-channels'", specifier = ">=2.3" },
+    { name = "discord-py", marker = "extra == 'discord'", specifier = ">=2.3" },
+    { name = "faster-whisper", marker = "extra == 'stt'", specifier = ">=1.0" },
+    { name = "filelock", specifier = ">=3.16" },
+    { name = "httpx", specifier = ">=0.28" },
+    { name = "langchain", specifier = ">=1.4.6" },
+    { name = "langchain-anthropic", specifier = ">=1.7.6" },
+    { name = "langchain-deepseek", specifier = ">=1.1.1" },
+    { name = "langchain-google-genai", specifier = ">=4.4.2" },
+    { name = "langchain-mcp-adapters", specifier = ">=0.3.2" },
+    { name = "langchain-nvidia-ai-endpoints", specifier = ">=1.5.0" },
+    { name = "langchain-ollama", specifier = ">=1.1.0" },
+    { name = "langchain-openai", specifier = ">=1.7.2" },
+    { name = "langchain-openrouter", specifier = ">=0.2.9" },
+    { name = "langchain-quickjs", specifier = ">=0.3.9" },
+    { name = "langgraph-api", specifier = ">=0.7.30" },
+    { name = "langgraph-checkpoint-sqlite", specifier = ">=3.0" },
+    { name = "langgraph-cli", extras = ["inmem"], specifier = ">=0.4" },
+    { name = "langgraph-sdk", specifier = ">=0.4" },
+    { name = "lark-oapi", marker = "extra == 'all-channels'", specifier = ">=1.4.0" },
+    { name = "lark-oapi", marker = "extra == 'feishu'", specifier = ">=1.4.0" },
+    { name = "lazy-loader", specifier = ">=0.5" },
+    { name = "markdownify", specifier = ">=1.2" },
+    { name = "openrouter", specifier = ">=0.10.8,<0.11.0" },
+    { name = "packaging", specifier = ">=24.0" },
+    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.5.0" },
+    { name = "prompt-toolkit", specifier = ">=3.0" },
+    { name = "psutil", specifier = ">=6.0" },
+    { name = "pycryptodome", marker = "extra == 'all-channels'", specifier = ">=3.20" },
+    { name = "pycryptodome", marker = "extra == 'wechat'", specifier = ">=3.20" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
+    { name = "pytest-timeout", marker = "extra == 'dev'", specifier = ">=2.4" },
+    { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.6" },
+    { name = "python-dotenv", specifier = ">=1.0" },
+    { name = "python-telegram-bot", marker = "extra == 'all-channels'", specifier = ">=21.0" },
+    { name = "python-telegram-bot", marker = "extra == 'telegram'", specifier = ">=21.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "qq-botpy", marker = "extra == 'all-channels'", specifier = ">=1.0" },
+    { name = "qq-botpy", marker = "extra == 'qq'", specifier = ">=1.0" },
+    { name = "qrcode", marker = "extra == 'all-channels'", specifier = ">=7.4" },
+    { name = "qrcode", marker = "extra == 'qq'", specifier = ">=7.4" },
+    { name = "qrcode", marker = "extra == 'wechat'", specifier = ">=7.4" },
+    { name = "questionary", specifier = ">=2.1" },
+    { name = "rich", specifier = ">=15.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5" },
+    { name = "slack-sdk", marker = "extra == 'all-channels'", specifier = ">=3.27" },
+    { name = "slack-sdk", marker = "extra == 'slack'", specifier = ">=3.27" },
+    { name = "tavily-python", specifier = ">=0.7" },
+    { name = "textual", specifier = ">=8.0,<8.2.7" },
+    { name = "typer", specifier = ">=0.24" },
+    { name = "tzlocal", specifier = ">=5.0" },
+]
+provides-extras = ["dev", "telegram", "discord", "slack", "wechat", "feishu", "qq", "stt", "oauth", "all-channels"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "build", specifier = ">=1.0" },
+    { name = "pre-commit", specifier = ">=3.5.0" },
+    { name = "pytest", specifier = ">=8.0" },
+    { name = "pytest-asyncio", specifier = ">=1.0" },
+    { name = "pytest-cov", specifier = ">=5.0" },
+    { name = "pytest-timeout", specifier = ">=2.4" },
+    { name = "pytest-xdist", specifier = ">=3.6" },
+    { name = "ruff", specifier = ">=0.5" },
 ]
 
 [[package]]

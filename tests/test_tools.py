@@ -1,6 +1,6 @@
-"""Tests for EvoScientist/tools.py — only non-API tools."""
+"""Tests for metasci_scribe/tools.py — only non-API tools."""
 
-from EvoScientist.tools import think_tool
+from metasci_scribe.tools import think_tool
 
 
 class TestThinkTool:

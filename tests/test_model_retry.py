@@ -13,9 +13,9 @@ from langchain.agents.middleware.types import ModelResponse
 from langchain_core.messages import AIMessage
 from langgraph.errors import GraphInterrupt
 
-from EvoScientist.backends import MODEL_RETRY_RUN_KEY
-from EvoScientist.llm.errors import ModelErrorFinishError, ProviderStreamError
-from EvoScientist.middleware.model_retry import (
+from metasci_scribe.backends import MODEL_RETRY_RUN_KEY
+from metasci_scribe.llm.errors import ModelErrorFinishError, ProviderStreamError
+from metasci_scribe.middleware.model_retry import (
     INTERACTIVE_CAP_SECONDS,
     MIN_WAIT_SECONDS,
     UNATTENDED_CAP_SECONDS,
@@ -245,7 +245,7 @@ async def test_error_finish_exception_from_inner_layers_sets_the_cause():
 
 
 async def test_run_key_overrides_construction_tier(monkeypatch):
-    from EvoScientist.middleware import model_retry as mod
+    from metasci_scribe.middleware import model_retry as mod
 
     h = _Harness(budget=0.0, unattended=False)
     monkeypatch.setattr(
@@ -263,7 +263,7 @@ async def test_run_key_overrides_construction_tier(monkeypatch):
 
 
 async def test_run_key_zero_switches_off_and_is_ignored_when_not_honoured(monkeypatch):
-    from EvoScientist.middleware import model_retry as mod
+    from metasci_scribe.middleware import model_retry as mod
 
     monkeypatch.setattr(
         mod,
@@ -288,7 +288,7 @@ async def test_run_key_zero_switches_off_and_is_ignored_when_not_honoured(monkey
     "budget", [float("inf"), "nan", "1e9", 1e9, 10**400, "60s", "61", True, 2.5]
 )
 def test_a_run_key_budget_that_is_not_an_int_falls_back(monkeypatch, budget):
-    from EvoScientist.middleware import model_retry as mod
+    from metasci_scribe.middleware import model_retry as mod
 
     monkeypatch.setattr(
         mod,
@@ -307,7 +307,7 @@ def test_a_run_key_budget_that_is_not_an_int_falls_back(monkeypatch, budget):
 @pytest.fixture
 def run(monkeypatch):
     """Model calls in one run share its ``model_retry`` marker; call to start another run."""
-    from EvoScientist.middleware import model_retry as mod
+    from metasci_scribe.middleware import model_retry as mod
 
     def _start():
         marker = {"unattended": False, "wait_budget_seconds": 60}
@@ -331,7 +331,9 @@ async def test_once_a_call_used_its_budget_later_calls_in_the_run_are_tried_once
     await _spend_the_budget(sub_agent)
     assert sum(sub_agent.sleeps) == 55.0
     main_agent = _Harness()
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.middleware.model_retry"):
+    with caplog.at_level(
+        logging.WARNING, logger="metasci_scribe.middleware.model_retry"
+    ):
         with pytest.raises(ProviderStreamError):
             await main_agent.mw.awrap_model_call(
                 main_agent.request, main_agent.handler([_transient(), OK])
@@ -557,7 +559,9 @@ def test_sync_path_counts_a_wait_that_overran_as_using_the_budget(run):
 
 async def test_warning_lines(caplog):
     h = _Harness(budget=1.5)
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.middleware.model_retry"):
+    with caplog.at_level(
+        logging.WARNING, logger="metasci_scribe.middleware.model_retry"
+    ):
         with pytest.raises(ProviderStreamError):
             await h.mw.awrap_model_call(
                 h.request, h.handler([_transient(), _transient(), OK])
@@ -584,7 +588,9 @@ async def test_wait_that_overruns_the_deadline_gives_up_without_another_attempt(
         calls += 1
         raise _transient()
 
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.middleware.model_retry"):
+    with caplog.at_level(
+        logging.WARNING, logger="metasci_scribe.middleware.model_retry"
+    ):
         with pytest.raises(ProviderStreamError):
             await h.mw.awrap_model_call(h.request, _handler)
     assert calls == 1
@@ -674,8 +680,8 @@ class _Chain:
         models=None,
         normalized=False,
     ):
-        from EvoScientist.middleware import model_fallback
-        from EvoScientist.middleware.error_normalization import (
+        from metasci_scribe.middleware import model_fallback
+        from metasci_scribe.middleware.error_normalization import (
             ErrorNormalizationMiddleware,
         )
 
@@ -687,7 +693,7 @@ class _Chain:
         self.calls: list[str] = []
         primary_model, self._fallback_model = models or (object(), object())
         monkeypatch.setattr(
-            "EvoScientist.llm.models.get_chat_model",
+            "metasci_scribe.llm.models.get_chat_model",
             lambda model, provider=None, **kwargs: self._fallback_model,
         )
         model_fallback.set_fallback_chain([("fb", "openai")])
@@ -721,7 +727,7 @@ class _Chain:
 
 @pytest.fixture
 def clean_chain():
-    from EvoScientist.middleware import model_fallback
+    from metasci_scribe.middleware import model_fallback
 
     yield
     model_fallback._reset_chain_initialization()
@@ -772,7 +778,7 @@ async def test_a_fallback_that_cannot_be_built_does_not_switch_off_the_retry(
     def _cannot_build(model, provider=None, **kwargs):
         raise ValueError("custom-openai needs a base URL")
 
-    monkeypatch.setattr("EvoScientist.llm.models.get_chat_model", _cannot_build)
+    monkeypatch.setattr("metasci_scribe.llm.models.get_chat_model", _cannot_build)
     with pytest.raises(ValueError, match="base URL"):
         await chain.run()
     assert chain.calls.count("primary") > 1
@@ -785,7 +791,7 @@ async def test_a_recognized_providers_chain_is_judged_the_same(
     """Failures normalized against their own model still show the retry layer what the SDK raised."""
     from langchain_openai import ChatOpenAI
 
-    from EvoScientist.middleware.model_fallback import chain_failures
+    from metasci_scribe.middleware.model_fallback import chain_failures
 
     models = [ChatOpenAI(model="m", api_key="k") for _ in range(2)]
     limited = httpx.Headers({"retry-after": "7"})
@@ -888,7 +894,9 @@ async def test_the_log_names_the_model_that_was_waited_for(
     chain = _Chain(
         monkeypatch, lambda: _sdk_error(503), lambda: _sdk_error(401), budget=1.5
     )
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.middleware.model_retry"):
+    with caplog.at_level(
+        logging.WARNING, logger="metasci_scribe.middleware.model_retry"
+    ):
         with pytest.raises(openai.AuthenticationError):
             await chain.run()
     lines = [r.getMessage() for r in caplog.records]
@@ -908,7 +916,9 @@ async def test_an_overrun_wait_names_the_model_that_was_waited_for(
         chain.h.clock.now += seconds + 30.0  # the process was suspended mid-wait
 
     chain.h.mw._sleep = _suspended_sleep
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.middleware.model_retry"):
+    with caplog.at_level(
+        logging.WARNING, logger="metasci_scribe.middleware.model_retry"
+    ):
         with pytest.raises(openai.AuthenticationError):
             await chain.run()
     (overran,) = [r.getMessage() for r in caplog.records if "ran" in r.getMessage()]
@@ -1083,7 +1093,7 @@ async def test_boundary_without_a_stream_writer_is_silent():
 
 
 async def test_retry_event_names_the_agent_it_runs_in(monkeypatch):
-    from EvoScientist.middleware import model_retry as mod
+    from metasci_scribe.middleware import model_retry as mod
 
     h = _Harness()
     monkeypatch.setattr(

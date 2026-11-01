@@ -5,10 +5,10 @@ from __future__ import annotations
 import os
 from unittest.mock import AsyncMock, MagicMock
 
-import EvoScientist.commands.implementation  # noqa: F401  (registers the commands)
-from EvoScientist.commands.base import ChannelRuntime, CommandContext
-from EvoScientist.commands.manager import manager
-from EvoScientist.paths import SessionDirs, Workspace
+import metasci_scribe.commands.implementation  # noqa: F401  (registers the commands)
+from metasci_scribe.commands.base import ChannelRuntime, CommandContext
+from metasci_scribe.commands.manager import manager
+from metasci_scribe.paths import SessionDirs, Workspace
 from tests.fakes.common import FakeGraphGateway
 
 _LOADED_AGENT = object()
@@ -150,7 +150,7 @@ async def test_refused_on_a_channel_ui(tmp_path):
 
 
 async def test_refused_when_the_session_executes_on_the_server(tmp_path):
-    from EvoScientist.gateway.server import LangGraphServerGateway
+    from metasci_scribe.gateway.server import LangGraphServerGateway
 
     server = MagicMock(spec=LangGraphServerGateway)
     ctx, ui, runtime = _ctx(tmp_path, gateway=server)

@@ -19,7 +19,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
-from EvoScientist.middleware.summarization import (
+from metasci_scribe.middleware.summarization import (
     _PerRunLimitsSummarizationMiddleware,
     _ProfileWindowShim,
     create_per_run_summarization_middleware,
@@ -115,7 +115,7 @@ async def test_limits_follow_per_run_model():
     small.profile = {"max_input_tokens": 32_768}
     with (
         _patched_config({"model": "small-model"}),
-        patch("EvoScientist.llm.get_chat_model", return_value=small),
+        patch("metasci_scribe.llm.get_chat_model", return_value=small),
     ):
         await _run()
     assert mw._get_profile_limits() == 32_768
@@ -128,7 +128,7 @@ async def test_limits_follow_per_run_model():
     large.profile = {"max_input_tokens": 1_000_000}
     with (
         _patched_config({"model": "large-model"}),
-        patch("EvoScientist.llm.get_chat_model", return_value=large),
+        patch("metasci_scribe.llm.get_chat_model", return_value=large),
     ):
         await _run()
     assert mw._get_profile_limits() == 1_000_000
@@ -147,7 +147,7 @@ def test_sync_wrap_path_syncs_limits_too():
     small.profile = {"max_input_tokens": 32_768}
     with (
         _patched_config({"model": "small-model"}),
-        patch("EvoScientist.llm.get_chat_model", return_value=small),
+        patch("metasci_scribe.llm.get_chat_model", return_value=small),
     ):
         mw.wrap_model_call(
             _fake_model_request(construction), MagicMock(return_value=MagicMock())
@@ -188,14 +188,14 @@ async def test_interleaved_tasks_keep_isolated_windows():
     async def task_a():
         with (
             _patched_config({"model": "small-model"}),
-            patch("EvoScientist.llm.get_chat_model", return_value=small),
+            patch("metasci_scribe.llm.get_chat_model", return_value=small),
         ):
             await mw.awrap_model_call(_fake_model_request(construction), handler_a)
 
     async def task_b():
         with (
             _patched_config({"model": "large-model"}),
-            patch("EvoScientist.llm.get_chat_model", return_value=large),
+            patch("metasci_scribe.llm.get_chat_model", return_value=large),
         ):
             await mw.awrap_model_call(
                 _fake_model_request(construction),
@@ -236,7 +236,7 @@ def test_shim_delegates_non_profile_attributes():
     reported tokens via ``_get_ls_params``)."""
     import contextvars
 
-    from EvoScientist.middleware.summarization import _ProfileWindowShim
+    from metasci_scribe.middleware.summarization import _ProfileWindowShim
 
     state: contextvars.ContextVar[tuple[Any, int] | None] = contextvars.ContextVar(
         "test_shim_state", default=None
@@ -276,7 +276,7 @@ async def test_window_cache_once_per_window_for_unhashable_models():
     large = _UnhashableModel(CONSTRUCTION_WINDOW)
 
     calls = []
-    from EvoScientist.llm.context_window import resolve_context_window as _real
+    from metasci_scribe.llm.context_window import resolve_context_window as _real
 
     def _counting(model, *a, **kw):
         calls.append(model)
@@ -284,11 +284,11 @@ async def test_window_cache_once_per_window_for_unhashable_models():
 
     with (
         patch(
-            "EvoScientist.llm.get_chat_model",
+            "metasci_scribe.llm.get_chat_model",
             side_effect=[small, large, small, large],
         ),
         patch(
-            "EvoScientist.middleware.summarization.resolve_context_window",
+            "metasci_scribe.middleware.summarization.resolve_context_window",
             side_effect=_counting,
         ),
     ):
@@ -309,7 +309,7 @@ async def test_resolution_failure_keeps_construction_limits():
     mw, construction = _make_mw()
     with (
         _patched_config({"model": "broken-model"}),
-        patch("EvoScientist.llm.get_chat_model", side_effect=RuntimeError("no key")),
+        patch("metasci_scribe.llm.get_chat_model", side_effect=RuntimeError("no key")),
     ):
         await mw.awrap_model_call(
             _fake_model_request(construction), AsyncMock(return_value=MagicMock())
@@ -319,7 +319,7 @@ async def test_resolution_failure_keeps_construction_limits():
 
 
 async def test_unknown_router_model_is_not_hidden_behind_construction_limits():
-    from EvoScientist.llm.registry import UnknownModelError
+    from metasci_scribe.llm.registry import UnknownModelError
 
     mw, construction = _make_mw()
     handler = AsyncMock(return_value=MagicMock())
@@ -355,7 +355,7 @@ async def test_unsynced_shim_reports_construction_profile_not_resolved_window():
     run_model = _Model(profile={"max_input_tokens": 8_000})
     with (
         _patched_config({"model": "small-model"}),
-        patch("EvoScientist.llm.get_chat_model", return_value=run_model),
+        patch("metasci_scribe.llm.get_chat_model", return_value=run_model),
     ):
         await mw.awrap_model_call(
             _fake_model_request(construction), AsyncMock(return_value=MagicMock())
@@ -374,7 +374,7 @@ async def test_unsynced_shim_reports_construction_profile_not_resolved_window():
     mw_profiled = create_per_run_summarization_middleware(profiled, MagicMock())
     with (
         _patched_config({"model": "small-model"}),
-        patch("EvoScientist.llm.get_chat_model", return_value=run_model),
+        patch("metasci_scribe.llm.get_chat_model", return_value=run_model),
     ):
         await mw_profiled.awrap_model_call(
             _fake_model_request(profiled), AsyncMock(return_value=MagicMock())
@@ -399,9 +399,9 @@ async def test_async_resolution_leaves_the_event_loop():
 
     with (
         _patched_config({"model": "small-model"}),
-        patch("EvoScientist.llm.get_chat_model", return_value=small),
+        patch("metasci_scribe.llm.get_chat_model", return_value=small),
         patch(
-            "EvoScientist.middleware.summarization.asyncio.to_thread",
+            "metasci_scribe.middleware.summarization.asyncio.to_thread",
             side_effect=_to_thread,
         ),
     ):
@@ -420,7 +420,7 @@ def test_input_budget_reserves_the_run_models_output():
     small.profile = {"max_input_tokens": 200_000}
     with (
         _patched_config({"model": "small-model"}),
-        patch("EvoScientist.llm.get_chat_model", return_value=small),
+        patch("metasci_scribe.llm.get_chat_model", return_value=small),
     ):
         mw._sync_limits()
     assert mw._input_budget(_fake_model_request(construction)) == 190_000
@@ -434,7 +434,7 @@ async def test_summary_follows_the_run_model():
     large.with_retry.return_value.ainvoke = AsyncMock(return_value=AIMessage("s"))
     with (
         _patched_config({"model": "large-model"}),
-        patch("EvoScientist.llm.get_chat_model", return_value=large),
+        patch("metasci_scribe.llm.get_chat_model", return_value=large),
     ):
         mw._sync_limits()
     await mw._acreate_summary([HumanMessage("old turn")])
@@ -463,7 +463,7 @@ def _failing_model_cls():
 def _sync_to(mw, run_model):
     with (
         _patched_config({"model": "small-model"}),
-        patch("EvoScientist.llm.get_chat_model", return_value=run_model),
+        patch("metasci_scribe.llm.get_chat_model", return_value=run_model),
     ):
         mw._sync_limits()
 
@@ -510,11 +510,11 @@ def test_racing_shim_install_keeps_upstream_retry_policy():
 
 
 @patch(
-    "EvoScientist.middleware.create_tool_selector_middleware",
+    "metasci_scribe.middleware.create_tool_selector_middleware",
     return_value=[MagicMock(), MagicMock()],
 )
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
-@patch("EvoScientist.EvoScientist._ensure_config")
+@patch("metasci_scribe.agent._ensure_chat_model")
+@patch("metasci_scribe.agent._ensure_config")
 def test_default_middleware_registers_subclass_exactly_once(
     mock_config, mock_model, mock_ts, workspace
 ):
@@ -528,7 +528,7 @@ def test_default_middleware_registers_subclass_exactly_once(
     cfg.auxiliary_provider = ""
     mock_config.return_value = cfg
 
-    from EvoScientist.EvoScientist import _get_default_middleware
+    from metasci_scribe.agent import _get_default_middleware
 
     mw = _get_default_middleware(workspace=workspace, backend=SimpleNamespace())
     summ = [m for m in mw if m.name == "SummarizationMiddleware"]
@@ -543,11 +543,11 @@ def test_default_middleware_registers_subclass_exactly_once(
 
 
 @patch(
-    "EvoScientist.middleware.create_tool_selector_middleware",
+    "metasci_scribe.middleware.create_tool_selector_middleware",
     return_value=[MagicMock(), MagicMock()],
 )
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
-@patch("EvoScientist.EvoScientist._ensure_config")
+@patch("metasci_scribe.agent._ensure_chat_model")
+@patch("metasci_scribe.agent._ensure_config")
 def test_deepagents_name_merge_replaces_stock_instance(
     mock_config, mock_model, mock_ts, workspace
 ):
@@ -569,7 +569,7 @@ def test_deepagents_name_merge_replaces_stock_instance(
 
     from deepagents.graph import _apply_custom_middleware
 
-    from EvoScientist.EvoScientist import _get_default_middleware
+    from metasci_scribe.agent import _get_default_middleware
 
     class _Named:
         def __init__(self, name: str) -> None:
@@ -594,7 +594,7 @@ def test_explicit_general_purpose_spec_gets_per_run_summarization(workspace):
     """general-purpose is an explicit spec, so it does not inherit the
     parent's middleware by name. Injection has to install the subclass
     itself (#466 review)."""
-    from EvoScientist.EvoScientist import (
+    from metasci_scribe.agent import (
         _ensure_general_purpose_subagent,
         _inject_subagent_middleware,
     )
@@ -643,15 +643,15 @@ def _assert_per_run_summarization(middleware: list, backend: Any) -> None:
 
 
 @patch("deepagents.create_deep_agent")
-@patch("EvoScientist.EvoScientist._load_mcp_tools_cached", return_value={})
-@patch("EvoScientist.EvoScientist._get_default_backend")
-@patch("EvoScientist.EvoScientist._ensure_config")
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
-@patch("EvoScientist.utils.load_subagents")
-@patch("EvoScientist.config.apply_config_to_env")
-@patch("EvoScientist.config.get_effective_config")
+@patch("metasci_scribe.agent._load_mcp_tools_cached", return_value={})
+@patch("metasci_scribe.agent._get_default_backend")
+@patch("metasci_scribe.agent._ensure_config")
+@patch("metasci_scribe.agent._ensure_chat_model")
+@patch("metasci_scribe.utils.load_subagents")
+@patch("metasci_scribe.config.apply_config_to_env")
+@patch("metasci_scribe.config.get_effective_config")
 @patch(
-    "EvoScientist.middleware.create_tool_selector_middleware",
+    "metasci_scribe.middleware.create_tool_selector_middleware",
     return_value=[MagicMock()],
 )
 def test_async_subagent_factory_installs_per_run_summarization(
@@ -678,7 +678,7 @@ def test_async_subagent_factory_installs_per_run_summarization(
     ]
     mock_create.return_value.with_config.return_value = MagicMock()
 
-    from EvoScientist.subagents._factory import build_async_subagent_graph
+    from metasci_scribe.subagents._factory import build_async_subagent_graph
 
     build_async_subagent_graph("writing-agent", workspace=workspace)
 
@@ -690,16 +690,16 @@ def test_async_subagent_factory_installs_per_run_summarization(
 
 
 @patch("deepagents.create_deep_agent")
-@patch("EvoScientist.EvoScientist._load_mcp_tools_cached", return_value={})
-@patch("EvoScientist.EvoScientist._get_default_backend")
-@patch("EvoScientist.EvoScientist._ensure_config")
-@patch("EvoScientist.EvoScientist._ensure_auxiliary_chat_model")
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
-@patch("EvoScientist.utils.load_subagents")
-@patch("EvoScientist.config.apply_config_to_env")
-@patch("EvoScientist.config.get_effective_config")
+@patch("metasci_scribe.agent._load_mcp_tools_cached", return_value={})
+@patch("metasci_scribe.agent._get_default_backend")
+@patch("metasci_scribe.agent._ensure_config")
+@patch("metasci_scribe.agent._ensure_auxiliary_chat_model")
+@patch("metasci_scribe.agent._ensure_chat_model")
+@patch("metasci_scribe.utils.load_subagents")
+@patch("metasci_scribe.config.apply_config_to_env")
+@patch("metasci_scribe.config.get_effective_config")
 @patch(
-    "EvoScientist.middleware.create_tool_selector_middleware",
+    "metasci_scribe.middleware.create_tool_selector_middleware",
     return_value=[MagicMock()],
 )
 def test_scheduler_summarization_uses_auxiliary_model(
@@ -733,7 +733,7 @@ def test_scheduler_summarization_uses_auxiliary_model(
     # instance is enough: the scheduler grader only stores it.
     mock_backend.return_value = SimpleNamespace()
 
-    from EvoScientist.subagents._factory import build_async_subagent_graph
+    from metasci_scribe.subagents._factory import build_async_subagent_graph
 
     build_async_subagent_graph("scheduler", workspace=workspace)
 
@@ -757,13 +757,13 @@ def test_scheduler_summarization_uses_auxiliary_model(
 
 
 @patch("deepagents.create_deep_agent")
-@patch("EvoScientist.EvoScientist._get_default_backend")
-@patch("EvoScientist.EvoScientist._ensure_config")
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
-@patch("EvoScientist.config.apply_config_to_env")
-@patch("EvoScientist.config.get_effective_config")
+@patch("metasci_scribe.agent._get_default_backend")
+@patch("metasci_scribe.agent._ensure_config")
+@patch("metasci_scribe.agent._ensure_chat_model")
+@patch("metasci_scribe.config.apply_config_to_env")
+@patch("metasci_scribe.config.get_effective_config")
 @patch(
-    "EvoScientist.middleware.create_tool_selector_middleware",
+    "metasci_scribe.middleware.create_tool_selector_middleware",
     return_value=[MagicMock()],
 )
 def test_expert_container_factory_installs_per_run_summarization(
@@ -785,7 +785,7 @@ def test_expert_container_factory_installs_per_run_summarization(
     mock_chat.return_value = MagicMock(profile={"max_input_tokens": 200_000})
     mock_create.return_value.with_config.return_value = MagicMock()
 
-    from EvoScientist.subagents.expert_container_async import (
+    from metasci_scribe.subagents.expert_container_async import (
         build_expert_container_async_graph,
     )
 
@@ -832,7 +832,7 @@ async def test_smaller_window_run_triggers_summarization(tmp_path):
     handler = AsyncMock(return_value=MagicMock())
     with (
         _patched_config({"model": "small-model"}),
-        patch("EvoScientist.llm.get_chat_model", return_value=run_model),
+        patch("metasci_scribe.llm.get_chat_model", return_value=run_model),
     ):
         await mw.awrap_model_call(_fake_model_request(construction, messages), handler)
 
@@ -869,7 +869,7 @@ async def test_stock_middleware_stays_frozen_under_same_override(tmp_path):
     handler = AsyncMock(return_value=MagicMock())
     with (
         _patched_config({"model": "small-model"}),
-        patch("EvoScientist.llm.get_chat_model", return_value=run_model),
+        patch("metasci_scribe.llm.get_chat_model", return_value=run_model),
     ):
         await mw.awrap_model_call(_fake_model_request(construction, messages), handler)
 

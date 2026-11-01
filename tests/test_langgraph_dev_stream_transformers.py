@@ -2,7 +2,7 @@
 
 langgraph-api enables only the stream modes that a graph's registered
 transformers declare. The middleware event mirror
-(``EvoScientist/middleware/events.py``) writes on the ``custom`` channel via
+(``metasci_scribe/middleware/events.py``) writes on the ``custom`` channel via
 ``get_stream_writer()``; without ``CustomTransformer`` registered for the served
 graph those writes hit a no-op writer and never reach the client.
 
@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from langgraph.stream.transformers import CustomTransformer
 
-from EvoScientist.langgraph_dev.stream_transformers import stream_transformers
+from metasci_scribe.langgraph_dev.stream_transformers import stream_transformers
 
 
 def test_stream_transformers_returns_a_fresh_custom_factory_list():

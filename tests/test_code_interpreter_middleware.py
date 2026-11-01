@@ -3,7 +3,7 @@
 
 langchain-quickjs >=0.3 reserves the ``task`` sub-agent dispatch tool as the
 top-level REPL global and raises ``ValueError`` if ``task`` appears in the
-``ptc`` allowlist. EvoScientist must therefore keep ``task`` out of the
+``ptc`` allowlist. Metasci Scribe must therefore keep ``task`` out of the
 allowlist (``task()`` stays reachable as the REPL global, with responseSchema).
 """
 
@@ -15,8 +15,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
-from EvoScientist.middleware import code_interpreter
-from EvoScientist.middleware.code_interpreter import (
+from metasci_scribe.middleware import code_interpreter
+from metasci_scribe.middleware.code_interpreter import (
     _DEFAULT_PTC_ALLOWLIST,
     aclose_code_interpreters,
     create_code_interpreter_middleware,
@@ -119,7 +119,7 @@ def test_middleware_uses_thread_mode():
     state as ``langchain-ai/deepagents#3064`` shipped it. The wire-cost
     bloat that motivated the earlier ``mode="turn"`` regression guard is
     fixed at the API serialization layer (``EvoFilteredGraph`` in
-    ``EvoScientist/langgraph_dev/main_graph.py``), not by revoking the
+    ``metasci_scribe/langgraph_dev/main_graph.py``), not by revoking the
     persistence feature.
     """
     mw = create_code_interpreter_middleware()
@@ -172,12 +172,15 @@ def test_after_agent_evicts_slot_on_untouched_turn():
 
 
 def test_evo_filtered_graph_strips_private_snapshot_field():
-    """The ``StateSnapshot`` returned by ``EvoScientist_agent.get_state`` must
+    """The ``StateSnapshot`` returned by ``scribe_agent.get_state`` must
     not contain ``_quickjs_snapshot_payload`` in either ``values`` (the
     materialized channel payload) or ``metadata['writes']`` (the raw write
     records surfaced by ``get_state_history``).
     """
-    from EvoScientist.langgraph_dev.main_graph import _EvoFilteredGraph, _strip_private
+    from metasci_scribe.langgraph_dev.main_graph import (
+        _EvoFilteredGraph,
+        _strip_private,
+    )
 
     snap = MagicMock()
     snap.values = {
@@ -224,7 +227,7 @@ def test_strip_private_handles_missing_metadata_writes():
     (e.g. initial state). The filter must not crash and must still strip
     values.
     """
-    from EvoScientist.langgraph_dev.main_graph import _strip_private
+    from metasci_scribe.langgraph_dev.main_graph import _strip_private
 
     snap = MagicMock()
     snap.values = {"_quickjs_snapshot_payload": b"x", "messages": []}
@@ -244,7 +247,7 @@ def test_strip_private_scrubs_task_result_snapshot_blob():
     on live history: this is the dominant per-response leak, larger than
     ``values`` and ``metadata.writes`` combined for anchor checkpoints.
     """
-    from EvoScientist.langgraph_dev.main_graph import _strip_private
+    from metasci_scribe.langgraph_dev.main_graph import _strip_private
 
     class FakeTask:
         def __init__(self, id_, result):
@@ -284,13 +287,13 @@ def test_agent_uses_filtered_graph_class():
     ``Pregel.copy(update=...)`` — the call langgraph-api makes in
     ``get_graph`` before yielding the graph to endpoint handlers.
     """
-    from EvoScientist.langgraph_dev.main_graph import (
-        EvoScientist_agent,
+    from metasci_scribe.langgraph_dev.main_graph import (
         _EvoFilteredGraph,
+        scribe_agent,
     )
 
     # Registered graphs sit behind a folder-checking factory; it serves this graph.
-    graph = EvoScientist_agent.graph
+    graph = scribe_agent.graph
     assert isinstance(graph, _EvoFilteredGraph)
     assert isinstance(graph.copy(update={}), _EvoFilteredGraph)
 
@@ -303,7 +306,7 @@ def test_all_registered_graphs_use_filtered_graph_class():
     test update.
 
     Subagents get ``create_code_interpreter_middleware`` unconditionally
-    (``EvoScientist.py:_build_middleware_stack``), so they can touch the
+    (``agent.py:_build_middleware_stack``), so they can touch the
     QuickJS REPL and write ``_quickjs_snapshot_payload`` on their own
     checkpoint namespace. Async subagents also get their own ``thread_id``
     and their ``/threads/{id}/state`` endpoint runs on their own compiled
@@ -315,8 +318,8 @@ def test_all_registered_graphs_use_filtered_graph_class():
     from pathlib import Path
 
     # Import triggers ``main_graph``'s swap loop.
-    from EvoScientist.langgraph_dev import main_graph
-    from EvoScientist.langgraph_dev.main_graph import _EvoFilteredGraph
+    from metasci_scribe.langgraph_dev import main_graph
+    from metasci_scribe.langgraph_dev.main_graph import _EvoFilteredGraph
 
     config_path = Path(main_graph.__file__).parent / "langgraph.json"
     config = json.loads(config_path.read_text())
@@ -336,7 +339,7 @@ def test_strip_private_recurses_into_nested_subgraph_state():
     """
     from langgraph.types import StateSnapshot
 
-    from EvoScientist.langgraph_dev.main_graph import _strip_private
+    from metasci_scribe.langgraph_dev.main_graph import _strip_private
 
     nested_snap = StateSnapshot(
         values={"_quickjs_snapshot_payload": b"n" * 1_400_000, "messages": []},
@@ -384,7 +387,7 @@ def test_strip_private_scrubs_delta_counters():
     but leaks the channel name — strip for consistency with the private
     annotation.
     """
-    from EvoScientist.langgraph_dev.main_graph import _strip_private
+    from metasci_scribe.langgraph_dev.main_graph import _strip_private
 
     snap = MagicMock()
     snap.values = {}

@@ -1,4 +1,4 @@
-"""Tests for EvoScientist.setup._install (helpers shared by the setup stages)."""
+"""Tests for metasci_scribe.setup._install (helpers shared by the setup stages)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import os
 
 import pytest
 
-from EvoScientist.setup import _install
+from metasci_scribe.setup import _install
 
 
 @pytest.fixture

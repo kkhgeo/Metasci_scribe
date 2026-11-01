@@ -1,4 +1,4 @@
-"""Tests for EvoScientist.updater (``EvoSci update``). The network and
+"""Tests for metasci_scribe.updater (``metasci-scribe update``). The network and
 subprocesses are mocked."""
 
 from __future__ import annotations
@@ -17,13 +17,13 @@ from typing import ClassVar
 
 import pytest
 
-from EvoScientist import updater, uv_tool
-from EvoScientist.setup.protocol import ERROR_CODES, JsonEmitter
+from metasci_scribe import updater, uv_tool
+from metasci_scribe.setup.protocol import ERROR_CODES, JsonEmitter
 
 RECEIPT = """\
 [tool]
 requirements = [
-    { name = "evoscientist", extras = ["oauth"], specifier = "==0.3.6" },
+    { name = "metasci-scribe", extras = ["oauth"], specifier = "==0.3.6" },
     { name = "six", specifier = ">=1.10,<2" },
     { name = "idna", marker = "python_full_version >= '3.8'", specifier = ">=3" },
 ]
@@ -48,7 +48,7 @@ class FakeConfig:
 def uv_install(tmp_path, monkeypatch):
     """A uv tool install of 0.3.7 with the receipt above, an index listing
     VERSIONS, and constraints that download."""
-    env = tmp_path / "tools" / "evoscientist"
+    env = tmp_path / "tools" / "metasci-scribe"
     env.mkdir(parents=True)
     (env / "uv-receipt.toml").write_text(RECEIPT, encoding="utf-8")
     monkeypatch.setattr(sys, "prefix", str(env))
@@ -57,9 +57,9 @@ def uv_install(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setattr(updater, "installed_version", lambda: "0.3.7")
     monkeypatch.setattr(uv_tool, "find_uv", lambda: "/opt/uv")
-    monkeypatch.setattr("EvoScientist.config.load_config", lambda: FakeConfig())
+    monkeypatch.setattr("metasci_scribe.config.load_config", lambda: FakeConfig())
     monkeypatch.setattr(
-        "EvoScientist.update_check.fetch_versions", lambda index, timeout: VERSIONS
+        "metasci_scribe.update_check.fetch_versions", lambda index, timeout: VERSIONS
     )
     downloads: list[str] = []
 
@@ -74,8 +74,10 @@ def uv_install(tmp_path, monkeypatch):
     monkeypatch.setattr(updater, "running_from_env", lambda: [])
     monkeypatch.setattr(updater, "_server_tree", set)
     # The Windows handover creates the data dir's tools folder (its lock).
-    monkeypatch.setattr("EvoScientist.paths.DATA_DIR", tmp_path / "data")
-    monkeypatch.setattr("EvoScientist.update_helper.has_visible_desktop", lambda: True)
+    monkeypatch.setattr("metasci_scribe.paths.DATA_DIR", tmp_path / "data")
+    monkeypatch.setattr(
+        "metasci_scribe.update_helper.has_visible_desktop", lambda: True
+    )
     return {"env": env, "downloads": downloads, "tmp": tmp_path}
 
 
@@ -94,7 +96,7 @@ class Runs:
 
 
 class FakePopen:
-    """``EvoSci setup --json`` writing *lines*, then exiting with *rc*."""
+    """``metasci-scribe setup --json`` writing *lines*, then exiting with *rc*."""
 
     calls: ClassVar[list[list[str]]] = []
 
@@ -150,7 +152,7 @@ def test_unknown_code_is_rejected():
 def test_version_help_describes_rollback():
     from typer.testing import CliRunner
 
-    from EvoScientist.cli import app
+    from metasci_scribe.cli import app
 
     result = CliRunner().invoke(app, ["update", "--help"], terminal_width=200)
     assert result.exit_code == 0
@@ -230,7 +232,7 @@ def test_uv_command_keeps_python_extras_and_with(tmp_path):
     assert "--managed-python" in cmd
     # By name: uv splits a -c path at spaces, so it runs from the file's dir.
     assert cmd[cmd.index("-c") + 1] == "c.txt"
-    assert "EvoScientist[oauth]==0.3.10" in cmd
+    assert "metasci-scribe[oauth]==0.3.10" in cmd
     with_args = [cmd[i + 1] for i, v in enumerate(cmd) if v == "--with"]
     assert with_args == ["six>=1.10,<2", "idna>=3 ; python_full_version >= '3.8'"]
     assert "upgrade" not in cmd
@@ -238,7 +240,7 @@ def test_uv_command_keeps_python_extras_and_with(tmp_path):
 
 def test_uv_command_without_python_key_uses_running_version(tmp_path):
     env = _write_receipt(
-        tmp_path, '[tool]\nrequirements = [{ name = "evoscientist" }]\n'
+        tmp_path, '[tool]\nrequirements = [{ name = "metasci-scribe" }]\n'
     )
     cmd = updater.uv_install_command(
         "/opt/uv", uv_tool.read_receipt(env), "0.3.10", tmp_path / "c.txt"
@@ -299,14 +301,14 @@ def test_json_update_forwards_setup_lines(uv_install, monkeypatch):
     uv_call = runs.calls[0]
     # The constraints file by name, from its temp dir (removed afterwards).
     assert uv_call["cmd"][uv_call["cmd"].index("-c") + 1] == "constraints.txt"
-    assert Path(uv_call["cwd"]).name.startswith("evosci-update-")
+    assert Path(uv_call["cwd"]).name.startswith("metasci-scribe-update-")
     assert not Path(uv_call["cwd"]).exists()
     assert uv_call["cmd"][0] == "/opt/uv"
     assert uv_call["stdout"] is sys.stderr
     # --skip reaches the new setup, by absolute path in uv's bin dir.
     assert FakePopen.calls == [
         [
-            str(uv_install["tmp"] / "bin" / "EvoSci"),
+            str(uv_install["tmp"] / "bin" / "metasci-scribe"),
             "setup",
             "--skip",
             "webui",
@@ -321,7 +323,10 @@ def test_terminal_update_runs_setup_on_the_console(uv_install, monkeypatch):
     monkeypatch.setattr(updater.subprocess, "run", runs)
     code, lines, _ = _run(updater.UpdateOptions(version="0.3.8"))
     assert code == 0
-    assert runs.calls[1]["cmd"] == [str(uv_install["tmp"] / "bin" / "EvoSci"), "setup"]
+    assert runs.calls[1]["cmd"] == [
+        str(uv_install["tmp"] / "bin" / "metasci-scribe"),
+        "setup",
+    ]
     assert _terminal(lines)["detail"] == {"version": "0.3.8"}
 
 
@@ -330,9 +335,9 @@ def test_cn_mirror_update_uses_mirrors(uv_install, monkeypatch):
         mirror = "cn"
 
     indexes: list[str] = []
-    monkeypatch.setattr("EvoScientist.config.load_config", lambda: CnConfig())
+    monkeypatch.setattr("metasci_scribe.config.load_config", lambda: CnConfig())
     monkeypatch.setattr(
-        "EvoScientist.update_check.fetch_versions",
+        "metasci_scribe.update_check.fetch_versions",
         lambda index, timeout: indexes.append(index) or VERSIONS,
     )
     runs = Runs()
@@ -367,7 +372,9 @@ def test_check_only_prints_versions(uv_install, monkeypatch):
 def test_rollback_backs_up_the_config(uv_install, monkeypatch):
     config = uv_install["tmp"] / "config.yaml"
     config.write_text("newer_key: 1\n")
-    monkeypatch.setattr("EvoScientist.config.settings.get_config_path", lambda: config)
+    monkeypatch.setattr(
+        "metasci_scribe.config.settings.get_config_path", lambda: config
+    )
     monkeypatch.setattr(updater.subprocess, "run", Runs())
     code, lines, _ = _run(updater.UpdateOptions(version="0.3.6"))
     assert code == 0
@@ -379,7 +386,9 @@ def test_rollback_backs_up_the_config(uv_install, monkeypatch):
 def test_no_backup_for_a_newer_target(uv_install, monkeypatch):
     config = uv_install["tmp"] / "config.yaml"
     config.write_text("a: 1\n")
-    monkeypatch.setattr("EvoScientist.config.settings.get_config_path", lambda: config)
+    monkeypatch.setattr(
+        "metasci_scribe.config.settings.get_config_path", lambda: config
+    )
     monkeypatch.setattr(updater.subprocess, "run", Runs())
     _run(updater.UpdateOptions(version="0.3.8"))
     assert not list(uv_install["tmp"].glob("config.yaml.bak-*"))
@@ -392,7 +401,7 @@ def test_lookup_without_network(uv_install, monkeypatch):
     def offline(index, timeout):
         raise OSError("Network is unreachable")
 
-    monkeypatch.setattr("EvoScientist.update_check.fetch_versions", offline)
+    monkeypatch.setattr("metasci_scribe.update_check.fetch_versions", offline)
     code, lines, _ = _run(updater.UpdateOptions(json=True))
     assert code == 1
     assert _terminal(lines)["code"] == "download_failed"
@@ -465,12 +474,12 @@ def no_subprocess(monkeypatch):
 def _plain_env(tmp_path, monkeypatch, *, editable=False):
     monkeypatch.setattr(sys, "prefix", str(tmp_path))
     monkeypatch.setattr(updater, "installed_version", lambda: "0.3.7")
-    monkeypatch.setattr("EvoScientist.config.load_config", lambda: FakeConfig())
+    monkeypatch.setattr("metasci_scribe.config.load_config", lambda: FakeConfig())
     monkeypatch.setattr(
-        "EvoScientist.update_check.fetch_versions", lambda index, timeout: VERSIONS
+        "metasci_scribe.update_check.fetch_versions", lambda index, timeout: VERSIONS
     )
     monkeypatch.setattr(
-        "EvoScientist.ccproxy_manager._is_editable_install", lambda: editable
+        "metasci_scribe.ccproxy_manager._is_editable_install", lambda: editable
     )
 
 
@@ -480,7 +489,7 @@ def test_pip_install_prints_the_command(tmp_path, monkeypatch, no_subprocess):
     end = _terminal(lines)
     assert code == 1
     assert end["code"] == "manual_update"
-    assert 'pip install --upgrade "EvoScientist==0.3.10"' in end["message"]
+    assert 'pip install --upgrade "metasci-scribe==0.3.10"' in end["message"]
     assert updater.constraints_url("0.3.10", "default") in end["message"]
 
 
@@ -494,7 +503,7 @@ def test_editable_install_says_git(tmp_path, monkeypatch, no_subprocess):
 
 def test_docker_image_says_pull(tmp_path, monkeypatch, no_subprocess):
     _plain_env(tmp_path, monkeypatch)
-    (tmp_path / ".evoscientist-managed").write_text("")
+    (tmp_path / ".metasci-scribe-managed").write_text("")
     _code, lines, _ = _run(updater.UpdateOptions(json=True))
     end = _terminal(lines)
     assert end["code"] == "manual_update"
@@ -514,7 +523,7 @@ def test_source_install_is_not_moved_to_pypi(
 ):
     _plain_env(tmp_path, monkeypatch)
     (tmp_path / "uv-receipt.toml").write_text(
-        f'[tool]\nrequirements = [{{ name = "evoscientist", {key} = "{value}" }}]\n'
+        f'[tool]\nrequirements = [{{ name = "metasci-scribe", {key} = "{value}" }}]\n'
     )
     _code, lines, _ = _run(updater.UpdateOptions(json=True))
     end = _terminal(lines)
@@ -545,7 +554,7 @@ def test_missing_uv(uv_install, monkeypatch, no_subprocess):
 @pytest.fixture
 def server(monkeypatch):
     """A server answering on 6174; *owned* when its sidecar pid serves it."""
-    import EvoScientist.langgraph_dev.manager as manager
+    import metasci_scribe.langgraph_dev.manager as manager
 
     state = {
         "owned": True,
@@ -570,17 +579,17 @@ def server(monkeypatch):
 
     monkeypatch.setattr(manager, "stop_recorded_server", stop)
     monkeypatch.setattr(
-        "EvoScientist.deploy.busy.running_bg_process_names", lambda url: state["jobs"]
+        "metasci_scribe.deploy.busy.running_bg_process_names", lambda url: state["jobs"]
     )
     monkeypatch.setattr(
-        "EvoScientist.deploy.busy.has_busy_thread", lambda url: state["busy"]
+        "metasci_scribe.deploy.busy.has_busy_thread", lambda url: state["busy"]
     )
 
     class Config:
         langgraph_dev_port = 6174
         langgraph_dev_host = "127.0.0.1"
 
-    monkeypatch.setattr("EvoScientist.config.get_effective_config", lambda: Config())
+    monkeypatch.setattr("metasci_scribe.config.get_effective_config", lambda: Config())
     return state
 
 
@@ -638,7 +647,7 @@ def test_owned_server_that_does_not_stop(server):
 
 
 def test_has_busy_thread_asks_for_busy_threads_only(monkeypatch):
-    from EvoScientist.deploy import busy
+    from metasci_scribe.deploy import busy
 
     payloads: list[dict] = []
     monkeypatch.setattr(
@@ -707,7 +716,7 @@ def test_stale_record_without_server_is_ignored(server):
 # Windows: the helper takes over
 # --------------------------------------------------------------------------- #
 def test_windows_hands_over_to_the_helper(uv_install, monkeypatch):
-    from EvoScientist import update_helper
+    from metasci_scribe import update_helper
 
     started: list[dict] = []
     monkeypatch.setattr(updater.sys, "platform", "win32")
@@ -722,7 +731,7 @@ def test_windows_hands_over_to_the_helper(uv_install, monkeypatch):
     monkeypatch.setattr(updater.subprocess, "run", runs)
     code, lines, _ = _run(updater.UpdateOptions(json=True, skip=["webui"]))
     assert code == 0
-    assert runs.calls == []  # uv runs in the helper, after EvoSci has exited
+    assert runs.calls == []  # uv runs in the helper, after metasci-scribe has exited
     # The helper writes the terminal line.
     assert all(e["status"] == "running" for e in lines)
     (call,) = started
@@ -735,9 +744,9 @@ def test_windows_hands_over_to_the_helper(uv_install, monkeypatch):
     assert config["wait_pids"][0] == os.getpid()
     assert config["uv"] == "/opt/uv"
     assert config["uv_args"][:3] == ["tool", "install", "--force"]
-    evosci = uv_install["tmp"] / "bin" / "EvoSci.exe"
-    assert config["evosci"] == str(evosci)
-    assert config["setup_command"] == f"& '{evosci}' setup"
+    scribe = uv_install["tmp"] / "bin" / "metasci-scribe.exe"
+    assert config["metasci-scribe"] == str(scribe)
+    assert config["setup_command"] == f"& '{scribe}' setup"
     assert config["skip"] == ["webui"]
     assert (config["installed"], config["target"]) == ("0.3.7", "0.3.10")
     assert config["lock"] == str(uv_install["tmp"] / "data" / "tools" / "update.lock")
@@ -747,15 +756,15 @@ def test_windows_hands_over_to_the_helper(uv_install, monkeypatch):
 
 
 def test_windows_handover_passes_the_uv_environment(uv_install, monkeypatch):
-    from EvoScientist import update_helper
-    from EvoScientist.update_check import CN_SIMPLE
+    from metasci_scribe import update_helper
+    from metasci_scribe.update_check import CN_SIMPLE
 
     class CnConfig:
         mirror = "cn"
 
     started: list[dict] = []
     monkeypatch.setattr(updater.sys, "platform", "win32")
-    monkeypatch.setattr("EvoScientist.config.load_config", lambda: CnConfig())
+    monkeypatch.setattr("metasci_scribe.config.load_config", lambda: CnConfig())
     for name in ("UV_SYSTEM_CERTS", "UV_NATIVE_TLS", "UV_HTTP_TIMEOUT"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.delenv("UV_DEFAULT_INDEX", raising=False)
@@ -779,7 +788,7 @@ def test_terminal_handover_without_a_desktop_stays_on_this_console(
 ):
     """In an SSH session nobody would see a new window: the helper writes to
     this console and does not wait."""
-    from EvoScientist import update_helper
+    from metasci_scribe import update_helper
 
     started: list[dict] = []
     monkeypatch.setattr(updater.sys, "platform", "win32")
@@ -798,7 +807,7 @@ def test_terminal_handover_without_a_desktop_stays_on_this_console(
 
 
 def test_start_helper_json_keeps_the_callers_pipes(tmp_path, monkeypatch):
-    from EvoScientist import update_helper
+    from metasci_scribe import update_helper
 
     calls: list[dict] = []
     monkeypatch.setattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200, raising=False)
@@ -820,11 +829,11 @@ def test_start_helper_json_keeps_the_callers_pipes(tmp_path, monkeypatch):
     assert call["cmd"][1:3] == ["-NoProfile", "-Command"]
     assert call["cmd"][3].startswith(". ([scriptblock]::Create(")
     assert call["cmd"][3].endswith(" -Json")
-    assert call["env"]["EVOSCI_UPDATE_HELPER"] == str(
+    assert call["env"]["METASCI_SCRIBE_UPDATE_HELPER"] == str(
         tmp_path / update_helper.HELPER_NAME
     )
-    assert call["env"]["EVOSCI_UPDATE_CONFIG"] == str(tmp_path / "config.json")
-    assert call["env"]["EVOSCI_UPDATE_TEMP"] == str(tmp_path)
+    assert call["env"]["METASCI_SCRIBE_UPDATE_CONFIG"] == str(tmp_path / "config.json")
+    assert call["env"]["METASCI_SCRIBE_UPDATE_TEMP"] == str(tmp_path)
     config = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
     assert config == {"env_dir": "C:\\env"}
 
@@ -832,7 +841,7 @@ def test_start_helper_json_keeps_the_callers_pipes(tmp_path, monkeypatch):
 def test_start_helper_terminal_opens_its_own_window(tmp_path, monkeypatch):
     """A prompt reads Ctrl+C as a key, so the helper gets a console of its own,
     where Ctrl+C reaches it."""
-    from EvoScientist import update_helper
+    from metasci_scribe import update_helper
 
     calls: list[dict] = []
     monkeypatch.setattr(subprocess, "CREATE_NEW_CONSOLE", 0x10, raising=False)
@@ -849,7 +858,7 @@ def test_start_helper_terminal_opens_its_own_window(tmp_path, monkeypatch):
 
 
 def test_terminal_handover_says_new_window(uv_install, monkeypatch):
-    from EvoScientist import update_helper
+    from metasci_scribe import update_helper
 
     monkeypatch.setattr(updater.sys, "platform", "win32")
     monkeypatch.setattr(update_helper, "start_helper", lambda *a, **kw: None)
@@ -859,7 +868,7 @@ def test_terminal_handover_says_new_window(uv_install, monkeypatch):
 
 @pytest.mark.skipif(shutil.which("pwsh") is None, reason="needs pwsh")
 def test_helper_script_parses(tmp_path):
-    from EvoScientist import update_helper
+    from metasci_scribe import update_helper
 
     script = tmp_path / "helper.ps1"
     script.write_text(update_helper.HELPER, encoding="utf-8")
@@ -967,7 +976,7 @@ def test_receipt_entry_that_cannot_be_reinstalled(tmp_path, monkeypatch, no_subp
     _plain_env(tmp_path, monkeypatch)
     (tmp_path / "uv-receipt.toml").write_text(
         "[tool]\nrequirements = [\n"
-        '  { name = "evoscientist", specifier = "==0.3.7" },\n'
+        '  { name = "metasci-scribe", specifier = "==0.3.7" },\n'
         '  { name = "wheelpkg", git = "https://example.org/r?path=dist/w.whl&rev=v1" },\n'
         "]\n"
     )
@@ -981,7 +990,7 @@ def test_receipt_entry_that_cannot_be_reinstalled(tmp_path, monkeypatch, no_subp
 # --------------------------------------------------------------------------- #
 # The Windows helper itself, under pwsh with POSIX stand-ins: a copy of
 # `sleep` started from the environment blocks it; shell scripts play uv and
-# EvoSci. macOS kills a copied system binary, so those tests skip there.
+# metasci-scribe. macOS kills a copied system binary, so those tests skip there.
 # --------------------------------------------------------------------------- #
 needs_pwsh = pytest.mark.skipif(
     shutil.which("pwsh") is None or sys.platform == "win32",
@@ -1043,19 +1052,19 @@ def _start_blocker(path: Path, seconds: int = 30) -> int:
 
 def _helper(root: Path, *, json_mode: bool = True, **config) -> list[str]:
     """Writes the helper and its config under *root* (environment
-    ``root/env``, uv and EvoSci stand-ins that succeed) and returns the
+    ``root/env``, uv and metasci-scribe stand-ins that succeed) and returns the
     command that runs it."""
-    from EvoScientist import update_helper
+    from metasci_scribe import update_helper
 
     (root / "env" / "bin").mkdir(parents=True, exist_ok=True)
     work = root / "work"
     work.mkdir(exist_ok=True)
     if "uv" not in config:
         config["uv"] = str(_script(root / "uv", "exit 0"))
-    if "evosci" not in config:
-        config["evosci"] = str(
+    if "metasci-scribe" not in config:
+        config["metasci-scribe"] = str(
             _script(
-                root / "EvoSci",
+                root / "metasci-scribe",
                 'echo \'{"protocol": 1, "stage": "node", "status": "done"}\'',
             )
         )
@@ -1064,7 +1073,7 @@ def _helper(root: Path, *, json_mode: bool = True, **config) -> list[str]:
         "wait_pids": [],
         "uv_args": [],
         "uv_env": {},
-        "setup_command": "EvoSci setup",
+        "setup_command": "metasci-scribe setup",
         "skip": [],
         "installed": "0.3.6",
         "target": "0.3.7",
@@ -1091,15 +1100,15 @@ def _kill(*pids: int) -> None:
 def test_helper_runs_through_the_start_command(tmp_path):
     """The script-block start command, with paths that hold a space and
     non-ASCII characters, runs the helper to its terminal line."""
-    from EvoScientist import update_helper
+    from metasci_scribe import update_helper
 
     root = tmp_path / "Evo Upd ąę"
     cmd = _helper(root)
     env = {
         **os.environ,
-        "EVOSCI_UPDATE_HELPER": cmd[3],
-        "EVOSCI_UPDATE_CONFIG": cmd[5],
-        "EVOSCI_UPDATE_TEMP": cmd[7],
+        "METASCI_SCRIBE_UPDATE_HELPER": cmd[3],
+        "METASCI_SCRIBE_UPDATE_CONFIG": cmd[5],
+        "METASCI_SCRIBE_UPDATE_TEMP": cmd[7],
     }
     result = subprocess.run(
         ["pwsh", "-NoProfile", "-Command", update_helper._START + " -Json"],
@@ -1132,9 +1141,9 @@ def test_helper_unreadable_config_ends_with_a_terminal_line(tmp_path):
 def test_helper_keeps_setup_output_that_is_not_an_event_off_stdout(tmp_path):
     cmd = _helper(
         tmp_path,
-        evosci=str(
+        scribe=str(
             _script(
-                tmp_path / "EvoSci",
+                tmp_path / "metasci-scribe",
                 "echo 'stray print'\n"
                 'echo \'{"protocol": 1, "stage": "node", "status": "done"}\'',
             )
@@ -1264,7 +1273,7 @@ def test_second_helper_ends_while_one_waits(tmp_path):
         _kill(first_blocker)
     end = json.loads(second.stdout.splitlines()[-1])
     assert end["code"] == "environment_busy"
-    assert "Another EvoSci update" in end["message"]
+    assert "Another metasci-scribe update" in end["message"]
     assert end["detail"] == {"waiting_for": []}
     assert not second_ran.exists()
 
@@ -1286,7 +1295,9 @@ def test_helper_waits_for_its_exiting_caller(tmp_path):
         _kill(exiting_pid)
     events = [json.loads(line) for line in result.stdout.splitlines()]
     assert not any("pending" in e.get("message", "") for e in events), events
-    assert any("Installing EvoScientist 0.3.7" in e.get("message", "") for e in events)
+    assert any(
+        "Installing Metasci Scribe 0.3.7" in e.get("message", "") for e in events
+    )
 
 
 @needs_blocker
@@ -1312,7 +1323,7 @@ def test_helper_without_a_desktop_does_not_wait(tmp_path):
 # --------------------------------------------------------------------------- #
 # macOS and Linux: waiting for other processes that run from the environment
 # --------------------------------------------------------------------------- #
-TUI = {"pid": 4321, "name": "EvoSci", "path": "/env/bin/python"}
+TUI = {"pid": 4321, "name": "metasci-scribe", "path": "/env/bin/python"}
 
 
 @pytest.fixture
@@ -1437,7 +1448,9 @@ def test_running_from_env_matches_the_interpreter_on_the_command_line(
     base = "/usr/lib/uv-python/cpython-3.12/bin/python3.12"
     procs = [
         Proc(os.getpid(), [str(env / "bin" / "python")], base),  # this process
-        Proc(11, [str(env / "bin" / "python"), str(env / "bin" / "EvoSci")], base),
+        Proc(
+            11, [str(env / "bin" / "python"), str(env / "bin" / "metasci-scribe")], base
+        ),
         Proc(12, ["node", "server.js"], "/usr/bin/node"),
         Proc(13, ["tool"], str(env / "bin" / "tool")),  # a binary in the env
         Proc(14, [], None),  # access denied
@@ -1466,7 +1479,7 @@ def test_reader_gone_sees_a_closed_pipe(monkeypatch):
 def test_json_command_never_asks_and_keeps_stdout_for_events(monkeypatch):
     from typer.testing import CliRunner
 
-    from EvoScientist.cli import app
+    from metasci_scribe.cli import app
 
     seen: dict = {}
 
@@ -1476,7 +1489,7 @@ def test_json_command_never_asks_and_keeps_stdout_for_events(monkeypatch):
 
     monkeypatch.setattr(updater, "run_update", fake_run)
     monkeypatch.setattr(
-        "EvoScientist.stream.json_sink.redirect_console_to_stderr",
+        "metasci_scribe.stream.json_sink.redirect_console_to_stderr",
         lambda: seen.setdefault("redirected", True),
     )
     result = CliRunner().invoke(app, ["update", "--json", "--skip", "webui"])
@@ -1515,16 +1528,16 @@ def test_editable_direct_url_says_git(tmp_path, monkeypatch, no_subprocess):
     """The real direct_url.json check, not a stub of it."""
 
     class Dist:
-        metadata: ClassVar[dict] = {"Name": "EvoScientist"}
+        metadata: ClassVar[dict] = {"Name": "metasci-scribe"}
 
         def read_text(self, name):
             return '{"url": "file:///src/evo", "dir_info": {"editable": true}}'
 
     monkeypatch.setattr(sys, "prefix", str(tmp_path))
     monkeypatch.setattr(updater, "installed_version", lambda: "0.3.7")
-    monkeypatch.setattr("EvoScientist.config.load_config", lambda: FakeConfig())
+    monkeypatch.setattr("metasci_scribe.config.load_config", lambda: FakeConfig())
     monkeypatch.setattr(
-        "EvoScientist.update_check.fetch_versions", lambda index, timeout: VERSIONS
+        "metasci_scribe.update_check.fetch_versions", lambda index, timeout: VERSIONS
     )
     monkeypatch.setattr("importlib.metadata.distributions", lambda: [Dist()])
     _code, lines, _ = _run(updater.UpdateOptions(json=True))
@@ -1536,7 +1549,7 @@ def test_editable_direct_url_says_git(tmp_path, monkeypatch, no_subprocess):
 def test_editable_receipt_says_git(tmp_path, monkeypatch, no_subprocess):
     _plain_env(tmp_path, monkeypatch)
     (tmp_path / "uv-receipt.toml").write_text(
-        '[tool]\nrequirements = [{ name = "evoscientist", editable = "/opt/src/evo" }]\n'
+        '[tool]\nrequirements = [{ name = "metasci-scribe", editable = "/opt/src/evo" }]\n'
     )
     _code, lines, _ = _run(updater.UpdateOptions(json=True))
     end = _terminal(lines)
@@ -1658,7 +1671,7 @@ def test_a_server_child_started_during_the_wait_is_not_waited_for(
 
 
 def test_server_tree_reads_the_recorded_server(monkeypatch):
-    import EvoScientist.langgraph_dev.manager as manager
+    import metasci_scribe.langgraph_dev.manager as manager
 
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     try:
@@ -1692,7 +1705,7 @@ def test_second_update_ends_while_one_holds_the_lock(uv_install, monkeypatch):
     end = _terminal(lines)
     assert code == 1
     assert end["code"] == "environment_busy"
-    assert "Another EvoSci update" in end["message"]
+    assert "Another metasci-scribe update" in end["message"]
     assert end["detail"] == {"waiting_for": []}
     assert runs.calls == []
     # Released at the end: the next update runs.

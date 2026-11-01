@@ -5,12 +5,12 @@ from __future__ import annotations
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
-from EvoScientist.memory.scheduler import MemoryScheduler
-from EvoScientist.memory.types import MemorySourceType
-from EvoScientist.middleware import memory_lifecycle
+from metasci_scribe.memory.scheduler import MemoryScheduler
+from metasci_scribe.memory.types import MemorySourceType
+from metasci_scribe.middleware import memory_lifecycle
 from tests.fakes.memory import fake_runtime
 
-TURN = [HumanMessage("hi", id="h1"), AIMessage("done", name="EvoScientist", id="a1")]
+TURN = [HumanMessage("hi", id="h1"), AIMessage("done", name="metasci-scribe", id="a1")]
 
 
 class _Recorder:
@@ -47,7 +47,7 @@ def _middleware(tmp_path, recorder, source_type=MemorySourceType.TURN):
         workspace_dir=tmp_path / "workspace",
         project_id="P-project",
         source_type=source_type,
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
         memory_scheduler=recorder.scheduler,
     )
 
@@ -91,7 +91,7 @@ async def test_the_next_real_turn_launches_again(tmp_path, recorder):
     messages = [
         *TURN,
         HumanMessage("more", id="h2"),
-        AIMessage("ok", name="EvoScientist", id="a2"),
+        AIMessage("ok", name="metasci-scribe", id="a2"),
     ]
     update = await _exit(
         middleware, {"messages": messages, "_memory_last_exit": "a1"}, sync=False

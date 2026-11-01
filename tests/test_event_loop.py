@@ -6,8 +6,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from EvoScientist.runtime import AsyncRuntime, AsyncRuntimeError
-from EvoScientist.stream.display import _run_streaming
+from metasci_scribe.runtime import AsyncRuntime, AsyncRuntimeError
+from metasci_scribe.stream.display import _run_streaming
 from tests.fakes.common import FakeGraphGateway
 
 
@@ -26,7 +26,7 @@ def test_sequential_streams_reuse_application_runtime_loop():
 
     with (
         AsyncRuntime(thread_name="test-stream-runtime") as runtime,
-        patch("EvoScientist.stream.display.Live"),
+        patch("metasci_scribe.stream.display.Live"),
     ):
         for index in range(3):
             result = _run_streaming(
@@ -52,7 +52,7 @@ def test_direct_streaming_call_scopes_and_closes_runtime():
         execution["loop"] = asyncio.get_running_loop()
         yield {"type": "done", "response": "ok"}
 
-    with patch("EvoScientist.stream.display.Live"):
+    with patch("metasci_scribe.stream.display.Live"):
         result = _run_streaming(
             agent=Mock(),
             message="message",
@@ -63,10 +63,10 @@ def test_direct_streaming_call_scopes_and_closes_runtime():
         )
 
     assert result == "ok"
-    assert execution["thread"] == "evosci-stream-runtime"
+    assert execution["thread"] == "metasci-scribe-stream-runtime"
     assert isinstance(execution["loop"], asyncio.AbstractEventLoop)
     assert not any(
-        thread.name == "evosci-stream-runtime" and thread.is_alive()
+        thread.name == "metasci-scribe-stream-runtime" and thread.is_alive()
         for thread in threading.enumerate()
     )
 
@@ -76,7 +76,7 @@ async def test_async_caller_must_offload_synchronous_renderer():
 
     with (
         AsyncRuntime(thread_name="test-stream-runtime") as runtime,
-        patch("EvoScientist.stream.display.Live"),
+        patch("metasci_scribe.stream.display.Live"),
         pytest.raises(AsyncRuntimeError, match="running event loop"),
     ):
         _run_streaming(
@@ -124,7 +124,7 @@ def test_recursive_streaming_reuses_runtime_and_deduplicates_thinking(
     sent_thinking: list[str] = []
     with (
         AsyncRuntime(thread_name="test-stream-runtime") as runtime,
-        patch("EvoScientist.stream.display.Live"),
+        patch("metasci_scribe.stream.display.Live"),
     ):
         result = _run_streaming(
             agent=Mock(),

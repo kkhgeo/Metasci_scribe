@@ -1,4 +1,4 @@
-"""Tests for EvoScientist.config.provider_keys (key checks and provider table)."""
+"""Tests for metasci_scribe.config.provider_keys (key checks and provider table)."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from EvoScientist.config import provider_keys
-from EvoScientist.config.provider_keys import (
+from metasci_scribe.config import provider_keys
+from metasci_scribe.config.provider_keys import (
     KeyCheck,
     check_custom_anthropic,
     check_custom_openai,
@@ -81,12 +81,12 @@ class TestWizardAdapter:
         ],
     )
     def test_as_pair(self, status, expected):
-        from EvoScientist.config.onboard.validators import as_pair
+        from metasci_scribe.config.onboard.validators import as_pair
 
         assert as_pair(KeyCheck(status, "msg")) == (expected, "msg")
 
     def test_validator_follows_a_patched_check(self):
-        from EvoScientist.config.onboard.validators import validate_openai_key
+        from metasci_scribe.config.onboard.validators import validate_openai_key
 
         with patch.object(
             provider_keys, "check_openai_key", return_value=KeyCheck("invalid", "no")
@@ -219,7 +219,7 @@ class TestCustomAnthropic:
 class TestOllama:
     def test_empty_base_url_probes_the_default(self):
         with patch(
-            "EvoScientist.llm.ollama_discovery.validate_ollama_connection",
+            "metasci_scribe.llm.ollama_discovery.validate_ollama_connection",
             return_value=(True, "Connected", ["llama3.2"]),
         ) as probe:
             result = check_ollama("", "")
@@ -228,7 +228,7 @@ class TestOllama:
 
     def test_unreachable_is_inconclusive(self):
         with patch(
-            "EvoScientist.llm.ollama_discovery.validate_ollama_connection",
+            "metasci_scribe.llm.ollama_discovery.validate_ollama_connection",
             return_value=(False, "Cannot reach Ollama: refused", []),
         ):
             assert check_ollama("", "http://x").status == "inconclusive"
@@ -266,9 +266,9 @@ class TestTable:
 def test_import_loads_no_ui_library():
     """The backend imports this module; it must not pull in the wizard."""
     code = (
-        "import sys; import EvoScientist.config.provider_keys; "
+        "import sys; import metasci_scribe.config.provider_keys; "
         "bad = [m for m in ('questionary', 'prompt_toolkit', "
-        "'EvoScientist.config.onboard') if m in sys.modules]; "
+        "'metasci_scribe.config.onboard') if m in sys.modules]; "
         "print(bad); sys.exit(1 if bad else 0)"
     )
     proc = subprocess.run(

@@ -3,7 +3,7 @@
 Both scripts carry the same Python code, run with the old tool environment's
 interpreter on a re-run. These tests run each copy on the same receipts and
 check the lines it prints, so the two copies cannot drift apart unnoticed;
-``EvoScientist.uv_tool``, which ``EvoSci update`` uses, reads the same
+``metasci_scribe.uv_tool``, which ``metasci-scribe update`` uses, reads the same
 receipts and must keep the same things.
 """
 
@@ -47,17 +47,17 @@ def _cases(local: Path) -> dict[str, tuple[str, list[str]]]:
     return {
         "own extras and python": (
             '[tool]\npython = "3.13"\nrequirements = [\n'
-            '  { name = "evoscientist", extras = ["telegram", "oauth"], specifier = "==0.3.6" },\n'
+            '  { name = "metasci-scribe", extras = ["telegram", "oauth"], specifier = "==0.3.6" },\n'
             "]\n",
             ["python\t3.13", "extras\ttelegram,oauth"],
         ),
         "no python recorded": (
-            '[tool]\nrequirements = [{ name = "EvoScientist" }]\n',
+            '[tool]\nrequirements = [{ name = "metasci-scribe" }]\n',
             [f"python\t{THIS_PYTHON}"],
         ),
         "specifier, extras and marker": (
             "[tool]\nrequirements = [\n"
-            '  { name = "evoscientist" },\n'
+            '  { name = "metasci-scribe" },\n'
             '  { name = "six", specifier = ">=1.10,<2", marker = "python_full_version >= \'3.11\'" },\n'
             '  { name = "idna", extras = ["all"], specifier = ">=3" },\n'
             "]\n",
@@ -69,7 +69,7 @@ def _cases(local: Path) -> dict[str, tuple[str, list[str]]]:
         ),
         "git and url sources": (
             "[tool]\nrequirements = [\n"
-            '  { name = "evoscientist" },\n'
+            '  { name = "metasci-scribe" },\n'
             '  { name = "pyjokes", git = "https://github.com/pyjokes/pyjokes?tag=v0.6.0" },\n'
             '  { name = "sub", git = "https://github.com/o/r?rev=abc123&subdirectory=pkg" },\n'
             '  { name = "arch", url = "https://example.com/arch.tar.gz", subdirectory = "src" },\n'
@@ -83,7 +83,7 @@ def _cases(local: Path) -> dict[str, tuple[str, list[str]]]:
         ),
         "local sources": (
             "[tool]\nrequirements = [\n"
-            '  { name = "evoscientist" },\n'
+            '  { name = "metasci-scribe" },\n'
             f'  {{ name = "byfile", path = "{local_toml}" }},\n'
             f'  {{ name = "bydir", directory = "{local_toml}" }},\n'
             f'  {{ name = "byedit", editable = "{local_toml}" }},\n'
@@ -97,7 +97,7 @@ def _cases(local: Path) -> dict[str, tuple[str, list[str]]]:
         ),
         "entries that cannot be kept": (
             "[tool]\nrequirements = [\n"
-            '  { name = "evoscientist" },\n'
+            '  { name = "metasci-scribe" },\n'
             '  { name = "gitpath", git = "https://github.com/o/r?path=pkg" },\n'
             '  { name = "virt", virtual = "/somewhere" },\n'
             '  { name = "six" },\n'
@@ -111,10 +111,10 @@ def _cases(local: Path) -> dict[str, tuple[str, list[str]]]:
         ),
         "own extras in several entries": (
             "[tool]\nrequirements = [\n"
-            '  { name = "evoscientist", extras = ["oauth"], specifier = "==0.3.6" },\n'
-            '  { name = "evoscientist", extras = ["telegram"] },\n'
+            '  { name = "metasci-scribe", extras = ["oauth"], specifier = "==0.3.6" },\n'
+            '  { name = "metasci-scribe", extras = ["telegram"] },\n'
             '  { name = "six" },\n'
-            '  { name = "EvoScientist", extras = ["oauth", "stt"] },\n'
+            '  { name = "metasci-scribe", extras = ["oauth", "stt"] },\n'
             "]\n",
             [f"python\t{THIS_PYTHON}", "with\tsix", "extras\toauth,telegram,stt"],
         ),
@@ -135,9 +135,9 @@ def test_reader_keeps_what_the_receipt_records(script, case, tmp_path):
 
 
 def _uv_tool_lines(env: Path) -> list[str]:
-    """What EvoSci update keeps from the receipt in *env*, in the readers'
+    """What metasci-scribe update keeps from the receipt in *env*, in the readers'
     line format; an entry it cannot reinstall is a ``warn`` line."""
-    from EvoScientist import uv_tool
+    from metasci_scribe import uv_tool
 
     receipt = uv_tool.read_receipt(env)
     lines = [f"python\t{uv_tool.python_request(receipt)}"]
@@ -155,7 +155,7 @@ def _uv_tool_lines(env: Path) -> list[str]:
 
 @pytest.mark.parametrize("case", CASE_NAMES)
 def test_update_keeps_what_the_scripts_keep(case, tmp_path):
-    """EvoSci update (uv_tool) and a re-run of the scripts keep the same
+    """metasci-scribe update (uv_tool) and a re-run of the scripts keep the same
     things from the same receipt; uv_tool raises where a script warns."""
     receipt_text, _ = _cases(tmp_path / "local pkg")[case]
     receipt = tmp_path / "uv-receipt.toml"

@@ -1,15 +1,15 @@
-"""Runs ``EvoSci update --version <target> --yes --json --skip webui`` for the
+"""Runs ``metasci-scribe update --version <target> --yes --json --skip webui`` for the
 installer smoke workflow and checks its output: exactly one terminal
-``update`` line, the last one, with ``done``, then ``EvoSci --version``
+``update`` line, the last one, with ``done``, then ``metasci-scribe --version``
 naming the target.
 
 Run it with a Python outside the tool environment (uv's base Python): on
 Windows the update waits until nothing runs from that environment. It reads
 stdout to its end, because there the helper writes the last lines after
-EvoSci has exited. stdin is NUL, so the update does not wait for anything
+metasci-scribe has exited. stdin is NUL, so the update does not wait for anything
 it finds running but stops at once.
 
-    python install_smoke_update.py <EvoSci> <target version>
+    python install_smoke_update.py <metasci-scribe> <target version>
 """
 
 import json
@@ -23,8 +23,8 @@ def fail(message: str) -> None:
 
 
 def main() -> None:
-    evosci, target = sys.argv[1:3]
-    cmd = [evosci, "update", "--version", target, "--yes", "--json", "--skip", "webui"]
+    scribe, target = sys.argv[1:3]
+    cmd = [scribe, "update", "--version", target, "--yes", "--json", "--skip", "webui"]
     print("+ " + " ".join(cmd), flush=True)
     proc = subprocess.Popen(
         cmd,
@@ -42,7 +42,7 @@ def main() -> None:
     try:
         events = [json.loads(line) for line in lines if line.strip()]
     except ValueError as exc:
-        fail(f"EvoSci update --json wrote a line that is not JSON: {exc}")
+        fail(f"metasci-scribe update --json wrote a line that is not JSON: {exc}")
     ends = [
         e
         for e in events
@@ -52,18 +52,18 @@ def main() -> None:
         fail(f"expected one terminal update line, the last one; got {len(ends)}")
     if ends[0]["status"] != "done":
         fail(
-            f"EvoSci update ended with {ends[0].get('code')}: {ends[0].get('message')}"
+            f"metasci-scribe update ended with {ends[0].get('code')}: {ends[0].get('message')}"
         )
     out = subprocess.run(
-        [evosci, "--version", "--json"],
+        [scribe, "--version", "--json"],
         capture_output=True,
         text=True,
         encoding="utf-8",
     ).stdout
     version = json.loads(out)["version"]
     if version != target:
-        fail(f"EvoSci --version after the update reports {version}, not {target}")
-    print(f"EvoSci update to {target}: ok")
+        fail(f"metasci-scribe --version after the update reports {version}, not {target}")
+    print(f"metasci-scribe update to {target}: ok")
 
 
 if __name__ == "__main__":

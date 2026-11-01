@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from langchain.agents.middleware.types import ModelRequest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from EvoScientist.middleware.tool_history_repair import (
+from metasci_scribe.middleware.tool_history_repair import (
     ToolHistoryRepairMiddleware,
     repair_tool_history,
 )
@@ -240,11 +240,11 @@ def test_repair_is_idempotent():
     assert repair_tool_history(once) == once
 
 
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
+@patch("metasci_scribe.agent._ensure_chat_model")
 def test_inject_subagent_includes_tool_history_repair(mock_model, workspace):
     mock_model.return_value = MagicMock(profile={"max_input_tokens": 200_000})
 
-    from EvoScientist.EvoScientist import _inject_subagent_middleware
+    from metasci_scribe.agent import _inject_subagent_middleware
 
     subs = [{"name": "test-agent"}]
     _inject_subagent_middleware(subs, workspace=workspace)

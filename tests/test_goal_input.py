@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from EvoScientist.gateway import GraphTarget, RunRequest
-from EvoScientist.gateway.local import LocalGraphGateway
+from metasci_scribe.gateway import GraphTarget, RunRequest
+from metasci_scribe.gateway.local import LocalGraphGateway
 
 REQUEST = {"kind": "pause", "id": "r1", "target": "goal:g1"}
 
@@ -15,7 +15,7 @@ async def test_the_local_gateway_forwards_the_request(monkeypatch):
         seen.update(kwargs, message=message)
         yield {"type": "done", "response": ""}
 
-    monkeypatch.setattr("EvoScientist.stream.events.stream_agent_events", _recording)
+    monkeypatch.setattr("metasci_scribe.stream.events.stream_agent_events", _recording)
     gateway = LocalGraphGateway()
     request = RunRequest(
         message="",

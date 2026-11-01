@@ -19,22 +19,22 @@ import pytest
 
 pytest.importorskip("textual")
 
-from EvoScientist.cli import async_notifier
-from EvoScientist.cli import channel as channel_mod
-from EvoScientist.cli.async_notifier import (
+from metasci_scribe.cli import async_notifier
+from metasci_scribe.cli import channel as channel_mod
+from metasci_scribe.cli.async_notifier import (
     AsyncTaskNotification,
     drain_notifications,
     enqueue_task_notification,
     has_pending_notifications,
 )
-from EvoScientist.cli.channel import (
+from metasci_scribe.cli.channel import (
     ChannelMessage,
     _message_queue,
     _register_channel_request,
 )
-from EvoScientist.commands import manager as cmd_manager
-from EvoScientist.paths import SessionDirs
-from EvoScientist.stream import display as display_mod
+from metasci_scribe.commands import manager as cmd_manager
+from metasci_scribe.paths import SessionDirs
+from metasci_scribe.stream import display as display_mod
 from tests.fakes.common import FakeGraphGateway, FakeThreadStore
 from tests.fakes.tui import NoHistory, capture_app, submit
 

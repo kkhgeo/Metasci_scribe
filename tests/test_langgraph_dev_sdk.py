@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from EvoScientist.langgraph_dev import sdk
-from EvoScientist.langgraph_dev.sdk import (
+from metasci_scribe.langgraph_dev import sdk
+from metasci_scribe.langgraph_dev.sdk import (
     LANGGRAPH_DEV_AUTH_HEADERS,
     cached_langgraph_async_client,
 )

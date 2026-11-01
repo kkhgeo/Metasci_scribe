@@ -1,4 +1,4 @@
-"""Tests for /api/settings (EvoScientist.langgraph_dev.settings_api + http routes)."""
+"""Tests for /api/settings (metasci_scribe.langgraph_dev.settings_api + http routes)."""
 
 from __future__ import annotations
 
@@ -12,18 +12,18 @@ import pytest
 import yaml
 from starlette.testclient import TestClient
 
-from EvoScientist import local_secret, paths
-from EvoScientist.config import provider_keys, store
-from EvoScientist.config.provider_keys import KEY_SPECS, KeyCheck
-from EvoScientist.config.settings import _ENV_MAPPINGS, get_config_path
-from EvoScientist.langgraph_dev import settings_api
-from EvoScientist.langgraph_dev.http import app
+from metasci_scribe import local_secret, paths
+from metasci_scribe.config import provider_keys, store
+from metasci_scribe.config.provider_keys import KEY_SPECS, KeyCheck
+from metasci_scribe.config.settings import _ENV_MAPPINGS, get_config_path
+from metasci_scribe.langgraph_dev import settings_api
+from metasci_scribe.langgraph_dev.http import app
 
 
 @pytest.fixture(autouse=True)
 def _clean(monkeypatch):
     """A fresh env-origin record and restart baseline."""
-    from EvoScientist.config import settings
+    from metasci_scribe.config import settings
 
     monkeypatch.setattr(settings, "_ENV_ORIGINS", {})
     monkeypatch.setattr(settings_api, "_baseline", None)
@@ -158,7 +158,7 @@ class TestGet:
     def test_instance_names_the_loaded_secret(self, server, secret):
         value = secret[local_secret.HEADER]
         expected = hashlib.sha256(
-            b"evoscientist-instance:" + value.encode("ascii")
+            b"metasci-scribe-instance:" + value.encode("ascii")
         ).hexdigest()[:16]
         response = server.get("/api/settings")
         assert response.json()["instance"] == expected
@@ -180,7 +180,7 @@ class TestGet:
 
     def test_settings_are_the_file_values(self, server, config_file, monkeypatch):
         config_file.write_text("langgraph_dev_port: 7000\n", encoding="utf-8")
-        monkeypatch.setenv("EVOSCIENTIST_LANGGRAPH_DEV_PORT", "7999")
+        monkeypatch.setenv("METASCI_SCRIBE_LANGGRAPH_DEV_PORT", "7999")
         assert (
             server.get("/api/settings").json()["settings"]["langgraph_dev_port"] == 7000
         )
@@ -276,9 +276,9 @@ class TestPatch:
     def test_channel_access_and_programs_are_read_only(self):
         from dataclasses import fields
 
-        from EvoScientist.config.settings import EvoScientistConfig
+        from metasci_scribe.config.settings import ScribeConfig
 
-        names = {f.name for f in fields(EvoScientistConfig)}
+        names = {f.name for f in fields(ScribeConfig)}
         senders = {n for n in names if n.endswith("_allowed_senders")}
         assert senders  # one per channel
         expected = senders | {"signal_cli_path", "dm_policy", "allowed_channels"}
@@ -401,10 +401,10 @@ class TestPatch:
         config_file.write_text("model: m1\n", encoding="utf-8")
         with (
             patch(
-                "EvoScientist.config.store.os.replace",
+                "metasci_scribe.config.store.os.replace",
                 side_effect=PermissionError("in use"),
             ),
-            patch("EvoScientist.config.store.time.sleep"),
+            patch("metasci_scribe.config.store.time.sleep"),
         ):
             response = server.patch(
                 "/api/settings", json={"model": "m2"}, headers=secret
@@ -671,7 +671,7 @@ class TestTestKey:
 
     def test_ollama_lists_models(self, server, secret):
         with patch(
-            "EvoScientist.llm.ollama_discovery.validate_ollama_connection",
+            "metasci_scribe.llm.ollama_discovery.validate_ollama_connection",
             return_value=(True, "Connected", ["llama3.2"]),
         ) as probe:
             body = server.post(
@@ -685,7 +685,7 @@ class TestTestKey:
 
     def test_ollama_without_base_url_probes_the_default(self, server, secret):
         with patch(
-            "EvoScientist.llm.ollama_discovery.validate_ollama_connection",
+            "metasci_scribe.llm.ollama_discovery.validate_ollama_connection",
             return_value=(True, "Connected", []),
         ) as probe:
             server.post(
@@ -842,7 +842,7 @@ class TestRestartRules:
     def test_mcp_specs_and_version_need_a_restart(self, server, monkeypatch, tmp_path):
         import importlib.metadata
 
-        from EvoScientist.config.settings import get_config_dir
+        from metasci_scribe.config.settings import get_config_dir
 
         server.get("/api/settings")
         get_config_dir().mkdir(parents=True, exist_ok=True)
@@ -864,7 +864,9 @@ class TestRestartRules:
             if isinstance(node, ast.Import | ast.ImportFrom)
             and getattr(node, "module", None) != "__future__"
         ]
-        assert imports[0].names[0].name == "EvoScientist.langgraph_dev.config_baseline"
+        assert (
+            imports[0].names[0].name == "metasci_scribe.langgraph_dev.config_baseline"
+        )
 
     def test_importing_the_baseline_module_takes_the_baseline(self, tmp_path):
         """A key saved after the graphs were imported is pending, although the
@@ -872,15 +874,15 @@ class TestRestartRules:
         import subprocess
         import sys
 
-        config_dir = tmp_path / "xdg" / "evoscientist"
+        config_dir = tmp_path / "xdg" / "metasci-scribe"
         config_dir.mkdir(parents=True)
         (config_dir / "config.yaml").write_text(
             "tavily_api_key: tvly-started\n", encoding="utf-8"
         )
         code = (
-            "import EvoScientist.langgraph_dev.config_baseline\n"
-            "from EvoScientist.config.settings import set_config_values\n"
-            "from EvoScientist.langgraph_dev import settings_api\n"
+            "import metasci_scribe.langgraph_dev.config_baseline\n"
+            "from metasci_scribe.config.settings import set_config_values\n"
+            "from metasci_scribe.langgraph_dev import settings_api\n"
             "set_config_values({'tavily_api_key': 'tvly-saved'})\n"
             "print(settings_api.read_settings()['restart_fields'])\n"
         )
@@ -889,7 +891,7 @@ class TestRestartRules:
         env.update(
             HOME=str(tmp_path),
             XDG_CONFIG_HOME=str(tmp_path / "xdg"),
-            EVOSCIENTIST_DATA_DIR=str(tmp_path / "data"),
+            METASCI_SCRIBE_DATA_DIR=str(tmp_path / "data"),
         )
         out = subprocess.run(
             [sys.executable, "-c", code],
@@ -928,7 +930,7 @@ class TestTestKeyStoredValues:
     def test_stored_key_is_the_saved_one_after_a_patch(
         self, server, secret, config_file
     ):
-        from EvoScientist.config.settings import (
+        from metasci_scribe.config.settings import (
             apply_config_to_env,
             get_effective_config,
         )

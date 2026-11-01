@@ -7,13 +7,13 @@ import pytest
 from langchain.agents.middleware.types import ModelRequest
 from langchain_core.tools import BaseTool, StructuredTool
 
-from EvoScientist.middleware.tool_selector import (
+from metasci_scribe.middleware.tool_selector import (
     _ConditionalToolSelectorMiddleware,
     create_tool_selector_middleware,
 )
-from EvoScientist.stream.emitter import StreamEventEmitter
-from EvoScientist.stream.sink import SessionEventSink
-from EvoScientist.stream.tool_selection import _ToolSelectionSuppressor
+from metasci_scribe.stream.emitter import StreamEventEmitter
+from metasci_scribe.stream.sink import SessionEventSink
+from metasci_scribe.stream.tool_selection import _ToolSelectionSuppressor
 
 
 class _RecordingSink:
@@ -74,16 +74,16 @@ def _factory_patches():
     # that don't care about the tag wiring.
     return (
         patch(
-            "EvoScientist.middleware.tool_selector.disable_thinking",
+            "metasci_scribe.middleware.tool_selector.disable_thinking",
             return_value=MagicMock(),
             create=True,
         ),
         patch(
-            "EvoScientist.middleware.tool_selector.disable_streaming",
+            "metasci_scribe.middleware.tool_selector.disable_streaming",
             return_value=MagicMock(),
             create=True,
         ),
-        patch("EvoScientist.EvoScientist._ensure_chat_model", return_value=MagicMock()),
+        patch("metasci_scribe.agent._ensure_chat_model", return_value=MagicMock()),
         patch(
             "langchain.agents.middleware.LLMToolSelectorMiddleware",
             return_value=MagicMock(),
@@ -134,11 +134,11 @@ def test_always_include_covers_every_builtin_tool(tmp_path, monkeypatch):
     from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
     from langgraph.checkpoint.memory import InMemorySaver
 
-    from EvoScientist.config import EvoScientistConfig
-    from EvoScientist.EvoScientist import create_cli_agent
-    from EvoScientist.langgraph_dev import manager
-    from EvoScientist.middleware.tool_selector import DEFAULT_ALWAYS_INCLUDE_TOOLS
-    from EvoScientist.paths import Workspace
+    from metasci_scribe.agent import create_cli_agent
+    from metasci_scribe.config import ScribeConfig
+    from metasci_scribe.langgraph_dev import manager
+    from metasci_scribe.middleware.tool_selector import DEFAULT_ALWAYS_INCLUDE_TOOLS
+    from metasci_scribe.paths import Workspace
 
     class _Model(GenericFakeChatModel):
         def bind_tools(self, tools, **kwargs):
@@ -150,7 +150,7 @@ def test_always_include_covers_every_builtin_tool(tmp_path, monkeypatch):
     model.profile = {"max_input_tokens": 200_000}
     agent = create_cli_agent(
         workspace=Workspace(tmp_path),
-        config=EvoScientistConfig(),
+        config=ScribeConfig(),
         chat_model=model,
         checkpointer=InMemorySaver(),
     )
@@ -273,7 +273,7 @@ def test_selector_failure_warns_once_per_middleware_instance(caplog):
     )
     request = _request([_tool(f"t{i}") for i in range(10)])
 
-    caplog.set_level("WARNING", logger="EvoScientist.middleware.tool_selector")
+    caplog.set_level("WARNING", logger="metasci_scribe.middleware.tool_selector")
     cond.wrap_model_call(request, MagicMock())
     cond.wrap_model_call(request, MagicMock())
 
@@ -289,7 +289,7 @@ def test_selector_failure_warns_once_per_middleware_instance(caplog):
 @pytest.mark.asyncio
 async def test_selector_provider_failure_allows_downstream_model_fallback(caplog):
     """A failed fixed selector model must not block a healthy request fallback."""
-    from EvoScientist.llm.errors import ProviderStreamError
+    from metasci_scribe.llm.errors import ProviderStreamError
 
     mock_selector = MagicMock()
     mock_selector.awrap_model_call = AsyncMock(
@@ -307,7 +307,7 @@ async def test_selector_provider_failure_allows_downstream_model_fallback(caplog
     response = MagicMock()
     handler = AsyncMock(return_value=response)
 
-    caplog.set_level("WARNING", logger="EvoScientist.middleware.tool_selector")
+    caplog.set_level("WARNING", logger="metasci_scribe.middleware.tool_selector")
     result = await cond.awrap_model_call(request, handler)
 
     assert result is response
@@ -504,7 +504,7 @@ def test_consume_is_once_only():
 
 
 @patch(
-    "EvoScientist.middleware.create_tool_selector_middleware",
+    "metasci_scribe.middleware.create_tool_selector_middleware",
     side_effect=lambda *a, **kw: [
         _ConditionalToolSelectorMiddleware(
             selector_factory=MagicMock(return_value=MagicMock()),
@@ -512,8 +512,8 @@ def test_consume_is_once_only():
         )
     ],
 )
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
-@patch("EvoScientist.EvoScientist._ensure_config")
+@patch("metasci_scribe.agent._ensure_chat_model")
+@patch("metasci_scribe.agent._ensure_config")
 def test_default_middleware_includes_tool_selector(
     mock_config, mock_model, mock_ts, workspace
 ):
@@ -525,18 +525,18 @@ def test_default_middleware_includes_tool_selector(
     cfg.auxiliary_provider = ""
     mock_config.return_value = cfg
 
-    from EvoScientist.EvoScientist import _get_default_middleware
+    from metasci_scribe.agent import _get_default_middleware
 
     mw = _get_default_middleware(workspace=workspace)
     type_names = [type(m).__name__ for m in mw]
     assert "_ConditionalToolSelectorMiddleware" in type_names
 
 
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
+@patch("metasci_scribe.agent._ensure_chat_model")
 def test_subagent_no_tool_selector(mock_model, workspace):
     mock_model.return_value = _mock_model()
 
-    from EvoScientist.EvoScientist import _inject_subagent_middleware
+    from metasci_scribe.agent import _inject_subagent_middleware
 
     subs = [{"name": "test-agent"}]
     _inject_subagent_middleware(subs, workspace=workspace)
@@ -546,7 +546,7 @@ def test_subagent_no_tool_selector(mock_model, workspace):
 
 
 @patch(
-    "EvoScientist.middleware.create_tool_selector_middleware",
+    "metasci_scribe.middleware.create_tool_selector_middleware",
     side_effect=lambda *a, **kw: [
         _ConditionalToolSelectorMiddleware(
             selector_factory=MagicMock(return_value=MagicMock()),
@@ -554,8 +554,8 @@ def test_subagent_no_tool_selector(mock_model, workspace):
         )
     ],
 )
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
-@patch("EvoScientist.EvoScientist._ensure_config")
+@patch("metasci_scribe.agent._ensure_chat_model")
+@patch("metasci_scribe.agent._ensure_config")
 def test_tool_selector_ordering(mock_config, mock_model, mock_ts, workspace):
     """ToolSelector should come after ToolErrorHandler and before Memory."""
     mock_model.return_value = _mock_model()
@@ -566,7 +566,7 @@ def test_tool_selector_ordering(mock_config, mock_model, mock_ts, workspace):
     cfg.auxiliary_provider = ""
     mock_config.return_value = cfg
 
-    from EvoScientist.EvoScientist import _get_default_middleware
+    from metasci_scribe.agent import _get_default_middleware
 
     mw = _get_default_middleware(workspace=workspace)
     type_names = [type(m).__name__ for m in mw]
@@ -587,7 +587,7 @@ def test_disable_streaming_sets_disable_streaming_field():
     hard-disable field checked by ``_streaming_disabled()``), not the
     model's own ``streaming`` field.
     """
-    from EvoScientist.middleware.utils import disable_streaming
+    from metasci_scribe.middleware.utils import disable_streaming
 
     model = MagicMock()
     copied = MagicMock()
@@ -615,7 +615,7 @@ def test_disable_streaming_defeats_upstream_streaming_dispatch():
     from langchain_core.messages import AIMessage
     from langchain_core.outputs import ChatGeneration, ChatResult
 
-    from EvoScientist.middleware.utils import disable_streaming
+    from metasci_scribe.middleware.utils import disable_streaming
 
     class _FakeModel(BaseChatModel):
         @property
@@ -657,7 +657,7 @@ def test_create_tool_selector_wires_nostream_and_flood_detector_on_model():
     so ``_FLOOD_DETECTOR`` fires on every selector call regardless of
     whether the tag is honored downstream.
     """
-    from EvoScientist.middleware.tool_selector import _FLOOD_DETECTOR
+    from metasci_scribe.middleware.tool_selector import _FLOOD_DETECTOR
 
     thinking_out = MagicMock(name="disable_thinking_output")
     streaming_out = MagicMock(name="disable_streaming_output")
@@ -676,14 +676,14 @@ def test_create_tool_selector_wires_nostream_and_flood_detector_on_model():
     # local import binding.
     with (
         patch(
-            "EvoScientist.middleware.utils.disable_thinking",
+            "metasci_scribe.middleware.utils.disable_thinking",
             return_value=thinking_out,
         ) as mock_dt,
         patch(
-            "EvoScientist.middleware.utils.disable_streaming",
+            "metasci_scribe.middleware.utils.disable_streaming",
             return_value=streaming_out,
         ) as mock_ds,
-        patch("EvoScientist.EvoScientist._ensure_chat_model", return_value=MagicMock()),
+        patch("metasci_scribe.agent._ensure_chat_model", return_value=MagicMock()),
         patch(
             "langchain.agents.middleware.LLMToolSelectorMiddleware",
             return_value=MagicMock(),
@@ -729,7 +729,7 @@ def test_flood_detector_warns_above_threshold(caplog):
     from langchain_core.messages import AIMessage
     from langchain_core.outputs import ChatGeneration, LLMResult
 
-    from EvoScientist.middleware.tool_selector import _SelectorFloodDetector
+    from metasci_scribe.middleware.tool_selector import _SelectorFloodDetector
 
     detector = _SelectorFloodDetector()
     tool_calls = [
@@ -740,7 +740,7 @@ def test_flood_detector_warns_above_threshold(caplog):
     result = LLMResult(generations=[[ChatGeneration(message=msg)]])
 
     with caplog.at_level(
-        _logging.WARNING, logger="EvoScientist.middleware.tool_selector"
+        _logging.WARNING, logger="metasci_scribe.middleware.tool_selector"
     ):
         detector.on_llm_end(result)
 
@@ -756,7 +756,7 @@ def test_flood_detector_silent_below_threshold(caplog):
     from langchain_core.messages import AIMessage
     from langchain_core.outputs import ChatGeneration, LLMResult
 
-    from EvoScientist.middleware.tool_selector import _SelectorFloodDetector
+    from metasci_scribe.middleware.tool_selector import _SelectorFloodDetector
 
     detector = _SelectorFloodDetector()
     msg = AIMessage(
@@ -768,7 +768,7 @@ def test_flood_detector_silent_below_threshold(caplog):
     result = LLMResult(generations=[[ChatGeneration(message=msg)]])
 
     with caplog.at_level(
-        _logging.WARNING, logger="EvoScientist.middleware.tool_selector"
+        _logging.WARNING, logger="metasci_scribe.middleware.tool_selector"
     ):
         detector.on_llm_end(result)
 
@@ -781,7 +781,7 @@ def test_flood_detector_silent_below_threshold(caplog):
 
 
 def _deepseek_model(monkeypatch, **kwargs):
-    from EvoScientist.llm.deepseek import EvoChatDeepSeek
+    from metasci_scribe.llm.deepseek import EvoChatDeepSeek
 
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
     return EvoChatDeepSeek(model="deepseek-v4-pro", **kwargs)
@@ -791,7 +791,7 @@ def test_disable_thinking_deepseek_sets_request_field(monkeypatch):
     """DeepSeek thinking is a server-side default; the helper copy must
     disable it in the request body, or the selector's forced tool_choice
     is rejected ("Thinking mode does not support this tool_choice")."""
-    from EvoScientist.middleware.utils import disable_thinking
+    from metasci_scribe.middleware.utils import disable_thinking
 
     model = _deepseek_model(monkeypatch)
     safe = disable_thinking(model)
@@ -803,7 +803,7 @@ def test_disable_thinking_deepseek_sets_request_field(monkeypatch):
 
 
 def test_disable_thinking_deepseek_preserves_extra_body(monkeypatch):
-    from EvoScientist.middleware.utils import disable_thinking
+    from metasci_scribe.middleware.utils import disable_thinking
 
     model = _deepseek_model(monkeypatch, extra_body={"custom": 1})
     safe = disable_thinking(model)
@@ -819,7 +819,7 @@ async def test_deepseek_selector_uses_copy_settings(monkeypatch, provider):
     import httpx
     from langchain_core.messages import HumanMessage
 
-    from EvoScientist.llm.models import get_chat_model
+    from metasci_scribe.llm.models import get_chat_model
 
     if provider == "deepseek":
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
@@ -1059,7 +1059,7 @@ def test_auto_selector_sends_auto_tool_choice_at_low_effort(monkeypatch):
     import anthropic
     from packaging.version import Version
 
-    from EvoScientist.llm.models import get_chat_model
+    from metasci_scribe.llm.models import get_chat_model
 
     if Version(anthropic.__version__) >= Version("1"):
         import httpx2 as httpx
@@ -1126,7 +1126,7 @@ def test_real_selector_switches_to_auto_end_to_end(monkeypatch):
     from langchain_core.messages import HumanMessage
     from packaging.version import Version
 
-    from EvoScientist.llm.models import get_chat_model
+    from metasci_scribe.llm.models import get_chat_model
 
     if Version(anthropic.__version__) >= Version("1"):
         import httpx2 as httpx
@@ -1210,7 +1210,7 @@ def test_real_selector_switches_to_auto_end_to_end(monkeypatch):
 
 
 def test_auto_selector_model_delegates_other_attributes():
-    from EvoScientist.middleware.tool_selector import _AutoToolChoiceSelectorModel
+    from metasci_scribe.middleware.tool_selector import _AutoToolChoiceSelectorModel
 
     inner = MagicMock(profile={"max_input_tokens": 1})
     wrapped = _AutoToolChoiceSelectorModel(inner)
@@ -1225,7 +1225,7 @@ def test_auto_selector_model_survives_copy():
 
     from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
-    from EvoScientist.middleware.tool_selector import _AutoToolChoiceSelectorModel
+    from metasci_scribe.middleware.tool_selector import _AutoToolChoiceSelectorModel
 
     wrapped = _AutoToolChoiceSelectorModel(FakeListChatModel(responses=["x"]))
 

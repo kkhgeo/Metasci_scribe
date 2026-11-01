@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from EvoScientist.middleware.expert_async_subagent import (
+from metasci_scribe.middleware.expert_async_subagent import (
     EvoAsyncSubAgentMiddleware,
     _build_run_input,
 )
@@ -163,7 +163,7 @@ class TestStartToolInvocation:
 
         client = _fake_sync_client()
         with patch(
-            "EvoScientist.middleware.expert_async_subagent._ClientCache.get_sync",
+            "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_sync",
             return_value=client,
         ):
             result = start.func(
@@ -201,7 +201,7 @@ class TestStartToolInvocation:
 
         client = _fake_sync_client()
         with patch(
-            "EvoScientist.middleware.expert_async_subagent._ClientCache.get_sync",
+            "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_sync",
             return_value=client,
         ):
             result = start.func(
@@ -228,7 +228,7 @@ class TestStartToolInvocation:
         Without this the ``/model`` CLI switch silently doesn't propagate to
         expert launches.
         """
-        from EvoScientist.config.settings import EvoScientistConfig
+        from metasci_scribe.config.settings import ScribeConfig
 
         mw = EvoAsyncSubAgentMiddleware(
             workspace=workspace, async_subagents=[_expert_spec()]
@@ -236,13 +236,13 @@ class TestStartToolInvocation:
         start = next(t for t in mw.tools if t.name == "start_async_task")
 
         client = _fake_sync_client()
-        fake_cfg = EvoScientistConfig(model="test-model-abc", provider="test-provider")
+        fake_cfg = ScribeConfig(model="test-model-abc", provider="test-provider")
         with (
             patch(
-                "EvoScientist.middleware.expert_async_subagent._ClientCache.get_sync",
+                "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_sync",
                 return_value=client,
             ),
-            patch("EvoScientist.EvoScientist._ensure_config", return_value=fake_cfg),
+            patch("metasci_scribe.agent._ensure_config", return_value=fake_cfg),
         ):
             start.func(
                 description="w",
@@ -266,7 +266,7 @@ class TestStartToolInvocation:
 
         client = _fake_sync_client()
         with patch(
-            "EvoScientist.middleware.expert_async_subagent._ClientCache.get_sync",
+            "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_sync",
             return_value=client,
         ):
             start.func(
@@ -286,7 +286,7 @@ class TestStartToolInvocation:
         # Patch the resolve-on-miss walk so the negative-miss path stays
         # hermetic — an unpatched call would read the real skills tree.
         with patch(
-            "EvoScientist.subagents.expert_container_async"
+            "metasci_scribe.subagents.expert_container_async"
             ".build_expert_async_subagent_specs",
             return_value=[],
         ):
@@ -314,7 +314,7 @@ class TestAstartToolInvocation:
 
         client = _fake_async_client()
         with patch(
-            "EvoScientist.middleware.expert_async_subagent._ClientCache.get_async",
+            "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_async",
             return_value=client,
         ):
             result = await start.coroutine(
@@ -336,7 +336,7 @@ class TestAstartToolInvocation:
 
     @pytest.mark.asyncio
     async def test_astart_injects_cfg_model_into_configurable(self, workspace):
-        from EvoScientist.config.settings import EvoScientistConfig
+        from metasci_scribe.config.settings import ScribeConfig
 
         mw = EvoAsyncSubAgentMiddleware(
             workspace=workspace, async_subagents=[_expert_spec()]
@@ -344,13 +344,13 @@ class TestAstartToolInvocation:
         start = next(t for t in mw.tools if t.name == "start_async_task")
 
         client = _fake_async_client()
-        fake_cfg = EvoScientistConfig(model="test-model-abc", provider="test-provider")
+        fake_cfg = ScribeConfig(model="test-model-abc", provider="test-provider")
         with (
             patch(
-                "EvoScientist.middleware.expert_async_subagent._ClientCache.get_async",
+                "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_async",
                 return_value=client,
             ),
-            patch("EvoScientist.EvoScientist._ensure_config", return_value=fake_cfg),
+            patch("metasci_scribe.agent._ensure_config", return_value=fake_cfg),
         ):
             await start.coroutine(
                 description="w",
@@ -373,7 +373,7 @@ class TestAstartToolInvocation:
 
         client = _fake_async_client()
         with patch(
-            "EvoScientist.middleware.expert_async_subagent._ClientCache.get_async",
+            "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_async",
             return_value=client,
         ):
             await start.coroutine(
@@ -393,7 +393,7 @@ class TestAstartToolInvocation:
 
         # Patch the resolve-on-miss walk — see the sync twin.
         with patch(
-            "EvoScientist.subagents.expert_container_async"
+            "metasci_scribe.subagents.expert_container_async"
             ".build_expert_async_subagent_specs",
             return_value=[],
         ):
@@ -432,12 +432,12 @@ class TestResolveOnMiss:
         client = _fake_sync_client()
         with (
             patch(
-                "EvoScientist.subagents.expert_container_async"
+                "metasci_scribe.subagents.expert_container_async"
                 ".build_expert_async_subagent_specs",
                 return_value=[_newly_installed_expert_spec()],
             ),
             patch(
-                "EvoScientist.middleware.expert_async_subagent._ClientCache.get_sync",
+                "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_sync",
                 return_value=client,
             ),
         ):
@@ -468,12 +468,12 @@ class TestResolveOnMiss:
         client = _fake_sync_client()
         with (
             patch(
-                "EvoScientist.subagents.expert_container_async"
+                "metasci_scribe.subagents.expert_container_async"
                 ".build_expert_async_subagent_specs",
                 return_value=[_newly_installed_expert_spec()],
             ),
             patch(
-                "EvoScientist.middleware.expert_async_subagent._ClientCache.get_sync",
+                "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_sync",
                 return_value=client,
             ),
         ):
@@ -513,12 +513,12 @@ class TestResolveOnMiss:
         client = _fake_sync_client()
         with (
             patch(
-                "EvoScientist.subagents.expert_container_async"
+                "metasci_scribe.subagents.expert_container_async"
                 ".build_expert_async_subagent_specs",
                 return_value=[challenger, _newly_installed_expert_spec()],
             ),
             patch(
-                "EvoScientist.middleware.expert_async_subagent._ClientCache.get_sync",
+                "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_sync",
                 return_value=client,
             ),
         ):
@@ -553,7 +553,7 @@ class TestResolveOnMiss:
         start = next(t for t in mw.tools if t.name == "start_async_task")
 
         with patch(
-            "EvoScientist.subagents.expert_container_async"
+            "metasci_scribe.subagents.expert_container_async"
             ".build_expert_async_subagent_specs",
             return_value=[_newly_installed_expert_spec()],
         ):
@@ -587,7 +587,7 @@ class TestResolveOnMiss:
             return [_newly_installed_expert_spec()]
 
         with patch(
-            "EvoScientist.subagents.expert_container_async"
+            "metasci_scribe.subagents.expert_container_async"
             ".build_expert_async_subagent_specs",
             side_effect=capture_cfg,
         ):
@@ -620,12 +620,12 @@ class TestAstartResolveOnMiss:
 
         with (
             patch(
-                "EvoScientist.subagents.expert_container_async"
+                "metasci_scribe.subagents.expert_container_async"
                 ".build_expert_async_subagent_specs",
                 return_value=[_newly_installed_expert_spec()],
             ),
             patch(
-                "EvoScientist.middleware.expert_async_subagent._ClientCache.get_async",
+                "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_async",
                 return_value=client,
             ),
             patch("asyncio.to_thread", new=_fake_to_thread),
@@ -656,12 +656,12 @@ class TestAstartResolveOnMiss:
         client = _fake_async_client()
         with (
             patch(
-                "EvoScientist.subagents.expert_container_async"
+                "metasci_scribe.subagents.expert_container_async"
                 ".build_expert_async_subagent_specs",
                 return_value=[_newly_installed_expert_spec()],
             ),
             patch(
-                "EvoScientist.middleware.expert_async_subagent._ClientCache.get_async",
+                "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_async",
                 return_value=client,
             ),
         ):
@@ -681,7 +681,7 @@ class TestAstartResolveOnMiss:
         start = next(t for t in mw.tools if t.name == "start_async_task")
 
         with patch(
-            "EvoScientist.subagents.expert_container_async"
+            "metasci_scribe.subagents.expert_container_async"
             ".build_expert_async_subagent_specs",
             return_value=[],
         ):
@@ -707,7 +707,7 @@ class TestAstartResolveOnMiss:
         start = next(t for t in mw.tools if t.name == "start_async_task")
 
         with patch(
-            "EvoScientist.subagents.expert_container_async"
+            "metasci_scribe.subagents.expert_container_async"
             ".build_expert_async_subagent_specs",
             return_value=[_newly_installed_expert_spec()],
         ):
@@ -738,7 +738,7 @@ class TestAstartResolveOnMiss:
         assert acquired
         try:
             with patch(
-                "EvoScientist.middleware.expert_async_subagent._ClientCache.get_async",
+                "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_async",
                 return_value=client,
             ):
                 result = await asyncio.wait_for(
@@ -770,7 +770,7 @@ class TestResolveOnMissLocking:
         import threading
         import time
 
-        from EvoScientist.middleware.expert_async_subagent import (
+        from metasci_scribe.middleware.expert_async_subagent import (
             _resolve_merge_validate,
         )
 
@@ -781,7 +781,7 @@ class TestResolveOnMissLocking:
 
         def resolver():
             with patch(
-                "EvoScientist.subagents.expert_container_async"
+                "metasci_scribe.subagents.expert_container_async"
                 ".build_expert_async_subagent_specs",
                 return_value=[_newly_installed_expert_spec()],
             ):
@@ -818,7 +818,7 @@ class TestResolveOnMissLocking:
         import threading
         import time
 
-        from EvoScientist.middleware import expert_async_subagent as mod
+        from metasci_scribe.middleware import expert_async_subagent as mod
 
         mw = EvoAsyncSubAgentMiddleware(
             workspace=workspace, async_subagents=[_standard_spec()]
@@ -836,7 +836,7 @@ class TestResolveOnMissLocking:
 
         def miss_dispatch():
             with patch(
-                "EvoScientist.subagents.expert_container_async"
+                "metasci_scribe.subagents.expert_container_async"
                 ".build_expert_async_subagent_specs",
                 return_value=[_newly_installed_expert_spec()],
             ):
@@ -849,7 +849,7 @@ class TestResolveOnMissLocking:
         def known_name_dispatch(done_event):
             client = _fake_sync_client()
             with patch(
-                "EvoScientist.middleware.expert_async_subagent._ClientCache.get_sync",
+                "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_sync",
                 return_value=client,
             ):
                 start.func(
@@ -908,9 +908,9 @@ class TestCallerModelInheritance:
         return ns
 
     def _cfg_default(self):
-        from EvoScientist.config.settings import EvoScientistConfig
+        from metasci_scribe.config.settings import ScribeConfig
 
-        return EvoScientistConfig(model="gemini-3-flash-preview", provider="openrouter")
+        return ScribeConfig(model="gemini-3-flash-preview", provider="openrouter")
 
     def _tracked_task(self, agent_name="writing-agent"):
         return {
@@ -933,11 +933,11 @@ class TestCallerModelInheritance:
         client = _fake_sync_client()
         with (
             patch(
-                "EvoScientist.middleware.expert_async_subagent._ClientCache.get_sync",
+                "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_sync",
                 return_value=client,
             ),
             patch(
-                "EvoScientist.EvoScientist._ensure_config",
+                "metasci_scribe.agent._ensure_config",
                 return_value=self._cfg_default(),
             ),
         ):
@@ -961,11 +961,11 @@ class TestCallerModelInheritance:
         client = _fake_async_client()
         with (
             patch(
-                "EvoScientist.middleware.expert_async_subagent._ClientCache.get_async",
+                "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_async",
                 return_value=client,
             ),
             patch(
-                "EvoScientist.EvoScientist._ensure_config",
+                "metasci_scribe.agent._ensure_config",
                 return_value=self._cfg_default(),
             ),
         ):
@@ -989,11 +989,11 @@ class TestCallerModelInheritance:
         state = {"async_tasks": {"task-abc": self._tracked_task()}}
         with (
             patch(
-                "EvoScientist.middleware.expert_async_subagent._ClientCache.get_sync",
+                "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_sync",
                 return_value=client,
             ),
             patch(
-                "EvoScientist.EvoScientist._ensure_config",
+                "metasci_scribe.agent._ensure_config",
                 return_value=self._cfg_default(),
             ),
         ):
@@ -1019,11 +1019,11 @@ class TestCallerModelInheritance:
         state = {"async_tasks": {"task-abc": self._tracked_task()}}
         with (
             patch(
-                "EvoScientist.middleware.expert_async_subagent._ClientCache.get_async",
+                "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_async",
                 return_value=client,
             ),
             patch(
-                "EvoScientist.EvoScientist._ensure_config",
+                "metasci_scribe.agent._ensure_config",
                 return_value=self._cfg_default(),
             ),
         ):
@@ -1041,7 +1041,7 @@ class TestCallerModelInheritance:
         """The contextvar must not leak past the tool call — a later launch
         with no override falls back to the config-default, not the prior
         caller's model."""
-        from EvoScientist.llm import patches as patches_mod
+        from metasci_scribe.llm import patches as patches_mod
 
         mw = EvoAsyncSubAgentMiddleware(
             workspace=workspace, async_subagents=[_expert_spec()]
@@ -1051,11 +1051,11 @@ class TestCallerModelInheritance:
         client = _fake_sync_client()
         with (
             patch(
-                "EvoScientist.middleware.expert_async_subagent._ClientCache.get_sync",
+                "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_sync",
                 return_value=client,
             ),
             patch(
-                "EvoScientist.EvoScientist._ensure_config",
+                "metasci_scribe.agent._ensure_config",
                 return_value=self._cfg_default(),
             ),
         ):

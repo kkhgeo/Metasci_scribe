@@ -18,13 +18,13 @@ from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langgraph.checkpoint.memory import InMemorySaver
 
-from EvoScientist.cli.widgets.subagent_widget import SubAgentWidget
-from EvoScientist.cli.widgets.tool_call_widget import ToolCallWidget
-from EvoScientist.config import EvoScientistConfig
-from EvoScientist.EvoScientist import create_cli_agent
-from EvoScientist.gateway import RuntimeGateways
-from EvoScientist.gateway.local import LocalGraphGateway
-from EvoScientist.paths import Workspace
+from metasci_scribe.agent import create_cli_agent
+from metasci_scribe.cli.widgets.subagent_widget import SubAgentWidget
+from metasci_scribe.cli.widgets.tool_call_widget import ToolCallWidget
+from metasci_scribe.config import ScribeConfig
+from metasci_scribe.gateway import RuntimeGateways
+from metasci_scribe.gateway.local import LocalGraphGateway
+from metasci_scribe.paths import Workspace
 from tests.fakes.common import close_result
 from tests.fakes.tui import capture_app
 
@@ -125,7 +125,7 @@ async def _settle(task: asyncio.Future) -> None:
 
 
 def _agent(tmp_path, scripts):
-    cfg = EvoScientistConfig(enable_async_subagents=False, memory_workers_enabled=False)
+    cfg = ScribeConfig(enable_async_subagents=False, memory_workers_enabled=False)
     return create_cli_agent(
         workspace=Workspace(tmp_path),
         config=cfg,
@@ -198,7 +198,7 @@ async def test_the_tui_lets_a_working_sibling_finish_then_closes_the_decline(
 def _slow_protocol_events(monkeypatch, seconds: float) -> None:
     """Hold back the decoder's protocol events (tool calls, approvals), so the
     sub-agent ends, which another producer announces, overtake them."""
-    from EvoScientist.stream import events as events_mod
+    from metasci_scribe.stream import events as events_mod
 
     process = events_mod._V3EventProcessor.process
 
@@ -343,11 +343,11 @@ async def test_the_tui_shows_an_approved_sub_agent_command_as_running(
 
 
 async def test_the_consumer_closes_a_declined_sub_agent_command(tmp_path, monkeypatch):
-    import EvoScientist.channels.interaction as interaction_mod
-    from EvoScientist.channels.bus.events import InboundMessage
-    from EvoScientist.channels.bus.message_bus import MessageBus
-    from EvoScientist.channels.channel_manager import ChannelManager
-    from EvoScientist.channels.consumer import InboundConsumer
+    import metasci_scribe.channels.interaction as interaction_mod
+    from metasci_scribe.channels.bus.events import InboundMessage
+    from metasci_scribe.channels.bus.message_bus import MessageBus
+    from metasci_scribe.channels.channel_manager import ChannelManager
+    from metasci_scribe.channels.consumer import InboundConsumer
     from tests.fakes.common import StubChannel
 
     monkeypatch.setattr(
@@ -408,7 +408,7 @@ async def test_the_tui_closes_a_decline_when_ctrl_c_stops_the_sibling(
 ):
     """The turn runs as the app runs it and is stopped with the app's own
     action while the sibling still works: the decline is recorded for both."""
-    from EvoScientist.stream.display import discard_stream_cancel
+    from metasci_scribe.stream.display import discard_stream_cancel
 
     scripts, held = _two_sub_agents()
     agent = _agent(tmp_path, scripts)

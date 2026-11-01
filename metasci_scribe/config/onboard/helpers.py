@@ -1,0 +1,581 @@
+"""Cross-step helpers: API key prompt loop, ccproxy login, npx/node bootstrapping,
+LaTeX detection/install, iMessage setup.
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import sys
+
+import questionary
+
+from ..provider_keys import configured_base_url, provider_spec, run_check
+from ..settings import ScribeConfig
+from .style import QMARK, WIZARD_STYLE, console
+from .validators import as_pair
+
+
+def _provider_key_info(config: ScribeConfig, provider: str):
+    """Return (display_name, current_value, validate_fn) for a provider.
+
+    ``validate_fn`` takes a key and returns ``(is_valid, message)``; it is
+    ``None`` for Ollama and the custom endpoints, which the wizard sets up
+    through their base URL. Raises ``KeyError`` for an unknown provider.
+    """
+    spec = provider_spec(provider)
+    if spec.key_field is None:
+        return spec.label, "__no_key__", None
+    current = getattr(config, spec.key_field) or os.environ.get(spec.key_env, "")
+    if spec.lists_models:
+        return spec.label, current, None
+
+    def validate_fn(key: str) -> tuple[bool, str]:
+        return as_pair(run_check(spec, key, configured_base_url(spec, config)))
+
+    return spec.label, current, validate_fn
+
+
+def _prompt_and_validate_api_key(
+    prompt_text: str,
+    current: str,
+    validate_fn,
+    skip_validation: bool = False,
+    placeholder=None,
+) -> str | None:
+    """Prompt user for an API key, validate, offer save-anyway on failure.
+
+    Args:
+        prompt_text: The question shown to the user.
+        current: Currently stored key value (may be empty).
+        validate_fn: Callable(key) -> (bool, str).
+        skip_validation: If True, skip the validation step entirely.
+        placeholder: Optional placeholder for the password input.
+
+    Returns:
+        New key string if the user entered one, or None to keep existing.
+    """
+    kwargs: dict = {"style": WIZARD_STYLE, "qmark": QMARK}
+    if placeholder is not None:
+        kwargs["placeholder"] = placeholder
+
+    new_key = questionary.password(prompt_text, **kwargs).ask()
+    if new_key is None:
+        raise KeyboardInterrupt()
+
+    new_key = new_key.strip()
+
+    # Determine which key to validate: new input or existing
+    key_to_validate = new_key or current
+
+    if not key_to_validate:
+        return None
+
+    if not skip_validation and validate_fn is not None:
+        console.print("  [dim]Validating...[/dim]", end="")
+        valid, msg = validate_fn(key_to_validate)
+        if valid:
+            console.print(f"\r  [green]\u2713 {msg}[/green]      ")
+            return new_key or None
+        else:
+            console.print(f"\r  [red]\u2717 {msg}[/red]      ")
+            if not new_key:
+                # Existing key is invalid — warn but keep (user didn't change it)
+                return None
+            save_anyway = questionary.confirm(
+                "Save anyway?",
+                default=False,
+                style=WIZARD_STYLE,
+                qmark=QMARK,
+            ).ask()
+            if save_anyway is None:
+                raise KeyboardInterrupt()
+            return new_key if save_anyway else None
+
+    return new_key or None
+
+
+def _prompt_ccproxy_port(config: ScribeConfig) -> None:
+    """Prompt the user for a ccproxy port and save it to config."""
+
+    def valid_port(value: str) -> bool:
+        if not value:  # empty = keep default
+            return True
+        try:
+            return 0 < int(value) < 2**16
+        except (ValueError, TypeError):
+            return False
+
+    current_port = getattr(config, "ccproxy_port", 8000)
+    try:
+        raw = questionary.text(
+            f"Enter port number for ccproxy to run on (Current: {current_port}, Enter to keep):",
+            validate=valid_port,
+            style=WIZARD_STYLE,
+            qmark=QMARK,
+        ).ask()
+        if raw is None:
+            raise KeyboardInterrupt()
+        raw = raw.strip()
+        ccproxy_port = int(raw) if raw else current_port
+    except (ValueError, TypeError):
+        ccproxy_port = current_port
+        console.print(f"  [dim]Using default port: {ccproxy_port}[/dim]")
+
+    config.ccproxy_port = ccproxy_port
+    console.print(
+        f"  [green]✓ ccproxy will run on http://127.0.0.1:{ccproxy_port}[/green]"
+    )
+
+
+def _run_ccproxy_login(provider: str, label: str) -> None:
+    """Run ccproxy auth login for the given provider and show status."""
+    from ...ccproxy_manager import _ccproxy_exe, check_ccproxy_auth
+
+    console.print("  [dim]Opening browser for authentication...[/dim]")
+    try:
+        proc = subprocess.run(
+            [_ccproxy_exe() or "ccproxy", "auth", "login", provider],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        for line in proc.stdout.splitlines():
+            if line.strip().startswith("https://"):
+                console.print(f"  [dim]Visit: {line.strip()}[/dim]")
+                break
+        authed, msg = check_ccproxy_auth(provider)
+        if authed:
+            console.print(f"  [green]✓ {label}: {msg}[/green]")
+        else:
+            console.print(f"  [red]Authentication failed: {msg}[/red]")
+    except subprocess.TimeoutExpired:
+        console.print("  [red]Login timed out.[/red]")
+    except Exception as exc:
+        console.print(f"  [red]Login error: {exc}[/red]")
+
+
+def _chatgpt_status_text(state) -> str:
+    """One-line sign-in status, with the plan when the token names it."""
+    return f"ChatGPT: signed in ({state.plan})" if state.plan else "ChatGPT: signed in"
+
+
+def _open_browser_here() -> bool:
+    """Whether a browser on this machine would be in front of the user."""
+    from ...deploy.launcher import no_display
+
+    return not (
+        no_display() or os.environ.get("SSH_CONNECTION") or os.environ.get("SSH_TTY")
+    )
+
+
+def _run_chatgpt_login() -> bool:
+    """Run the ChatGPT browser sign-in and print the outcome."""
+    import httpx
+    from rich.markup import escape
+
+    from ...llm import chatgpt_oauth
+
+    try:
+        state = chatgpt_oauth.login(open_browser=_open_browser_here())
+    except KeyboardInterrupt:
+        console.print("  [red]Login cancelled.[/red]")
+        return False
+    except (RuntimeError, OSError, ValueError, httpx.HTTPError) as exc:
+        console.print(f"  [red]Login failed: {escape(str(exc))}[/red]")
+        return False
+    if not state.signed_in:
+        console.print("  [red]Login failed: no token was stored.[/red]")
+        return False
+    console.print(f"  [green]✓ {_chatgpt_status_text(state)}[/green]")
+    return True
+
+
+def _check_npx() -> bool:
+    """Check if npx is available on the system.
+
+    Uses shutil.which() to resolve the executable path, which correctly
+    finds .cmd/.bat wrappers on Windows (e.g., npx.cmd).
+
+    Returns:
+        True if npx is found and working.
+    """
+    npx = shutil.which("npx")
+    if not npx:
+        return False
+    try:
+        result = subprocess.run(
+            [npx, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
+def _ensure_npx(reason: str) -> bool:
+    """Check for npx and offer to install Metasci Scribe's private Node.js if missing.
+
+    The private Node goes under ``<DATA_DIR>/tools`` (see
+    :func:`metasci_scribe.setup.node.ensure_node`); nothing outside it is touched.
+
+    Args:
+        reason: Why npx is needed (shown in the warning message).
+
+    Returns:
+        True if npx is available (was already present or just installed).
+    """
+    if _check_npx():
+        return True
+
+    from rich.markup import escape
+
+    from ...setup._install import tools_dir
+    from ...setup.node import NODE_VERSION, activate_runtime, ensure_node
+    from ...setup.protocol import ConsoleEmitter, StageError, make_event
+
+    console.print(f"  [yellow]✗ npx not found — {reason}[/yellow]")
+    install_node = questionary.confirm(
+        f"Install Node.js {NODE_VERSION} into {tools_dir()}?",
+        default=True,
+        style=WIZARD_STYLE,
+        qmark=f"  {QMARK}",
+    ).ask()
+    if install_node is None:
+        raise KeyboardInterrupt()
+    if not install_node:
+        console.print("  [dim]Install it later with: metasci-scribe setup[/dim]")
+        return False
+
+    console.print("  [dim]Installing Node.js...[/dim]")
+    emit = ConsoleEmitter(console)
+    try:
+        ensure_node(
+            progress=lambda fraction, message: emit(
+                make_event("node", "running", progress=fraction, message=message)
+            )
+        )
+    except StageError as exc:
+        console.print(f"  [red]✗ Installation failed: {escape(exc.message)}[/red]")
+        console.print("  [dim]Retry with: metasci-scribe setup[/dim]")
+        return False
+    activate_runtime()
+    if _check_npx():
+        console.print("  [green]✓ npx now available[/green]")
+        return True
+    console.print("  [yellow]✗ npx still not found after install[/yellow]")
+    return False
+
+
+# =============================================================================
+# TinyTeX (LaTeX) helpers
+# =============================================================================
+
+
+def _check_latex_components() -> dict[str, bool]:
+    """Check which LaTeX components are available.
+
+    Returns:
+        Dict mapping component name to availability:
+        ``{"pdflatex": bool, "latexmk": bool, "tlmgr": bool}``.
+    """
+    result: dict[str, bool] = {}
+    for cmd in ("pdflatex", "latexmk", "tlmgr"):
+        exe = shutil.which(cmd)
+        if not exe:
+            result[cmd] = False
+            continue
+        try:
+            proc = subprocess.run(
+                [exe, "--version"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            result[cmd] = proc.returncode == 0
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            result[cmd] = False
+    return result
+
+
+def _check_tinytex() -> bool:
+    """Check if a usable LaTeX distribution is available.
+
+    Returns:
+        True if pdflatex is found and working.
+    """
+    return _check_latex_components().get("pdflatex", False)
+
+
+def _detect_tinytex_install_method() -> tuple[str, str]:
+    """Detect the best way to install TinyTeX for this platform.
+
+    Returns:
+        Tuple of (method_name, install_command_or_url).
+    """
+    if sys.platform == "win32":
+        if shutil.which("choco"):
+            return "choco", "choco install tinytex -y"
+        if shutil.which("scoop"):
+            return "scoop", "scoop install tinytex"
+        return "manual", "https://yihui.org/tinytex/"
+
+    # macOS and Linux: use the official install script
+    if shutil.which("curl"):
+        return (
+            "curl",
+            'curl -sL "https://yihui.org/tinytex/install-bin-unix.sh" | sh',
+        )
+    if shutil.which("wget"):
+        return (
+            "wget",
+            'wget -qO- "https://yihui.org/tinytex/install-bin-unix.sh" | sh',
+        )
+
+    return "manual", "https://yihui.org/tinytex/"
+
+
+def _install_tinytex(method: str, command: str) -> bool:
+    """Install TinyTeX using the detected method.
+
+    Returns:
+        True if installation succeeded.
+    """
+    if method == "manual":
+        return False
+
+    if method in ("curl", "wget"):
+        # Pipe-to-shell commands must run through the shell
+        try:
+            proc = subprocess.run(
+                command,
+                shell=True,  # user confirmed install in wizard
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )
+            return proc.returncode == 0
+        except subprocess.TimeoutExpired:
+            console.print("  [red]✗ Installation timed out[/red]")
+            return False
+        except Exception as e:
+            console.print(f"  [red]✗ Installation failed: {e}[/red]")
+            return False
+
+    # choco / scoop
+    parts = command.split()
+    exe = shutil.which(parts[0]) or parts[0]
+    try:
+        proc = subprocess.run(
+            [exe, *parts[1:]],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        return proc.returncode == 0
+    except FileNotFoundError:
+        console.print(f"  [red]✗ {method} not found[/red]")
+        return False
+    except subprocess.TimeoutExpired:
+        console.print("  [red]✗ Installation timed out[/red]")
+        return False
+    except Exception as e:
+        console.print(f"  [red]✗ Installation failed: {e}[/red]")
+        return False
+
+
+def _print_latex_status(components: dict[str, bool]) -> None:
+    """Print a single-line status showing all LaTeX components."""
+    parts: list[str] = []
+    for cmd, _role in (
+        ("pdflatex", "compiler"),
+        ("latexmk", "build tool"),
+        ("tlmgr", "package manager"),
+    ):
+        if components.get(cmd, False):
+            parts.append(f"[green]✓ {cmd}[/green]")
+        else:
+            parts.append(f"[yellow]✗ {cmd}[/yellow]")
+    console.print("  " + "  ".join(parts))
+
+
+def _auto_install_latexmk() -> None:
+    """Auto-install latexmk via tlmgr when it is missing."""
+    console.print("  [dim]Installing latexmk via tlmgr...[/dim]")
+    tlmgr = shutil.which("tlmgr")
+    if not tlmgr:
+        return
+    try:
+        proc = subprocess.run(
+            [tlmgr, "install", "latexmk"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if proc.returncode == 0 and shutil.which("latexmk"):
+            console.print("  [green]✓ latexmk installed[/green]")
+        else:
+            console.print(
+                "  [yellow]⚠ Failed to install latexmk"
+                " (run: tlmgr install latexmk)[/yellow]"
+            )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        console.print(
+            "  [yellow]⚠ Failed to install latexmk"
+            " (run: tlmgr install latexmk)[/yellow]"
+        )
+
+
+def validate_imessage() -> tuple[bool, str]:
+    """Validate iMessage environment by checking for the imsg CLI.
+
+    Returns:
+        Tuple of (is_valid, message).
+    """
+    # macOS only
+    if sys.platform != "darwin":
+        return False, "iMessage requires macOS"
+
+    from ...channels.imessage.probe import find_cli
+
+    cli_path = find_cli()
+    if not cli_path:
+        return False, "not_installed"
+
+    # Check version
+    try:
+        result = subprocess.run(
+            [cli_path, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        version = result.stdout.strip() if result.returncode == 0 else None
+    except Exception:
+        version = None
+
+    # Check RPC support
+    try:
+        result = subprocess.run(
+            [cli_path, "rpc", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        rpc_ok = result.returncode == 0
+    except Exception:
+        rpc_ok = False
+
+    if not rpc_ok:
+        return (
+            False,
+            f"imsg found at {cli_path} but RPC not supported (update with: brew upgrade imsg)",
+        )
+
+    version_str = f" ({version})" if version else ""
+    return True, f"imsg{version_str} at {cli_path}"
+
+
+def _install_ccproxy() -> bool:
+    """Run pip install for ccproxy (metasci-scribe[oauth]).
+
+    Uses uv pip install when available (uv-managed envs don't ship pip).
+
+    Returns:
+        True if installation succeeded and ccproxy is available.
+    """
+    from ...ccproxy_manager import is_ccproxy_available
+    from ...mcp.registry import install_library
+
+    ok = install_library("metasci-scribe[oauth]")
+    if not ok:
+        console.print("  [red]✗ Installation failed.[/red]")
+        return False
+    return is_ccproxy_available()
+
+
+def _install_imsg() -> bool:
+    """Run brew install for imsg CLI.
+
+    Returns:
+        True if installation succeeded.
+    """
+    try:
+        proc = subprocess.run(
+            ["brew", "install", "steipete/tap/imsg"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        return proc.returncode == 0
+    except FileNotFoundError:
+        console.print("  [red]✗ Homebrew not found[/red]")
+        console.print("  [dim]Install Homebrew first: https://brew.sh[/dim]")
+        return False
+    except subprocess.TimeoutExpired:
+        console.print("  [red]✗ Installation timed out[/red]")
+        return False
+    except Exception as e:
+        console.print(f"  [red]✗ Installation failed: {e}[/red]")
+        return False
+
+
+def _setup_imessage() -> bool:
+    """Guide the user through iMessage setup: install, validate, test.
+
+    Returns:
+        True if iMessage is ready to use.
+    """
+    # Step 1: Validate
+    console.print("  [dim]Checking iMessage environment...[/dim]")
+    valid, msg = validate_imessage()
+
+    if valid:
+        console.print(f"  [green]✓ {msg}[/green]")
+        return True
+
+    if msg == "iMessage requires macOS":
+        console.print(f"  [red]✗ {msg}[/red]")
+        return False
+
+    if msg == "not_installed":
+        console.print("  [yellow]✗ imsg CLI not installed[/yellow]")
+        console.print()
+
+        # Step 2: Offer to install
+        install = questionary.confirm(
+            "Install imsg via Homebrew? (brew install steipete/tap/imsg)",
+            default=True,
+            style=WIZARD_STYLE,
+            qmark=f"  {QMARK}",
+        ).ask()
+
+        if install is None:
+            raise KeyboardInterrupt()
+
+        if install:
+            console.print()
+            if _install_imsg():
+                console.print()
+                # Re-validate after install
+                valid, msg = validate_imessage()
+                if valid:
+                    console.print(f"  [green]✓ {msg}[/green]")
+                    return True
+                else:
+                    console.print(f"  [red]✗ {msg}[/red]")
+                    return False
+            else:
+                return False
+        else:
+            console.print(
+                "  [dim]Skipped. Install manually: brew install steipete/tap/imsg[/dim]"
+            )
+            return False
+    else:
+        # RPC not supported or other issue
+        console.print(f"  [red]✗ {msg}[/red]")
+        return False

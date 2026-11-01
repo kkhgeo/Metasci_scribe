@@ -1,9 +1,9 @@
-# Running EvoScientist 24/7 on macOS (Telegram Bot + STT + ccproxy)
+# Running Metasci Scribe 24/7 on macOS (Telegram Bot + STT + ccproxy)
 
-This guide covers deploying EvoScientist as a fully automated 24/7 service on macOS
+This guide covers deploying Metasci Scribe as a fully automated 24/7 service on macOS
 (tested on Mac Mini with Apple Silicon), using:
 
-- **EvoScientist** — the AI research agent
+- **Metasci Scribe** — the AI research agent
 - **ccproxy** — local proxy that routes API calls through your Claude Code subscription
 - **Telegram channel** — messaging interface
 - **STT** — automatic voice message transcription (faster-whisper)
@@ -26,7 +26,7 @@ This guide covers deploying EvoScientist as a fully automated 24/7 service on ma
 mkdir -p ~/Dev/tools
 cd ~/Dev/tools
 
-git clone git@github.com:jhfnetboy/EvoScientist.git
+git clone git@github.com:jhfnetboy/metasci_scribe.git
 git clone git@github.com:jhfnetboy/ccproxy-api.git
 ```
 
@@ -65,10 +65,10 @@ ls ~/.claude/.credentials.json   # note the leading dot
 
 ---
 
-## 4. Install EvoScientist from source
+## 4. Install Metasci Scribe from source
 
 ```bash
-cd ~/Dev/tools/EvoScientist
+cd ~/Dev/tools/Metasci Scribe
 git checkout jhf-research
 
 # Install with Telegram and STT support
@@ -81,8 +81,8 @@ uv pip install -e '.[telegram,stt]'
 Verify:
 
 ```bash
-which EvoSci
-EvoSci -h
+which metasci-scribe
+metasci-scribe -h
 ```
 
 ---
@@ -102,25 +102,25 @@ print('STT model ready')
 
 ---
 
-## 6. Configure EvoScientist
+## 6. Configure Metasci Scribe
 
 ```bash
-cd ~/Dev/tools/EvoScientist
+cd ~/Dev/tools/Metasci Scribe
 
-EvoSci config set anthropic_base_url "http://localhost:8000/claude"
-EvoSci config set anthropic_api_key  "sk-dummy"
-EvoSci config set model              "claude-sonnet-5-5"
+metasci-scribe config set anthropic_base_url "http://localhost:8000/claude"
+metasci-scribe config set anthropic_api_key  "sk-dummy"
+metasci-scribe config set model              "claude-sonnet-5-5"
 
 # Telegram
-EvoSci config set telegram_bot_token      "YOUR_BOT_TOKEN"
-EvoSci config set telegram_allowed_senders "YOUR_TELEGRAM_USER_ID"
+metasci-scribe config set telegram_bot_token      "YOUR_BOT_TOKEN"
+metasci-scribe config set telegram_allowed_senders "YOUR_TELEGRAM_USER_ID"
 
 # STT voice transcription
-EvoSci config set stt_enabled  true
-EvoSci config set stt_language zh     # zh / en / auto
+metasci-scribe config set stt_enabled  true
+metasci-scribe config set stt_language zh     # zh / en / auto
 
 # Optional: set a default workspace directory
-EvoSci config set default_workdir "/absolute/path/to/your/workspace"
+metasci-scribe config set default_workdir "/absolute/path/to/your/workspace"
 ```
 
 ---
@@ -134,10 +134,10 @@ Open two terminals:
 ccproxy serve --port 8000
 ```
 
-**Terminal 2 — EvoSci:**
+**Terminal 2 — metasci-scribe:**
 ```bash
-cd ~/Dev/tools/EvoScientist
-EvoSci serve --auto-approve
+cd ~/Dev/tools/Metasci Scribe
+metasci-scribe serve --auto-approve
 ```
 
 Send a text message and a voice message to your Telegram bot.
@@ -151,16 +151,16 @@ Run this script once to create both plist files:
 
 ```bash
 CCPROXY=$(which ccproxy)
-EVOSCI_DIR="$HOME/Dev/tools/EvoScientist"   # adjust if your path differs
-EVOSCI_BIN="${EVOSCI_DIR}/.venv/bin/EvoSci"
+METASCI_SCRIBE_DIR="$HOME/Dev/tools/Metasci Scribe"   # adjust if your path differs
+METASCI_SCRIBE_BIN="${METASCI_SCRIBE_DIR}/.venv/bin/metasci-scribe"
 
 # ── ccproxy service ──────────────────────────────────────────────────
-cat > ~/Library/LaunchAgents/com.evosci.ccproxy.plist << EOF
+cat > ~/Library/LaunchAgents/com.metasci_scribe.ccproxy.plist << EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>Label</key><string>com.evosci.ccproxy</string>
+    <key>Label</key><string>com.metasci_scribe.ccproxy</string>
     <key>ProgramArguments</key>
     <array>
         <string>${CCPROXY}</string>
@@ -176,34 +176,34 @@ cat > ~/Library/LaunchAgents/com.evosci.ccproxy.plist << EOF
 </plist>
 EOF
 
-# ── EvoSci serve service ─────────────────────────────────────────────
-cat > ~/Library/LaunchAgents/com.evosci.serve.plist << EOF
+# ── metasci-scribe serve service ─────────────────────────────────────────────
+cat > ~/Library/LaunchAgents/com.metasci_scribe.serve.plist << EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>Label</key><string>com.evosci.serve</string>
+    <key>Label</key><string>com.metasci_scribe.serve</string>
     <key>ProgramArguments</key>
     <array>
-        <string>${EVOSCI_BIN}</string>
+        <string>${METASCI_SCRIBE_BIN}</string>
         <string>serve</string>
         <string>--auto-approve</string>
     </array>
-    <key>WorkingDirectory</key><string>${EVOSCI_DIR}</string>
+    <key>WorkingDirectory</key><string>${METASCI_SCRIBE_DIR}</string>
     <key>RunAtLoad</key><true/>
     <key>KeepAlive</key><true/>
-    <key>StandardOutPath</key><string>/tmp/evosci.log</string>
-    <key>StandardErrorPath</key><string>/tmp/evosci.log</string>
+    <key>StandardOutPath</key><string>/tmp/metasci-scribe.log</string>
+    <key>StandardErrorPath</key><string>/tmp/metasci-scribe.log</string>
 </dict>
 </plist>
 EOF
 
 # ── Load both services ───────────────────────────────────────────────
-launchctl load ~/Library/LaunchAgents/com.evosci.ccproxy.plist
-launchctl load ~/Library/LaunchAgents/com.evosci.serve.plist
+launchctl load ~/Library/LaunchAgents/com.metasci_scribe.ccproxy.plist
+launchctl load ~/Library/LaunchAgents/com.metasci_scribe.serve.plist
 
 echo "Services loaded:"
-launchctl list | grep evosci
+launchctl list | grep metasci-scribe
 ```
 
 ---
@@ -212,10 +212,10 @@ launchctl list | grep evosci
 
 ```bash
 # Are both services running?
-launchctl list | grep evosci
+launchctl list | grep metasci-scribe
 
 # Live logs
-tail -f /tmp/evosci.log
+tail -f /tmp/metasci-scribe.log
 tail -f /tmp/ccproxy.log
 ```
 
@@ -225,10 +225,10 @@ tail -f /tmp/ccproxy.log
 
 | Action | Command |
 |--------|---------|
-| Restart EvoSci | `launchctl kickstart -k gui/$(id -u)/com.evosci.serve` |
-| Restart ccproxy | `launchctl kickstart -k gui/$(id -u)/com.evosci.ccproxy` |
-| Stop EvoSci | `launchctl unload ~/Library/LaunchAgents/com.evosci.serve.plist` |
-| Stop ccproxy | `launchctl unload ~/Library/LaunchAgents/com.evosci.ccproxy.plist` |
+| Restart metasci-scribe | `launchctl kickstart -k gui/$(id -u)/com.metasci_scribe.serve` |
+| Restart ccproxy | `launchctl kickstart -k gui/$(id -u)/com.metasci_scribe.ccproxy` |
+| Stop metasci-scribe | `launchctl unload ~/Library/LaunchAgents/com.metasci_scribe.serve.plist` |
+| Stop ccproxy | `launchctl unload ~/Library/LaunchAgents/com.metasci_scribe.ccproxy.plist` |
 | Reload after plist edit | `launchctl unload <plist> && launchctl load <plist>` |
 
 ---
@@ -252,24 +252,24 @@ Verify the token was saved at `~/.claude/.credentials.json` (hidden file, note t
 ### `Channel telegram fatal error: python-telegram-bot not installed`
 The package was installed in the wrong Python environment. Use `uv pip`:
 ```bash
-cd ~/Dev/tools/EvoScientist
+cd ~/Dev/tools/Metasci Scribe
 uv pip install 'python-telegram-bot>=21.0'
 ```
 
-### `zsh: no matches found: evoscientist[telegram]`
+### `zsh: no matches found: metasci-scribe[telegram]`
 Shell interprets `[` as a glob. Always quote the package name:
 ```bash
-uv pip install 'EvoScientist[telegram,stt]'   # correct
-uv pip install  EvoScientist[telegram,stt]    # wrong — shell eats the brackets
+uv pip install 'metasci-scribe[telegram,stt]'   # correct
+uv pip install  metasci-scribe[telegram,stt]    # wrong — shell eats the brackets
 ```
 
 ### Agent keeps asking to approve ffmpeg / shell commands
-Add `--auto-approve` to the EvoSci serve command in the plist (see step 8).
+Add `--auto-approve` to the metasci-scribe serve command in the plist (see step 8).
 
 ### Voice messages not transcribed / agent receives `[voice: ...]` annotation
 STT is disabled or not installed:
 ```bash
-EvoSci config set stt_enabled true
+metasci-scribe config set stt_enabled true
 uv pip install faster-whisper
 ```
 
@@ -279,11 +279,11 @@ automatically by the built-in VAD filter and `no_speech_prob` threshold introduc
 in PR #28. Make sure you are on the `jhf-research` branch or a release that includes
 that fix.
 
-### `Could not find service "com.evosci.*" in domain`
+### `Could not find service "com.metasci_scribe.*" in domain`
 The plist was never loaded. Run:
 ```bash
-launchctl load ~/Library/LaunchAgents/com.evosci.ccproxy.plist
-launchctl load ~/Library/LaunchAgents/com.evosci.serve.plist
+launchctl load ~/Library/LaunchAgents/com.metasci_scribe.ccproxy.plist
+launchctl load ~/Library/LaunchAgents/com.metasci_scribe.serve.plist
 ```
 
 ### heredoc `cat > file << EOF` hangs in terminal
@@ -298,10 +298,10 @@ the services will start automatically once the drive is available.
 This is normal behaviour for a Mac Mini where the drive is always connected.
 
 ### `pip install` installs to conda base instead of `.venv`
-Always use `uv pip install` inside the EvoScientist project directory,
+Always use `uv pip install` inside the Metasci Scribe project directory,
 or explicitly target the venv:
 ```bash
-cd ~/Dev/tools/EvoScientist
+cd ~/Dev/tools/Metasci Scribe
 uv pip install 'some-package'
 ```
 
@@ -316,11 +316,11 @@ Telegram app
 python-telegram-bot (polling)
     │
     ▼
-EvoScientist channel layer
+Metasci Scribe channel layer
     │  STT hook in _enqueue_raw()
     │  .ogg → faster-whisper → plain text
     ▼
-EvoScientist agent
+Metasci Scribe agent
     │  tool calls / LLM requests
     ▼
 ccproxy  (localhost:8000)

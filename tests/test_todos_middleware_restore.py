@@ -1,4 +1,4 @@
-"""deepagents 0.7.0 made TodoListMiddleware opt-in; EvoScientist opts back in everywhere."""
+"""deepagents 0.7.0 made TodoListMiddleware opt-in; Metasci Scribe opts back in everywhere."""
 
 
 def _names(middleware_list):
@@ -6,13 +6,13 @@ def _names(middleware_list):
 
 
 def test_default_middleware_includes_todos(workspace):
-    from EvoScientist.EvoScientist import _get_default_middleware
+    from metasci_scribe.agent import _get_default_middleware
 
     assert "TodoListMiddleware" in _names(_get_default_middleware(workspace=workspace))
 
 
 def test_async_subagent_middleware_includes_todos(workspace):
-    from EvoScientist.EvoScientist import _get_default_middleware
+    from metasci_scribe.agent import _get_default_middleware
 
     assert "TodoListMiddleware" in _names(
         _get_default_middleware(workspace=workspace, for_async_subagent=True)
@@ -20,7 +20,7 @@ def test_async_subagent_middleware_includes_todos(workspace):
 
 
 def test_injected_subagent_middleware_includes_todos(workspace):
-    from EvoScientist.EvoScientist import _inject_subagent_middleware
+    from metasci_scribe.agent import _inject_subagent_middleware
 
     subs = [{"name": "research-agent"}]
     _inject_subagent_middleware(subs, workspace=workspace)

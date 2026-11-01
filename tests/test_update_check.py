@@ -1,4 +1,4 @@
-"""Tests for EvoScientist.update_check module."""
+"""Tests for metasci_scribe.update_check module."""
 
 import json
 import time
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from EvoScientist.update_check import (
+from metasci_scribe.update_check import (
     CACHE_TTL,
     CN_SIMPLE,
     fetch_versions,
@@ -41,7 +41,7 @@ class TestFetchVersions:
         with patch("urllib.request.urlopen", return_value=resp) as urlopen:
             assert fetch_versions(CN_SIMPLE, 5) == ["0.3.5", "0.3.6"]
         request = urlopen.call_args.args[0]
-        assert request.full_url == f"{CN_SIMPLE}/evoscientist/"
+        assert request.full_url == f"{CN_SIMPLE}/metasci-scribe/"
         assert request.get_header("Accept") == "application/vnd.pypi.simple.v1+json"
 
 
@@ -53,18 +53,18 @@ class TestGetLatestVersion:
         class Config:
             mirror = "default"
 
-        monkeypatch.setattr("EvoScientist.config.load_config", lambda: Config())
+        monkeypatch.setattr("metasci_scribe.config.load_config", lambda: Config())
 
     def test_cn_mirror_reads_tsinghua(self, tmp_path, monkeypatch):
         class Config:
             mirror = "cn"
 
-        monkeypatch.setattr("EvoScientist.config.load_config", lambda: Config())
+        monkeypatch.setattr("metasci_scribe.config.load_config", lambda: Config())
         cache_file = tmp_path / "latest_version.json"
         resp = _response({"versions": ["0.3.10", "0.3.9", "0.4.0rc1"]})
         with (
-            patch("EvoScientist.update_check.CACHE_FILE", cache_file),
-            patch("EvoScientist.update_check.CACHE_DIR", tmp_path),
+            patch("metasci_scribe.update_check.CACHE_FILE", cache_file),
+            patch("metasci_scribe.update_check.CACHE_DIR", tmp_path),
             patch("urllib.request.urlopen", return_value=resp) as urlopen,
         ):
             assert get_latest_version() == "0.3.10"
@@ -75,7 +75,7 @@ class TestGetLatestVersion:
         cache_file.write_text(
             json.dumps({"version": "1.0.0", "checked_at": time.time()})
         )
-        with patch("EvoScientist.update_check.CACHE_FILE", cache_file):
+        with patch("metasci_scribe.update_check.CACHE_FILE", cache_file):
             assert get_latest_version() == "1.0.0"
 
     def test_stale_cache_fetches_pypi(self, tmp_path):
@@ -96,8 +96,8 @@ class TestGetLatestVersion:
         mock_resp.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch("EvoScientist.update_check.CACHE_FILE", cache_file),
-            patch("EvoScientist.update_check.CACHE_DIR", tmp_path),
+            patch("metasci_scribe.update_check.CACHE_FILE", cache_file),
+            patch("metasci_scribe.update_check.CACHE_DIR", tmp_path),
             patch("urllib.request.urlopen", return_value=mock_resp),
         ):
             assert get_latest_version() == "2.0.0"
@@ -112,8 +112,8 @@ class TestGetLatestVersion:
         mock_resp.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch("EvoScientist.update_check.CACHE_FILE", cache_file),
-            patch("EvoScientist.update_check.CACHE_DIR", tmp_path),
+            patch("metasci_scribe.update_check.CACHE_FILE", cache_file),
+            patch("metasci_scribe.update_check.CACHE_DIR", tmp_path),
             patch("urllib.request.urlopen", return_value=mock_resp),
         ):
             assert get_latest_version() == "3.0.0"
@@ -125,7 +125,7 @@ class TestGetLatestVersion:
     def test_network_error_returns_none(self, tmp_path):
         cache_file = tmp_path / "latest_version.json"
         with (
-            patch("EvoScientist.update_check.CACHE_FILE", cache_file),
+            patch("metasci_scribe.update_check.CACHE_FILE", cache_file),
             patch("urllib.request.urlopen", side_effect=OSError("network down")),
         ):
             assert get_latest_version() is None
@@ -141,8 +141,8 @@ class TestGetLatestVersion:
         mock_resp.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch("EvoScientist.update_check.CACHE_FILE", cache_file),
-            patch("EvoScientist.update_check.CACHE_DIR", tmp_path),
+            patch("metasci_scribe.update_check.CACHE_FILE", cache_file),
+            patch("metasci_scribe.update_check.CACHE_DIR", tmp_path),
             patch("urllib.request.urlopen", return_value=mock_resp),
         ):
             assert get_latest_version() == "1.5.0"
@@ -153,8 +153,12 @@ class TestIsUpdateAvailable:
 
     def test_newer_version_available(self):
         with (
-            patch("EvoScientist.update_check.get_latest_version", return_value="9.9.9"),
-            patch("EvoScientist.update_check._installed_version", return_value="0.0.2"),
+            patch(
+                "metasci_scribe.update_check.get_latest_version", return_value="9.9.9"
+            ),
+            patch(
+                "metasci_scribe.update_check._installed_version", return_value="0.0.2"
+            ),
         ):
             available, latest = is_update_available()
             assert available is True
@@ -162,39 +166,52 @@ class TestIsUpdateAvailable:
 
     def test_same_version(self):
         with (
-            patch("EvoScientist.update_check.get_latest_version", return_value="0.0.2"),
-            patch("EvoScientist.update_check._installed_version", return_value="0.0.2"),
+            patch(
+                "metasci_scribe.update_check.get_latest_version", return_value="0.0.2"
+            ),
+            patch(
+                "metasci_scribe.update_check._installed_version", return_value="0.0.2"
+            ),
         ):
             available, _latest = is_update_available()
             assert available is False
 
     def test_older_pypi_version(self):
         with (
-            patch("EvoScientist.update_check.get_latest_version", return_value="0.0.1"),
-            patch("EvoScientist.update_check._installed_version", return_value="0.0.2"),
+            patch(
+                "metasci_scribe.update_check.get_latest_version", return_value="0.0.1"
+            ),
+            patch(
+                "metasci_scribe.update_check._installed_version", return_value="0.0.2"
+            ),
         ):
             available, _latest = is_update_available()
             assert available is False
 
     def test_pypi_unreachable(self):
-        with patch("EvoScientist.update_check.get_latest_version", return_value=None):
+        with patch("metasci_scribe.update_check.get_latest_version", return_value=None):
             available, latest = is_update_available()
             assert available is False
             assert latest is None
 
     def test_invalid_version_string(self):
         with (
-            patch("EvoScientist.update_check.get_latest_version", return_value="abc"),
-            patch("EvoScientist.update_check._installed_version", return_value="0.0.2"),
+            patch("metasci_scribe.update_check.get_latest_version", return_value="abc"),
+            patch(
+                "metasci_scribe.update_check._installed_version", return_value="0.0.2"
+            ),
         ):
             available, _latest = is_update_available()
             assert available is False
 
     def test_prerelease_installed_sees_final_release(self):
         with (
-            patch("EvoScientist.update_check.get_latest_version", return_value="0.4.0"),
             patch(
-                "EvoScientist.update_check._installed_version", return_value="0.4.0rc1"
+                "metasci_scribe.update_check.get_latest_version", return_value="0.4.0"
+            ),
+            patch(
+                "metasci_scribe.update_check._installed_version",
+                return_value="0.4.0rc1",
             ),
         ):
             assert is_update_available() == (True, "0.4.0")

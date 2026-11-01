@@ -1,12 +1,12 @@
-"""Tests for EvoScientist.tools.skills_manager module."""
+"""Tests for metasci_scribe.tools.skills_manager module."""
 
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from EvoScientist.paths import Workspace
-from EvoScientist.tools.skills_manager import (
+from metasci_scribe.paths import Workspace
+from metasci_scribe.tools.skills_manager import (
     SkillInfo,
     _is_github_url,
     _load_manifest,
@@ -38,7 +38,7 @@ def temp_skills_dir(tmp_path):
     skills_dir.mkdir()
     empty_global = tmp_path / "global_skills"
     empty_global.mkdir()
-    with patch("EvoScientist.paths.GLOBAL_SKILLS_DIR", empty_global):
+    with patch("metasci_scribe.paths.GLOBAL_SKILLS_DIR", empty_global):
         yield skills_dir
 
 
@@ -497,7 +497,7 @@ class TestInstallManifest:
         installed_provenance() must not report it as installed."""
         empty_global = tmp_path / "empty_global"
         empty_global.mkdir()
-        with patch("EvoScientist.paths.GLOBAL_SKILLS_DIR", empty_global):
+        with patch("metasci_scribe.paths.GLOBAL_SKILLS_DIR", empty_global):
             install_skill(
                 str(sample_skill_dir), str(temp_skills_dir), workspace=skills_ws
             )
@@ -526,7 +526,7 @@ class TestInstallManifest:
             commit="abc123def456",
         )
         with patch(
-            "EvoScientist.paths.GLOBAL_SKILLS_DIR",
+            "metasci_scribe.paths.GLOBAL_SKILLS_DIR",
             temp_skills_dir.parent / "missing",
         ):
             prov = installed_provenance(workspace=skills_ws)
@@ -540,14 +540,14 @@ class TestResolveRemoteHead:
         assert resolve_remote_head("/tmp/some/local/path") is None
 
     def test_returns_none_when_git_unavailable(self):
-        with patch("EvoScientist.git_cli.subprocess.run") as run:
+        with patch("metasci_scribe.git_cli.subprocess.run") as run:
             run.side_effect = FileNotFoundError("git not on PATH")
             assert resolve_remote_head("owner/repo@skill") is None
 
     def test_returns_none_on_timeout(self):
         import subprocess as _sp
 
-        with patch("EvoScientist.git_cli.subprocess.run") as run:
+        with patch("metasci_scribe.git_cli.subprocess.run") as run:
             run.side_effect = _sp.TimeoutExpired(cmd="git", timeout=5)
             assert resolve_remote_head("owner/repo@skill") is None
 
@@ -561,7 +561,7 @@ class TestResolveRemoteHead:
                 "stderr": "",
             },
         )()
-        with patch("EvoScientist.git_cli.subprocess.run", return_value=proc):
+        with patch("metasci_scribe.git_cli.subprocess.run", return_value=proc):
             sha = resolve_remote_head("owner/repo@skill")
         assert sha == "deadbeef0000000000000000000000000000abcd"
 
@@ -581,7 +581,7 @@ class TestMissingGit:
     def test_bare_name_reports_missing_git_not_missing_path(
         self, temp_skills_dir, skills_ws, tmp_path, monkeypatch
     ):
-        from EvoScientist.tools.skills_manager import _REMOTE_INDEX_CACHE
+        from metasci_scribe.tools.skills_manager import _REMOTE_INDEX_CACHE
 
         _REMOTE_INDEX_CACHE.clear()
         monkeypatch.chdir(tmp_path)
@@ -600,7 +600,7 @@ class TestMissingGit:
     def test_mistyped_path_still_reports_missing_path(
         self, source, temp_skills_dir, skills_ws, tmp_path, monkeypatch
     ):
-        from EvoScientist.tools.skills_manager import _REMOTE_INDEX_CACHE
+        from metasci_scribe.tools.skills_manager import _REMOTE_INDEX_CACHE
 
         _REMOTE_INDEX_CACHE.clear()
         monkeypatch.chdir(tmp_path)
@@ -611,8 +611,8 @@ class TestMissingGit:
         assert result["error"] == f"Path does not exist: {source}"
 
     def test_remote_index_raises_git_not_found(self):
-        from EvoScientist.git_cli import GitNotFoundError
-        from EvoScientist.tools.skills_manager import _REMOTE_INDEX_CACHE
+        from metasci_scribe.git_cli import GitNotFoundError
+        from metasci_scribe.tools.skills_manager import _REMOTE_INDEX_CACHE
 
         _REMOTE_INDEX_CACHE.clear()
 
@@ -620,16 +620,16 @@ class TestMissingGit:
             fetch_remote_skill_index(repo="test/repo")
 
     def test_local_head_is_unknown(self, tmp_path):
-        from EvoScientist.tools.skills_manager import _resolve_local_head
+        from metasci_scribe.tools.skills_manager import _resolve_local_head
 
         assert _resolve_local_head(str(tmp_path)) is None
 
     def test_agent_install_returns_the_message(self, tmp_path):
-        from EvoScientist.tools.skill_manager import make_skill_manager_tool
+        from metasci_scribe.tools.skill_manager import make_skill_manager_tool
 
         skill_manager = make_skill_manager_tool(Workspace(tmp_path))
 
-        with patch("EvoScientist.paths.GLOBAL_SKILLS_DIR", tmp_path / "skills"):
+        with patch("metasci_scribe.paths.GLOBAL_SKILLS_DIR", tmp_path / "skills"):
             result = skill_manager.invoke(
                 {"action": "install", "source": "owner/repo@skill"}
             )
@@ -638,8 +638,8 @@ class TestMissingGit:
         assert "Traceback" not in result
 
     def test_agent_browse_returns_the_message(self, tmp_path):
-        from EvoScientist.tools.skill_manager import make_skill_manager_tool
-        from EvoScientist.tools.skills_manager import _REMOTE_INDEX_CACHE
+        from metasci_scribe.tools.skill_manager import make_skill_manager_tool
+        from metasci_scribe.tools.skills_manager import _REMOTE_INDEX_CACHE
 
         _REMOTE_INDEX_CACHE.clear()
         skill_manager = make_skill_manager_tool(Workspace(tmp_path))
@@ -660,7 +660,7 @@ class TestBareNameIndexFailure:
         """The macOS Command Line Tools stub (and an offline git) exit non-zero."""
         from types import SimpleNamespace
 
-        from EvoScientist.tools.skills_manager import _REMOTE_INDEX_CACHE
+        from metasci_scribe.tools.skills_manager import _REMOTE_INDEX_CACHE
 
         _REMOTE_INDEX_CACHE.clear()
         monkeypatch.chdir(tmp_path)
@@ -669,7 +669,7 @@ class TestBareNameIndexFailure:
             stdout="",
             stderr="xcode-select: note: No developer tools were found.\n",
         )
-        with patch("EvoScientist.git_cli.subprocess.run", return_value=stub):
+        with patch("metasci_scribe.git_cli.subprocess.run", return_value=stub):
             result = install_skill(
                 "no-such-skill-xyz", str(temp_skills_dir), workspace=skills_ws
             )
@@ -683,7 +683,7 @@ class TestBareNameIndexFailure:
         """A path can never match an index name: no EvoSkills clone for a typo."""
         monkeypatch.chdir(tmp_path)
         with patch(
-            "EvoScientist.tools.skills_manager.fetch_remote_skill_index"
+            "metasci_scribe.tools.skills_manager.fetch_remote_skill_index"
         ) as fetch:
             result = install_skill(
                 "./my-skil", str(temp_skills_dir), workspace=skills_ws
@@ -884,10 +884,10 @@ class TestFetchRemoteSkillIndex:
             shutil.copytree(tmp_path / "repo", dest)
 
         with patch(
-            "EvoScientist.tools.skills_manager._clone_repo", side_effect=fake_clone
+            "metasci_scribe.tools.skills_manager._clone_repo", side_effect=fake_clone
         ):
             # Clear cache to ensure fresh fetch
-            from EvoScientist.tools.skills_manager import _REMOTE_INDEX_CACHE
+            from metasci_scribe.tools.skills_manager import _REMOTE_INDEX_CACHE
 
             _REMOTE_INDEX_CACHE.clear()
 
@@ -926,9 +926,9 @@ class TestFetchRemoteSkillIndex:
             shutil.copytree(tmp_path / "repo", dest)
 
         with patch(
-            "EvoScientist.tools.skills_manager._clone_repo", side_effect=fake_clone
+            "metasci_scribe.tools.skills_manager._clone_repo", side_effect=fake_clone
         ):
-            from EvoScientist.tools.skills_manager import _REMOTE_INDEX_CACHE
+            from metasci_scribe.tools.skills_manager import _REMOTE_INDEX_CACHE
 
             _REMOTE_INDEX_CACHE.clear()
 
@@ -962,7 +962,7 @@ class TestSkillManagerList:
 
     def test_list_user_skills_workspace(self, tmp_path):
         """Workspace-tier skills appear under 'User Skills'."""
-        from EvoScientist.tools.skill_manager import make_skill_manager_tool
+        from metasci_scribe.tools.skill_manager import make_skill_manager_tool
 
         ws = Workspace(tmp_path / "project")
         workspace_dir = ws.skills_dir
@@ -973,7 +973,7 @@ class TestSkillManagerList:
         self._make_skill(tmp_path, "ws-skill")
         install_skill(str(tmp_path / "ws-skill"), str(workspace_dir), workspace=ws)
 
-        with patch("EvoScientist.paths.GLOBAL_SKILLS_DIR", global_dir):
+        with patch("metasci_scribe.paths.GLOBAL_SKILLS_DIR", global_dir):
             result = skill_manager.invoke({"action": "list", "include_system": False})
 
         assert "User Skills (1)" in result
@@ -982,7 +982,7 @@ class TestSkillManagerList:
 
     def test_list_user_skills_global(self, tmp_path):
         """Global-tier skills appear under 'User Skills'."""
-        from EvoScientist.tools.skill_manager import make_skill_manager_tool
+        from metasci_scribe.tools.skill_manager import make_skill_manager_tool
 
         ws = Workspace(tmp_path / "project")
         workspace_dir = ws.skills_dir
@@ -993,7 +993,7 @@ class TestSkillManagerList:
         self._make_skill(tmp_path, "global-skill")
         install_skill(str(tmp_path / "global-skill"), str(global_dir), workspace=ws)
 
-        with patch("EvoScientist.paths.GLOBAL_SKILLS_DIR", global_dir):
+        with patch("metasci_scribe.paths.GLOBAL_SKILLS_DIR", global_dir):
             result = skill_manager.invoke({"action": "list", "include_system": False})
 
         assert "User Skills (1)" in result
@@ -1001,8 +1001,8 @@ class TestSkillManagerList:
 
     def test_list_include_system_shows_both_sections(self, tmp_path):
         """include_system=True shows both User Skills and System Skills sections."""
-        from EvoScientist.tools.skill_manager import make_skill_manager_tool
-        from EvoScientist.tools.skills_manager import SkillInfo
+        from metasci_scribe.tools.skill_manager import make_skill_manager_tool
+        from metasci_scribe.tools.skills_manager import SkillInfo
 
         ws = Workspace(tmp_path / "project")
         workspace_dir = ws.skills_dir
@@ -1021,9 +1021,9 @@ class TestSkillManagerList:
         )
 
         with (
-            patch("EvoScientist.paths.GLOBAL_SKILLS_DIR", global_dir),
+            patch("metasci_scribe.paths.GLOBAL_SKILLS_DIR", global_dir),
             patch(
-                "EvoScientist.tools.skills_manager.list_skills",
+                "metasci_scribe.tools.skills_manager.list_skills",
                 return_value=[
                     SkillInfo(
                         name="user-skill",
@@ -1044,7 +1044,7 @@ class TestSkillManagerList:
 
     def test_list_no_user_skills_returns_message(self, tmp_path):
         """Empty workspace and global dirs return the 'no user skills' message."""
-        from EvoScientist.tools.skill_manager import make_skill_manager_tool
+        from metasci_scribe.tools.skill_manager import make_skill_manager_tool
 
         ws = Workspace(tmp_path / "project")
         workspace_dir = ws.skills_dir
@@ -1053,7 +1053,7 @@ class TestSkillManagerList:
         global_dir = tmp_path / "global"
         global_dir.mkdir()
 
-        with patch("EvoScientist.paths.GLOBAL_SKILLS_DIR", global_dir):
+        with patch("metasci_scribe.paths.GLOBAL_SKILLS_DIR", global_dir):
             result = skill_manager.invoke({"action": "list", "include_system": False})
 
         assert "No user skills installed" in result
@@ -1384,7 +1384,7 @@ metadata:
             ),
         )
         with caplog.at_level(
-            logging.WARNING, logger="EvoScientist.tools.skills_manager"
+            logging.WARNING, logger="metasci_scribe.tools.skills_manager"
         ):
             result = _parse_skill_md(skill_dir / "SKILL.md")
         assert result.expert_source == "expert_md"
@@ -1438,7 +1438,7 @@ role: legacy role
 """
         )
         with caplog.at_level(
-            logging.WARNING, logger="EvoScientist.tools.skills_manager"
+            logging.WARNING, logger="metasci_scribe.tools.skills_manager"
         ):
             first = _parse_skill_md(skill_dir / "SKILL.md")
             _parse_skill_md(skill_dir / "SKILL.md")
@@ -1482,7 +1482,7 @@ description: Plain utility skill
 # Body
 """
         )
-        with patch("EvoScientist.paths.GLOBAL_SKILLS_DIR", global_dir):
+        with patch("metasci_scribe.paths.GLOBAL_SKILLS_DIR", global_dir):
             all_skills = list_skills(workspace=ws)
             expert_skills = list_expert_skills(include_system=False, workspace=ws)
         assert {s.name for s in all_skills} == {"expert-a", "util-b"}
@@ -1505,7 +1505,7 @@ description: Utility
 # Body
 """
         )
-        with patch("EvoScientist.paths.GLOBAL_SKILLS_DIR", global_dir):
+        with patch("metasci_scribe.paths.GLOBAL_SKILLS_DIR", global_dir):
             expert_skills = list_expert_skills(include_system=False, workspace=ws)
         assert expert_skills == []
 
@@ -1537,12 +1537,12 @@ class TestSkillManagerToolExpertSurface:
         ]
 
     def test_list_filters_to_expert_when_skill_type_set(self, workspace):
-        from EvoScientist.tools.skill_manager import make_skill_manager_tool
+        from metasci_scribe.tools.skill_manager import make_skill_manager_tool
 
         skill_manager = make_skill_manager_tool(workspace)
 
         with patch(
-            "EvoScientist.tools.skills_manager.list_skills",
+            "metasci_scribe.tools.skills_manager.list_skills",
             return_value=self._mock_skills(),
         ):
             out = skill_manager.invoke(
@@ -1560,7 +1560,7 @@ class TestSkillManagerToolExpertSurface:
         This test guards against silently reintroducing the empty-string
         default that broke the live agent-teams smoke on 2026-07-17.
         """
-        from EvoScientist.tools.skill_manager import make_skill_manager_tool
+        from metasci_scribe.tools.skill_manager import make_skill_manager_tool
 
         skill_manager = make_skill_manager_tool(workspace)
 
@@ -1583,12 +1583,12 @@ class TestSkillManagerToolExpertSurface:
     def test_list_all_sentinel_is_no_filter(self, workspace):
         """`skill_type='all'` (the default) must return every skill —
         it's the no-filter case, not a bucket that only 'all' skills fall into."""
-        from EvoScientist.tools.skill_manager import make_skill_manager_tool
+        from metasci_scribe.tools.skill_manager import make_skill_manager_tool
 
         skill_manager = make_skill_manager_tool(workspace)
 
         with patch(
-            "EvoScientist.tools.skills_manager.list_skills",
+            "metasci_scribe.tools.skills_manager.list_skills",
             return_value=self._mock_skills(),
         ):
             out = skill_manager.invoke(
@@ -1599,12 +1599,12 @@ class TestSkillManagerToolExpertSurface:
         assert "util-b" in out
 
     def test_list_all_when_skill_type_absent(self, workspace):
-        from EvoScientist.tools.skill_manager import make_skill_manager_tool
+        from metasci_scribe.tools.skill_manager import make_skill_manager_tool
 
         skill_manager = make_skill_manager_tool(workspace)
 
         with patch(
-            "EvoScientist.tools.skills_manager.list_skills",
+            "metasci_scribe.tools.skills_manager.list_skills",
             return_value=self._mock_skills(),
         ):
             out = skill_manager.invoke({"action": "list", "include_system": True})
@@ -1612,12 +1612,12 @@ class TestSkillManagerToolExpertSurface:
         assert "util-b" in out
 
     def test_list_returns_message_when_filter_matches_nothing(self, workspace):
-        from EvoScientist.tools.skill_manager import make_skill_manager_tool
+        from metasci_scribe.tools.skill_manager import make_skill_manager_tool
 
         skill_manager = make_skill_manager_tool(workspace)
 
         with patch(
-            "EvoScientist.tools.skills_manager.list_skills",
+            "metasci_scribe.tools.skills_manager.list_skills",
             return_value=self._mock_skills()[1:],  # only the utility
         ):
             out = skill_manager.invoke(
@@ -1626,12 +1626,12 @@ class TestSkillManagerToolExpertSurface:
         assert "No expert skills found" in out
 
     def test_info_surfaces_expert_fields(self, workspace):
-        from EvoScientist.tools.skill_manager import make_skill_manager_tool
+        from metasci_scribe.tools.skill_manager import make_skill_manager_tool
 
         skill_manager = make_skill_manager_tool(workspace)
 
         with patch(
-            "EvoScientist.tools.skills_manager.get_skill_info",
+            "metasci_scribe.tools.skills_manager.get_skill_info",
             return_value=self._mock_skills()[0],
         ):
             out = skill_manager.invoke({"action": "info", "name": "expert-a"})
@@ -1644,12 +1644,12 @@ class TestSkillManagerToolExpertSurface:
         assert "Default dispatch" not in out
 
     def test_info_omits_expert_block_for_utility_skills(self, workspace):
-        from EvoScientist.tools.skill_manager import make_skill_manager_tool
+        from metasci_scribe.tools.skill_manager import make_skill_manager_tool
 
         skill_manager = make_skill_manager_tool(workspace)
 
         with patch(
-            "EvoScientist.tools.skills_manager.get_skill_info",
+            "metasci_scribe.tools.skills_manager.get_skill_info",
             return_value=self._mock_skills()[1],
         ):
             out = skill_manager.invoke({"action": "info", "name": "util-b"})
@@ -1678,7 +1678,7 @@ class TestSkillManagerInfo:
 
     def test_info_reports_virtual_mount_path(self, tmp_path):
         """``Path:`` is the sandbox-visible ``/skills/<name>``, not the host path."""
-        from EvoScientist.tools.skill_manager import make_skill_manager_tool
+        from metasci_scribe.tools.skill_manager import make_skill_manager_tool
 
         ws = Workspace(tmp_path / "project")
         workspace_dir = ws.skills_dir
@@ -1689,7 +1689,7 @@ class TestSkillManagerInfo:
         self._make_skill(tmp_path, "info-skill")
         install_skill(str(tmp_path / "info-skill"), str(workspace_dir), workspace=ws)
 
-        with patch("EvoScientist.paths.GLOBAL_SKILLS_DIR", global_dir):
+        with patch("metasci_scribe.paths.GLOBAL_SKILLS_DIR", global_dir):
             result = skill_manager.invoke({"action": "info", "name": "info-skill"})
 
         assert "Path: /skills/info-skill" in result
@@ -1701,8 +1701,8 @@ class TestSkillManagerInfo:
         keeps the path visible under a different label (``Local:``,
         ``Installed at:``, embedded in ``Source: …``).
         """
-        from EvoScientist.tools.skill_manager import make_skill_manager_tool
-        from EvoScientist.tools.skills_manager import get_skill_info
+        from metasci_scribe.tools.skill_manager import make_skill_manager_tool
+        from metasci_scribe.tools.skills_manager import get_skill_info
 
         ws = Workspace(tmp_path / "project")
         workspace_dir = ws.skills_dir
@@ -1715,7 +1715,7 @@ class TestSkillManagerInfo:
             str(tmp_path / "host-leak-guard"), str(workspace_dir), workspace=ws
         )
 
-        with patch("EvoScientist.paths.GLOBAL_SKILLS_DIR", global_dir):
+        with patch("metasci_scribe.paths.GLOBAL_SKILLS_DIR", global_dir):
             info = get_skill_info("host-leak-guard", workspace=ws)
             result = skill_manager.invoke({"action": "info", "name": "host-leak-guard"})
 
@@ -1741,7 +1741,7 @@ class TestSkillManagerInstall:
 
     def test_install_single_reports_virtual_mount_path(self, tmp_path):
         """Single install: ``Path: /skills/<name>``, no host path."""
-        from EvoScientist.tools.skill_manager import make_skill_manager_tool
+        from metasci_scribe.tools.skill_manager import make_skill_manager_tool
 
         ws = Workspace(tmp_path / "project")
         workspace_dir = ws.skills_dir
@@ -1751,7 +1751,7 @@ class TestSkillManagerInstall:
         global_dir.mkdir()
         self._make_skill(tmp_path, "solo-skill")
 
-        with patch("EvoScientist.paths.GLOBAL_SKILLS_DIR", global_dir):
+        with patch("metasci_scribe.paths.GLOBAL_SKILLS_DIR", global_dir):
             result = skill_manager.invoke(
                 {"action": "install", "source": str(tmp_path / "solo-skill")}
             )
@@ -1769,7 +1769,7 @@ class TestSkillManagerInstall:
         might resolve to. ``tmp_path`` covers both patched dirs and the source
         path used by ``install_skill``.
         """
-        from EvoScientist.tools.skill_manager import make_skill_manager_tool
+        from metasci_scribe.tools.skill_manager import make_skill_manager_tool
 
         ws = Workspace(tmp_path / "project")
         workspace_dir = ws.skills_dir
@@ -1779,7 +1779,7 @@ class TestSkillManagerInstall:
         global_dir.mkdir()
         self._make_skill(tmp_path, "leak-guard-install")
 
-        with patch("EvoScientist.paths.GLOBAL_SKILLS_DIR", global_dir):
+        with patch("metasci_scribe.paths.GLOBAL_SKILLS_DIR", global_dir):
             result = skill_manager.invoke(
                 {"action": "install", "source": str(tmp_path / "leak-guard-install")}
             )
@@ -1788,7 +1788,7 @@ class TestSkillManagerInstall:
 
     def test_install_batch_lists_each_skill_with_virtual_path(self, tmp_path):
         """Batch install: one block per installed skill, each with ``Path: /skills/<name>``."""
-        from EvoScientist.tools.skill_manager import make_skill_manager_tool
+        from metasci_scribe.tools.skill_manager import make_skill_manager_tool
 
         ws = Workspace(tmp_path / "project")
         workspace_dir = ws.skills_dir
@@ -1801,7 +1801,7 @@ class TestSkillManagerInstall:
         self._make_skill(pack, "alpha", description="first")
         self._make_skill(pack, "beta", description="second")
 
-        with patch("EvoScientist.paths.GLOBAL_SKILLS_DIR", global_dir):
+        with patch("metasci_scribe.paths.GLOBAL_SKILLS_DIR", global_dir):
             result = skill_manager.invoke({"action": "install", "source": str(pack)})
 
         assert "Successfully installed skill: alpha" in result
@@ -1822,7 +1822,7 @@ class TestSkillManagerInstall:
         "installed": [], "failed": [{"name": ..., "error": ...}]}`` with no
         top-level ``error`` key. This test pins the guard.
         """
-        from EvoScientist.tools.skill_manager import make_skill_manager_tool
+        from metasci_scribe.tools.skill_manager import make_skill_manager_tool
 
         ws = Workspace(tmp_path / "project")
         workspace_dir = ws.skills_dir
@@ -1842,9 +1842,9 @@ class TestSkillManagerInstall:
         }
 
         with (
-            patch("EvoScientist.paths.GLOBAL_SKILLS_DIR", global_dir),
+            patch("metasci_scribe.paths.GLOBAL_SKILLS_DIR", global_dir),
             patch(
-                "EvoScientist.tools.skills_manager.install_skill",
+                "metasci_scribe.tools.skills_manager.install_skill",
                 return_value=batch_result,
             ),
         ):
@@ -1864,7 +1864,7 @@ class TestSkillManagerInstall:
         Pre-fix behavior: partial failures were silently dropped; only the
         success blocks reached the agent.
         """
-        from EvoScientist.tools.skill_manager import make_skill_manager_tool
+        from metasci_scribe.tools.skill_manager import make_skill_manager_tool
 
         ws = Workspace(tmp_path / "project")
         workspace_dir = ws.skills_dir
@@ -1889,9 +1889,9 @@ class TestSkillManagerInstall:
         }
 
         with (
-            patch("EvoScientist.paths.GLOBAL_SKILLS_DIR", global_dir),
+            patch("metasci_scribe.paths.GLOBAL_SKILLS_DIR", global_dir),
             patch(
-                "EvoScientist.tools.skills_manager.install_skill",
+                "metasci_scribe.tools.skills_manager.install_skill",
                 return_value=partial_result,
             ),
         ):
@@ -1985,11 +1985,11 @@ class TestPinnedSkillNames:
     @pytest.fixture(autouse=True)
     def global_skills(self, tmp_path, monkeypatch):
         """Keep the developer's real global skills out of the index."""
-        from EvoScientist.tools import skills_manager
+        from metasci_scribe.tools import skills_manager
 
         global_dir = tmp_path / "global_skills"
         global_dir.mkdir()
-        monkeypatch.setattr("EvoScientist.paths.GLOBAL_SKILLS_DIR", global_dir)
+        monkeypatch.setattr("metasci_scribe.paths.GLOBAL_SKILLS_DIR", global_dir)
         skills_manager._skill_index_cache.clear()
         yield global_dir
         skills_manager._skill_index_cache.clear()
@@ -2017,7 +2017,7 @@ class TestPinnedSkillNames:
         return skill_dir
 
     def test_first_word_must_be_installed(self, workspace):
-        from EvoScientist.tools.skills_manager import pinned_skill_names
+        from metasci_scribe.tools.skills_manager import pinned_skill_names
 
         self._skill(workspace, "alpha")
         assert pinned_skill_names("/alpha go", workspace) == ["alpha"]
@@ -2028,7 +2028,7 @@ class TestPinnedSkillNames:
     def test_sees_a_skill_made_or_removed_by_hand(self, workspace):
         import shutil
 
-        from EvoScientist.tools.skills_manager import pinned_skill_names
+        from metasci_scribe.tools.skills_manager import pinned_skill_names
 
         self._skill(workspace, "alpha")
         assert pinned_skill_names("/alpha go", workspace) == ["alpha"]
@@ -2041,7 +2041,7 @@ class TestPinnedSkillNames:
         assert pinned_skill_names("/alpha go", workspace) == []
 
     def test_text_without_a_leading_skill_word_scans_nothing(self, workspace):
-        from EvoScientist.tools import skills_manager
+        from metasci_scribe.tools import skills_manager
 
         with patch.object(
             skills_manager,
@@ -2053,7 +2053,7 @@ class TestPinnedSkillNames:
         spy.assert_not_called()
 
     def test_index_picks_up_a_hand_made_skill(self, workspace):
-        from EvoScientist.tools.skills_manager import installed_skill_index
+        from metasci_scribe.tools.skills_manager import installed_skill_index
 
         self._skill(workspace, "alpha", "Alpha.")
         assert installed_skill_index(workspace)["alpha"] == "Alpha."
@@ -2065,7 +2065,7 @@ class TestPinnedSkillNames:
     def test_index_picks_up_an_edited_description(self, workspace):
         import os
 
-        from EvoScientist.tools.skills_manager import installed_skill_index
+        from metasci_scribe.tools.skills_manager import installed_skill_index
 
         self._skill(workspace, "alpha", "Old.")
         assert installed_skill_index(workspace)["alpha"] == "Old."
@@ -2080,7 +2080,7 @@ class TestPinnedSkillNames:
         assert installed_skill_index(workspace)["alpha"] == "New."
 
     def test_index_is_not_rescanned_when_nothing_changed(self, workspace):
-        from EvoScientist.tools import skills_manager
+        from metasci_scribe.tools import skills_manager
 
         self._skill(workspace, "alpha")
         with patch.object(
@@ -2094,7 +2094,7 @@ class TestPinnedSkillNames:
         assert spy.call_count == 1
 
     def test_notify_drops_the_cached_index(self, workspace):
-        from EvoScientist.tools import skills_manager
+        from metasci_scribe.tools import skills_manager
 
         skills_manager.installed_skill_index(workspace)
         assert workspace.key in skills_manager._skill_index_cache
@@ -2102,7 +2102,7 @@ class TestPinnedSkillNames:
         assert workspace.key not in skills_manager._skill_index_cache
 
     def test_fingerprint_marks_a_missing_root(self, workspace):
-        from EvoScientist.tools.skills_manager import _skill_dirs_fingerprint
+        from metasci_scribe.tools.skills_manager import _skill_dirs_fingerprint
 
         assert _skill_dirs_fingerprint(workspace)[0] == (
             str(workspace.skills_dir),
@@ -2110,7 +2110,7 @@ class TestPinnedSkillNames:
         )
 
     def test_fingerprint_marks_an_unreadable_root(self, workspace):
-        from EvoScientist.tools.skills_manager import _skill_dirs_fingerprint
+        from metasci_scribe.tools.skills_manager import _skill_dirs_fingerprint
 
         self._skill(workspace, "alpha")
         healthy = _skill_dirs_fingerprint(workspace)
@@ -2120,7 +2120,7 @@ class TestPinnedSkillNames:
         assert broken != healthy
 
     def test_fingerprint_of_an_unreadable_root_never_repeats(self, workspace):
-        from EvoScientist.tools.skills_manager import _skill_dirs_fingerprint
+        from metasci_scribe.tools.skills_manager import _skill_dirs_fingerprint
 
         self._skill(workspace, "alpha")
         with patch("pathlib.Path.iterdir", side_effect=PermissionError):
@@ -2129,7 +2129,7 @@ class TestPinnedSkillNames:
         assert first != second
 
     def test_index_is_rescanned_while_a_root_cannot_be_listed(self, workspace):
-        from EvoScientist.tools import skills_manager
+        from metasci_scribe.tools import skills_manager
 
         self._skill(workspace, "alpha")
         with (
@@ -2141,15 +2141,15 @@ class TestPinnedSkillNames:
         assert spy.call_count == 2
 
     def test_approval_hook_clears_the_index(self, workspace):
-        from EvoScientist.memory.autoskills import proposals
-        from EvoScientist.tools import skills_manager
+        from metasci_scribe.memory.autoskills import proposals
+        from metasci_scribe.tools import skills_manager
 
         skills_manager._skill_index_cache[workspace.key] = ((), {})
         proposals._notify_approved_skill()
         assert workspace.key not in skills_manager._skill_index_cache
 
     def test_index_values_are_strings_when_the_yaml_is_not(self, workspace):
-        from EvoScientist.tools.skills_manager import installed_skill_index
+        from metasci_scribe.tools.skills_manager import installed_skill_index
 
         self._raw_skill(
             workspace.skills_dir,
@@ -2159,7 +2159,7 @@ class TestPinnedSkillNames:
         assert installed_skill_index(workspace)["2024"] == "42"
 
     def test_expert_is_keyed_by_its_frontmatter_name(self, workspace):
-        from EvoScientist.tools.skills_manager import pinned_skill_names
+        from metasci_scribe.tools.skills_manager import pinned_skill_names
 
         skill_dir = self._raw_skill(
             workspace.skills_dir,
@@ -2204,7 +2204,7 @@ class TestPinnedSkillNames:
         ],
     )
     def test_skills_the_agent_cannot_load_are_not_indexed(self, workspace, content):
-        from EvoScientist.tools.skills_manager import (
+        from metasci_scribe.tools.skills_manager import (
             installed_skill_index,
             pinned_skill_names,
         )
@@ -2216,7 +2216,7 @@ class TestPinnedSkillNames:
         assert pinned_skill_names("/bad-skill go", workspace) == []
 
     def test_oversized_skill_md_is_not_indexed(self, workspace, monkeypatch):
-        from EvoScientist.tools import skills_manager
+        from metasci_scribe.tools import skills_manager
 
         monkeypatch.setattr(skills_manager, "_MAX_SKILL_MD_BYTES", 64)
         self._raw_skill(
@@ -2229,7 +2229,7 @@ class TestPinnedSkillNames:
     def test_workspace_folder_shadows_a_global_folder_of_the_same_name(
         self, workspace, global_skills
     ):
-        from EvoScientist.tools.skills_manager import installed_skill_index
+        from metasci_scribe.tools.skills_manager import installed_skill_index
 
         self._raw_skill(
             workspace.skills_dir,
@@ -2248,7 +2248,7 @@ class TestPinnedSkillNames:
     def test_folder_without_skill_md_does_not_shadow_a_lower_tier(
         self, workspace, global_skills
     ):
-        from EvoScientist.tools.skills_manager import installed_skill_index
+        from metasci_scribe.tools.skills_manager import installed_skill_index
 
         (workspace.skills_dir / "shared").mkdir(parents=True)
         self._raw_skill(
@@ -2263,7 +2263,7 @@ class TestPinnedSkillNames:
     def test_same_frontmatter_name_in_two_folders_keeps_the_later_folder(
         self, workspace
     ):
-        from EvoScientist.tools.skills_manager import installed_skill_index
+        from metasci_scribe.tools.skills_manager import installed_skill_index
 
         for dirname, description in (("a-dir", "First."), ("b-dir", "Second.")):
             self._raw_skill(
@@ -2274,7 +2274,7 @@ class TestPinnedSkillNames:
         assert installed_skill_index(workspace)["twin"] == "Second."
 
     def test_deeply_nested_frontmatter_is_not_indexed(self, workspace):
-        from EvoScientist.tools.skills_manager import installed_skill_index
+        from metasci_scribe.tools.skills_manager import installed_skill_index
 
         nested = "[" * 5000 + "]" * 5000
         self._raw_skill(
@@ -2285,7 +2285,7 @@ class TestPinnedSkillNames:
         assert "deep-skill" not in installed_skill_index(workspace)
 
     def test_folder_sorting_follows_the_middleware_path_order(self, workspace):
-        from EvoScientist.tools.skills_manager import installed_skill_index
+        from metasci_scribe.tools.skills_manager import installed_skill_index
 
         for dirname, description in (("foo", "Plain."), ("foo.bak", "Backup.")):
             self._raw_skill(
@@ -2296,17 +2296,17 @@ class TestPinnedSkillNames:
         assert installed_skill_index(workspace)["foo"] == "Plain."
 
     def test_builtin_skills_are_indexed(self, workspace):
-        from EvoScientist.tools.skills_manager import installed_skill_index
+        from metasci_scribe.tools.skills_manager import installed_skill_index
 
         assert "skill-creator" in installed_skill_index(workspace)
 
     def test_backend_failure_raises_so_callers_can_degrade(self, workspace):
-        from EvoScientist.tools.skills_manager import _build_skill_index
+        from metasci_scribe.tools.skills_manager import _build_skill_index
 
         self._skill(workspace, "alpha")
         with (
             patch(
-                "EvoScientist.backends.MergedSkillsBackend.download_files",
+                "metasci_scribe.backends.MergedSkillsBackend.download_files",
                 side_effect=PermissionError,
             ),
             pytest.raises(PermissionError),
@@ -2333,7 +2333,7 @@ class TestPinnedSkillNames:
     def test_unreadable_workspace_file_falls_through_to_the_global_tier(
         self, workspace, global_skills, unreadable
     ):
-        from EvoScientist.tools.skills_manager import pinned_skill_names
+        from metasci_scribe.tools.skills_manager import pinned_skill_names
 
         self._skill(workspace, "alpha")
         self._skill_in(global_skills, "alpha")
@@ -2343,7 +2343,7 @@ class TestPinnedSkillNames:
     def test_skill_folder_symlinked_outside_the_skills_root_is_not_indexed(
         self, workspace, tmp_path
     ):
-        from EvoScientist.tools.skills_manager import pinned_skill_names
+        from metasci_scribe.tools.skills_manager import pinned_skill_names
 
         outside = self._skill_in(tmp_path / "outside", "alpha")
         workspace.skills_dir.mkdir(parents=True)
@@ -2366,7 +2366,7 @@ class TestPinnedSkillNames:
     def test_a_permission_repair_refreshes_the_cached_index(
         self, workspace, unreadable
     ):
-        from EvoScientist.tools.skills_manager import installed_skill_index
+        from metasci_scribe.tools.skills_manager import installed_skill_index
 
         self._skill(workspace, "alpha")
         skill_md = workspace.skills_dir / "alpha" / "SKILL.md"
@@ -2379,7 +2379,7 @@ class TestPinnedSkillNames:
     def test_a_permission_repair_brings_back_the_higher_tier_copy(
         self, workspace, global_skills, unreadable
     ):
-        from EvoScientist.tools.skills_manager import installed_skill_index
+        from metasci_scribe.tools.skills_manager import installed_skill_index
 
         self._skill(workspace, "alpha", "Workspace copy.")
         self._skill_in(global_skills, "alpha", "Global copy.")
@@ -2393,7 +2393,7 @@ class TestPinnedSkillNames:
     def test_a_folder_without_skill_md_does_not_stop_the_scan_being_cached(
         self, workspace, global_skills
     ):
-        from EvoScientist.tools import skills_manager
+        from metasci_scribe.tools import skills_manager
 
         self._skill(workspace, "alpha")
         (workspace.skills_dir / "assets").mkdir()
@@ -2408,7 +2408,7 @@ class TestPinnedSkillNames:
         assert spy.call_count == 1
 
     def test_indexing_does_not_create_the_workspace_skills_folder(self, workspace):
-        from EvoScientist.tools.skills_manager import (
+        from metasci_scribe.tools.skills_manager import (
             installed_skill_index,
             pinned_skill_names,
         )

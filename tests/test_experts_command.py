@@ -8,13 +8,13 @@ from unittest.mock import patch
 
 import pytest
 
-from EvoScientist.commands.base import ChannelRuntime, CommandContext
-from EvoScientist.commands.implementation.experts import (
+from metasci_scribe.commands.base import ChannelRuntime, CommandContext
+from metasci_scribe.commands.implementation.experts import (
     ExpertCommand,
     ExpertsCommand,
     invalidate_experts_cache,
 )
-from EvoScientist.paths import SessionDirs, Workspace
+from metasci_scribe.paths import SessionDirs, Workspace
 from tests.fakes.common import TEST_WORKSPACE
 
 
@@ -87,7 +87,7 @@ class TestExpertsList:
     async def test_lists_installed_experts_in_table(self, workspace):
         ctx, ui = _make_ctx(workspace)
         with patch(
-            "EvoScientist.tools.skills_manager.list_expert_skills",
+            "metasci_scribe.tools.skills_manager.list_expert_skills",
             return_value=[
                 _FakeSkillInfo(
                     name="idea-brainstorm",
@@ -103,7 +103,7 @@ class TestExpertsList:
     async def test_empty_list_prints_help_hint(self, workspace):
         ctx, ui = _make_ctx(workspace)
         with patch(
-            "EvoScientist.tools.skills_manager.list_expert_skills",
+            "metasci_scribe.tools.skills_manager.list_expert_skills",
             return_value=[],
         ):
             await ExpertsCommand().execute(ctx, args=[])
@@ -113,7 +113,7 @@ class TestExpertsList:
     async def test_active_expert_marked_in_table(self, workspace):
         ctx, ui = _make_ctx(workspace, active_teams=["idea-brainstorm"])
         with patch(
-            "EvoScientist.tools.skills_manager.list_expert_skills",
+            "metasci_scribe.tools.skills_manager.list_expert_skills",
             return_value=[
                 _FakeSkillInfo(
                     name="idea-brainstorm",
@@ -134,7 +134,7 @@ class TestExpertToggle:
     async def test_unknown_expert_errors(self, workspace):
         ctx, ui = _make_ctx(workspace)
         with patch(
-            "EvoScientist.tools.skills_manager.list_expert_skills",
+            "metasci_scribe.tools.skills_manager.list_expert_skills",
             return_value=[_FakeSkillInfo(name="idea-brainstorm")],
         ):
             await ExpertCommand().execute(ctx, args=["not-an-expert"])
@@ -154,11 +154,11 @@ class TestExpertToggle:
         ctx, _ui = _make_ctx(workspace)
         with (
             patch(
-                "EvoScientist.tools.skills_manager.list_expert_skills",
+                "metasci_scribe.tools.skills_manager.list_expert_skills",
                 return_value=[_FakeSkillInfo(name="literature-review")],
             ),
             patch(
-                "EvoScientist.langgraph_dev.manager.is_async_subagents_available",
+                "metasci_scribe.langgraph_dev.manager.is_async_subagents_available",
                 return_value=False,
             ),
         ):
@@ -168,7 +168,7 @@ class TestExpertToggle:
     async def test_invite_adds_to_active_teams(self, workspace):
         ctx, ui = _make_ctx(workspace)
         with patch(
-            "EvoScientist.tools.skills_manager.list_expert_skills",
+            "metasci_scribe.tools.skills_manager.list_expert_skills",
             return_value=[_FakeSkillInfo(name="idea-brainstorm")],
         ):
             await ExpertCommand().execute(ctx, args=["idea-brainstorm"])
@@ -187,7 +187,7 @@ class TestExpertToggle:
         it"."""
         ctx, ui = _make_ctx(workspace)
         with patch(
-            "EvoScientist.tools.skills_manager.list_expert_skills",
+            "metasci_scribe.tools.skills_manager.list_expert_skills",
             return_value=[_FakeSkillInfo(name="idea-brainstorm")],
         ):
             await ExpertCommand().execute(ctx, args=["idea-brainstorm"])
@@ -204,7 +204,7 @@ class TestExpertToggle:
         """Execute honours the same case-insensitive match as completion."""
         ctx, ui = _make_ctx(workspace)
         with patch(
-            "EvoScientist.tools.skills_manager.list_expert_skills",
+            "metasci_scribe.tools.skills_manager.list_expert_skills",
             return_value=[_FakeSkillInfo(name="idea-brainstorm")],
         ):
             await ExpertCommand().execute(ctx, args=["Idea-Brainstorm"])
@@ -214,7 +214,7 @@ class TestExpertToggle:
     async def test_toggle_dismisses_when_already_invited(self, workspace):
         ctx, ui = _make_ctx(workspace, active_teams=["idea-brainstorm"])
         with patch(
-            "EvoScientist.tools.skills_manager.list_expert_skills",
+            "metasci_scribe.tools.skills_manager.list_expert_skills",
             return_value=[_FakeSkillInfo(name="idea-brainstorm")],
         ):
             await ExpertCommand().execute(ctx, args=["idea-brainstorm"])
@@ -262,7 +262,7 @@ class TestExpertCompletions:
         # silently reject a fake whose name collides with a future yaml
         # sub-agent.
         return patch(
-            "EvoScientist.subagents.expert_container.list_dispatchable_experts",
+            "metasci_scribe.subagents.expert_container.list_dispatchable_experts",
             return_value=[_FakeSkillInfo(name=n) for n in names],
         )
 

@@ -22,26 +22,26 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from EvoScientist.channels.base import (
+from metasci_scribe.channels.base import (
     ChannelError,
     InboundMessage,
     OutboundMessage,
     RawIncoming,
     chunk_text,
 )
-from EvoScientist.channels.bus.events import (
+from metasci_scribe.channels.bus.events import (
     InboundMessage as BusInbound,
 )
-from EvoScientist.channels.bus.events import (
+from metasci_scribe.channels.bus.events import (
     OutboundMessage as BusOutbound,
 )
-from EvoScientist.channels.bus.message_bus import MessageBus
-from EvoScientist.channels.channel_manager import ChannelManager
-from EvoScientist.channels.consumer import InboundConsumer
-from EvoScientist.channels.formatter import convert_markdown
-from EvoScientist.channels.middleware import DedupCache, MentionGatingMiddleware
-from EvoScientist.channels.retry import RetryConfig, RetryInfo, retry_async
-from EvoScientist.runtime import AsyncRuntime, AsyncRuntimeError
+from metasci_scribe.channels.bus.message_bus import MessageBus
+from metasci_scribe.channels.channel_manager import ChannelManager
+from metasci_scribe.channels.consumer import InboundConsumer
+from metasci_scribe.channels.formatter import convert_markdown
+from metasci_scribe.channels.middleware import DedupCache, MentionGatingMiddleware
+from metasci_scribe.channels.retry import RetryConfig, RetryInfo, retry_async
+from metasci_scribe.runtime import AsyncRuntime, AsyncRuntimeError
 
 # ═══════════════════════════════════════════════════════════════════
 # Helpers
@@ -98,7 +98,8 @@ class TestInboundSyncAdapter:
 
         assert message is not None
         assert not any(
-            thread.name == "evosci-channel-adapter-runtime" and thread.is_alive()
+            thread.name == "metasci-scribe-channel-adapter-runtime"
+            and thread.is_alive()
             for thread in threading.enumerate()
         )
 
@@ -2344,7 +2345,7 @@ class TestEdgeCases:
 
     def test_health_server_response_structure(self, tmp_path):
         """HealthServer builds response with expected keys."""
-        from EvoScientist.channels.channel_manager import _HealthServer
+        from metasci_scribe.channels.channel_manager import _HealthServer
 
         bus = MessageBus()
         mgr = ChannelManager(bus, media_dir=tmp_path)

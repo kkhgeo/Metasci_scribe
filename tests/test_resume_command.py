@@ -3,12 +3,12 @@
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
-from EvoScientist.paths import SessionDirs, Workspace, normalize_path
+from metasci_scribe.paths import SessionDirs, Workspace, normalize_path
 from tests.fakes.common import TEST_WORKSPACE, FakeGraphGateway, FakeThreadStore
 
 
 def _ctx(thread_id="current", run_dir=None, thread_store=None):
-    from EvoScientist.commands.base import CommandContext
+    from metasci_scribe.commands.base import CommandContext
 
     store = thread_store or FakeThreadStore()
     ui = MagicMock()
@@ -26,7 +26,7 @@ def _ctx(thread_id="current", run_dir=None, thread_store=None):
 
 class TestResumeCommand:
     async def test_with_arg_resolves_and_calls_ui(self):
-        from EvoScientist.commands.implementation.session import ResumeCommand
+        from metasci_scribe.commands.implementation.session import ResumeCommand
 
         ctx, ui = _ctx(
             thread_store=FakeThreadStore(
@@ -44,7 +44,7 @@ class TestResumeCommand:
         assert ctx.run_dir is None
 
     async def test_no_arg_empty_threads_prints_message(self):
-        from EvoScientist.commands.implementation.session import ResumeCommand
+        from metasci_scribe.commands.implementation.session import ResumeCommand
 
         ctx, ui = _ctx()
         await ResumeCommand().execute(ctx, [])
@@ -54,7 +54,7 @@ class TestResumeCommand:
         ui.handle_session_resume.assert_not_called()
 
     async def test_no_arg_calls_picker(self):
-        from EvoScientist.commands.implementation.session import ResumeCommand
+        from metasci_scribe.commands.implementation.session import ResumeCommand
 
         ctx, ui = _ctx()
         ui.wait_for_thread_pick.return_value = "picked-tid"
@@ -69,7 +69,7 @@ class TestResumeCommand:
         ui.handle_session_resume.assert_awaited_once()
 
     async def test_picker_cancel_returns(self):
-        from EvoScientist.commands.implementation.session import ResumeCommand
+        from metasci_scribe.commands.implementation.session import ResumeCommand
 
         ctx, ui = _ctx()
         ui.wait_for_thread_pick.return_value = None
@@ -80,7 +80,7 @@ class TestResumeCommand:
         ui.handle_session_resume.assert_not_called()
 
     async def test_ambiguous_prefix(self):
-        from EvoScientist.commands.implementation.session import ResumeCommand
+        from metasci_scribe.commands.implementation.session import ResumeCommand
 
         ctx, ui = _ctx(thread_store=FakeThreadStore(matches=["abc-one", "abc-two"]))
         await ResumeCommand().execute(ctx, ["abc"])
@@ -89,7 +89,7 @@ class TestResumeCommand:
         ui.handle_session_resume.assert_not_called()
 
     async def test_not_found(self):
-        from EvoScientist.commands.implementation.session import ResumeCommand
+        from metasci_scribe.commands.implementation.session import ResumeCommand
 
         ctx, ui = _ctx()
         await ResumeCommand().execute(ctx, ["missing"])
@@ -98,7 +98,7 @@ class TestResumeCommand:
         ui.handle_session_resume.assert_not_called()
 
     async def test_prefix_resolves_to_unique_match(self):
-        from EvoScientist.commands.implementation.session import ResumeCommand
+        from metasci_scribe.commands.implementation.session import ResumeCommand
 
         ctx, ui = _ctx(
             thread_store=FakeThreadStore(
@@ -113,7 +113,7 @@ class TestResumeCommand:
         assert ctx.thread_id == "abc-one"
 
     async def test_empty_workspace_metadata_preserves_ctx_workspace(self):
-        from EvoScientist.commands.implementation.session import ResumeCommand
+        from metasci_scribe.commands.implementation.session import ResumeCommand
 
         ctx, ui = _ctx(
             run_dir=Path("/keep"),
@@ -131,14 +131,14 @@ class TestResumeClearsInvitedExperts:
     """Invitations are session-scoped: switching threads dismisses them."""
 
     def _runtime(self, invited):
-        from EvoScientist.commands.base import ChannelRuntime
+        from metasci_scribe.commands.base import ChannelRuntime
 
         runtime = ChannelRuntime()
         runtime.active_teams = list(invited)
         return runtime
 
     async def test_switching_thread_dismisses_and_announces(self):
-        from EvoScientist.commands.implementation.session import ResumeCommand
+        from metasci_scribe.commands.implementation.session import ResumeCommand
 
         ctx, ui = _ctx(
             thread_id="current",
@@ -153,7 +153,7 @@ class TestResumeClearsInvitedExperts:
         )
 
     async def test_resuming_current_thread_keeps_invitations(self):
-        from EvoScientist.commands.implementation.session import ResumeCommand
+        from metasci_scribe.commands.implementation.session import ResumeCommand
 
         ctx, ui = _ctx(
             thread_id="current",
@@ -166,7 +166,7 @@ class TestResumeClearsInvitedExperts:
         assert not any("Dismissed experts" in m for m in msgs)
 
     async def test_failed_resolution_keeps_invitations(self):
-        from EvoScientist.commands.implementation.session import ResumeCommand
+        from metasci_scribe.commands.implementation.session import ResumeCommand
 
         ctx, _ui = _ctx(thread_store=FakeThreadStore())
         ctx.channel_runtime = self._runtime(["idea-brainstorm"])

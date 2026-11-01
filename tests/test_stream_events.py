@@ -1,4 +1,4 @@
-"""Tests for EvoScientist/stream/events.py helpers."""
+"""Tests for metasci_scribe/stream/events.py helpers."""
 
 import asyncio
 from types import SimpleNamespace
@@ -11,13 +11,13 @@ from langchain_core.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command, Interrupt
 
-from EvoScientist.middleware.ask_user import AskUserMiddleware
-from EvoScientist.stream.events import stream_agent_events
-from EvoScientist.stream.summarization import (
+from metasci_scribe.middleware.ask_user import AskUserMiddleware
+from metasci_scribe.stream.events import stream_agent_events
+from metasci_scribe.stream.summarization import (
     _extract_summary_message_text,
     _find_summarization_event_payload,
 )
-from EvoScientist.stream.tool_results import (
+from metasci_scribe.stream.tool_results import (
     _extract_command_tool_content,
     _extract_tool_content,
 )
@@ -262,7 +262,7 @@ class TestV3ProtocolStreaming:
     ):
         calls = []
         monkeypatch.setattr(
-            "EvoScientist.stream.events.clear_completed_memory_activity_counts",
+            "metasci_scribe.stream.events.clear_completed_memory_activity_counts",
             lambda: calls.append(True),
         )
         agent = FakeV3Agent([])
@@ -276,7 +276,7 @@ class TestV3ProtocolStreaming:
     ):
         calls = []
         monkeypatch.setattr(
-            "EvoScientist.stream.events.clear_completed_memory_activity_counts",
+            "metasci_scribe.stream.events.clear_completed_memory_activity_counts",
             lambda: calls.append(True),
         )
         agent = FakeV3Agent([])
@@ -440,7 +440,7 @@ class TestV3ProtocolStreaming:
 
     async def test_tool_selector_reasoning_delta_is_suppressed(self):
         """Selector reasoning must not appear as main-agent thinking."""
-        from EvoScientist.stream.sink import SessionEventSink
+        from metasci_scribe.stream.sink import SessionEventSink
 
         sink = SessionEventSink()
         sink.on_tool_selection_started(30)  # selector call in flight
@@ -471,7 +471,7 @@ class TestV3ProtocolStreaming:
 
     async def test_default_run_scoped_sink_suppresses_selector_reasoning(self):
         """Default main-agent middleware reports into the current stream sink."""
-        from EvoScientist.middleware.events import RunScopedEventSink
+        from metasci_scribe.middleware.events import RunScopedEventSink
 
         middleware_events = RunScopedEventSink()
 
@@ -529,8 +529,8 @@ class TestV3ProtocolStreaming:
         from langchain.agents.middleware.types import AgentMiddleware
         from langchain_core.runnables.config import run_in_executor
 
-        from EvoScientist.middleware.events import RunScopedEventSink
-        from EvoScientist.stream.sink import SessionEventSink
+        from metasci_scribe.middleware.events import RunScopedEventSink
+        from metasci_scribe.stream.sink import SessionEventSink
 
         class SyncSelectionProbeMiddleware(AgentMiddleware):
             name = "sync_selection_probe"
@@ -612,7 +612,7 @@ class TestV3ProtocolStreaming:
 
     async def test_tool_selector_whole_message_reasoning_is_suppressed(self):
         """Selector reasoning in whole-message payloads is also hidden."""
-        from EvoScientist.stream.sink import SessionEventSink
+        from metasci_scribe.stream.sink import SessionEventSink
 
         sink = SessionEventSink()
         sink.on_tool_selection_started(30)
@@ -944,7 +944,7 @@ class TestV3ProtocolStreaming:
 
     async def test_tool_selection_flushes_before_tool_only_step(self):
         """Selector UI event is emitted even when selection is followed only by a tool."""
-        from EvoScientist.stream.sink import SessionEventSink
+        from metasci_scribe.stream.sink import SessionEventSink
 
         # The frontend sink holds a pending selection (1 of 3 tools) — the
         # suppressor must surface it before the tool-only step.
@@ -1497,7 +1497,7 @@ class TestSummarizationHelpers:
 
 class TestRunInputRubric:
     async def test_text_message_carries_the_rubric_only_when_given(self):
-        from EvoScientist.stream.events import build_agent_stream_input
+        from metasci_scribe.stream.events import build_agent_stream_input
 
         without = await build_agent_stream_input("hi")
         assert without == {
@@ -1513,14 +1513,14 @@ class TestRunInputRubric:
 
     async def test_every_message_clears_a_goal_request_left_on_the_thread(self):
         """A request whose run never finished must not take over this message."""
-        from EvoScientist.stream.events import build_agent_stream_input
+        from metasci_scribe.stream.events import build_agent_stream_input
 
         run_input = await build_agent_stream_input("hi")
         assert "goal_request" in run_input
         assert run_input["goal_request"] is None
 
     async def test_a_goal_request_travels_without_a_message(self):
-        from EvoScientist.stream.events import build_agent_stream_input
+        from metasci_scribe.stream.events import build_agent_stream_input
 
         request = {"kind": "create", "id": "r1", "objective": "ship it"}
         run_input = await build_agent_stream_input("", goal_request=request)
@@ -1528,7 +1528,7 @@ class TestRunInputRubric:
         assert run_input["goal_request"] is not request
 
     async def test_resume_command_is_passed_through_untouched(self):
-        from EvoScientist.stream.events import build_agent_stream_input
+        from metasci_scribe.stream.events import build_agent_stream_input
 
         command = Command(resume={"decisions": []})
         assert await build_agent_stream_input(command, rubric="- a") is command
@@ -2240,13 +2240,13 @@ class TestModelRetryRollback:
     async def test_main_agent_retry_carries_no_name(self):
         from tests.fakes.stream_v3 import retry_event
 
-        out = await self._run([retry_event(agent="EvoScientist")])
+        out = await self._run([retry_event(agent="metasci-scribe")])
         assert self._retries(out)[0]["subagent"] == ""
 
     @staticmethod
     def _screen(events):
         """The answer text a client holds after applying every event."""
-        from EvoScientist.stream.state import StreamState
+        from metasci_scribe.stream.state import StreamState
 
         state = StreamState()
         for event in events:

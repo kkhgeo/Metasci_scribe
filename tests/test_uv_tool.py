@@ -1,4 +1,4 @@
-"""Tests for EvoScientist.uv_tool: receipt reading and the uv to run."""
+"""Tests for metasci_scribe.uv_tool: receipt reading and the uv to run."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from EvoScientist import paths, uv_tool
+from metasci_scribe import paths, uv_tool
 
 # The real functions; conftest stubs them for every other test.
 _FIND_UV = uv_tool.find_uv
@@ -26,7 +26,7 @@ def _real_uv_lookups(monkeypatch):
 RECEIPT = """\
 [tool]
 requirements = [
-    { name = "evoscientist", extras = ["oauth", "telegram"], specifier = "==0.3.6" },
+    { name = "metasci-scribe", extras = ["oauth", "telegram"], specifier = "==0.3.6" },
     { name = "six", specifier = ">=1.10,<2" },
     { name = "idna", extras = ["all"], marker = "python_full_version >= '3.8'", specifier = ">=3" },
     { name = "pyjokes", git = "https://github.com/pyjokes/pyjokes?rev=v0.6.0#7f1a2b3c" },
@@ -41,7 +41,7 @@ constraints = [
     { name = "tomli", marker = "python_full_version <= '3.11'", specifier = "==2.5.0" },
 ]
 python = "3.12"
-entrypoints = [{ name = "EvoSci", install-path = "/x/bin/EvoSci", from = "evoscientist" }]
+entrypoints = [{ name = "metasci-scribe", install-path = "/x/bin/metasci-scribe", from = "metasci-scribe" }]
 
 [tool.options]
 exclude-newer = "2026-10-01T00:00:00Z"
@@ -52,7 +52,7 @@ RECEIPT = RECEIPT.replace("@LOCAL@", LOCAL)
 
 
 def _env(tmp_path: Path, text: str = RECEIPT) -> Path:
-    env = tmp_path / "tools" / "evoscientist"
+    env = tmp_path / "tools" / "metasci-scribe"
     env.mkdir(parents=True)
     (env / "uv-receipt.toml").write_text(text, encoding="utf-8")
     return env
@@ -115,13 +115,15 @@ def test_with_args_keep_specifier_extras_marker_and_sources(tmp_path):
     ],
 )
 def test_source_of_own_requirement(tmp_path, key, value):
-    text = f'[tool]\nrequirements = [{{ name = "evoscientist", {key} = "{value}" }}]\n'
+    text = (
+        f'[tool]\nrequirements = [{{ name = "metasci-scribe", {key} = "{value}" }}]\n'
+    )
     assert uv_tool.read_receipt(_env(tmp_path, text)).source == value
 
 
 def test_receipt_without_python_key(tmp_path, monkeypatch):
     receipt = uv_tool.read_receipt(
-        _env(tmp_path, '[tool]\nrequirements = [{ name = "evoscientist" }]\n')
+        _env(tmp_path, '[tool]\nrequirements = [{ name = "metasci-scribe" }]\n')
     )
     assert receipt.python is None
     assert receipt.constraint_lines() == []
@@ -135,7 +137,7 @@ def test_receipt_without_python_key(tmp_path, monkeypatch):
         "not [ toml",
         "[other]\n",
         '[tool]\nrequirements = [{ name = "six" }]\n',
-        '[tool]\nrequirements = "evoscientist"\n',
+        '[tool]\nrequirements = "metasci-scribe"\n',
     ],
 )
 def test_unreadable_receipt_raises(tmp_path, text):
@@ -144,20 +146,20 @@ def test_unreadable_receipt_raises(tmp_path, text):
 
 
 def test_several_own_entries_join_their_extras(tmp_path):
-    """A receipt written with ``--with 'evoscientist[x]'`` stays readable:
+    """A receipt written with ``--with 'metasci-scribe[x]'`` stays readable:
     the extras-only entries join the one with the version."""
     receipt = uv_tool.read_receipt(
         _env(
             tmp_path,
             "[tool]\nrequirements = [\n"
-            '  { name = "evoscientist", extras = ["telegram"] },\n'
-            '  { name = "EvoScientist", extras = ["oauth"], specifier = "==0.3.6" },\n'
+            '  { name = "metasci-scribe", extras = ["telegram"] },\n'
+            '  { name = "metasci-scribe", extras = ["oauth"], specifier = "==0.3.6" },\n'
             '  { name = "six" },\n'
             "]\n",
         )
     )
     assert receipt.own == {
-        "name": "EvoScientist",
+        "name": "metasci-scribe",
         "extras": ["telegram", "oauth"],
         "specifier": "==0.3.6",
     }
@@ -167,8 +169,8 @@ def test_several_own_entries_join_their_extras(tmp_path):
 def test_two_versioned_own_entries_raise(tmp_path):
     text = (
         "[tool]\nrequirements = [\n"
-        '  { name = "evoscientist", specifier = "==0.3.6" },\n'
-        '  { name = "evoscientist", extras = ["x"], specifier = ">=0.3" },\n'
+        '  { name = "metasci-scribe", specifier = "==0.3.6" },\n'
+        '  { name = "metasci-scribe", extras = ["x"], specifier = ">=0.3" },\n'
         "]\n"
     )
     with pytest.raises(uv_tool.ReceiptError):

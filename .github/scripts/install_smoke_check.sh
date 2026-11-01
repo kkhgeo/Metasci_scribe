@@ -6,17 +6,17 @@
 #             versions against constraints.txt, a second setup that downloads
 #             nothing, and the WebUI launch with the oldest and the newest
 #             WebUI release in the core's range
-#   offline   EvoSci setup and the WebUI launch; run with the network blocked
+#   offline   metasci-scribe setup and the WebUI launch; run with the network blocked
 #   blocked   succeeds only when https://pypi.org cannot be reached
-#   update    EvoSci update to a release (install_smoke_update.py)
+#   update    metasci-scribe update to a release (install_smoke_update.py)
 #
 # EXPECTED_VERSION (else the newest release on INDEX_URL) and
-# EVOSCI_INSTALL_CONSTRAINTS (else constraints.txt at the release tag) are
+# METASCI_SCRIBE_INSTALL_CONSTRAINTS (else constraints.txt at the release tag) are
 # optional.
 set -euo pipefail
 
 INDEX_URL="${INDEX_URL:-https://pypi.org/simple}"
-DATA_DIR="${EVOSCIENTIST_DATA_DIR:-$HOME/.evoscientist}"
+DATA_DIR="${METASCI_SCRIBE_DATA_DIR:-$HOME/.metasci-scribe}"
 BACKEND_URL="http://127.0.0.1:${EVOSCIENTIST_LANGGRAPH_DEV_PORT:-6174}/ok"
 WEBUI_URL="http://127.0.0.1:${EVOSCIENTIST_WEBUI_PORT:-4716}/"
 
@@ -29,8 +29,8 @@ UV=$(sed -nE 's/.*"path": *"([^"]*)".*/\1/p' "$DATA_DIR/tools/uv.json")
 [ -x "$UV" ] || fail "No uv recorded in $DATA_DIR/tools/uv.json"
 BIN_DIR=$("$UV" tool dir --bin)
 TOOL_DIR=$("$UV" tool dir)
-EVOSCI="$BIN_DIR/EvoSci"
-PYTHON="$TOOL_DIR/evoscientist/bin/python"
+METASCI_SCRIBE="$BIN_DIR/metasci-scribe"
+PYTHON="$TOOL_DIR/metasci-scribe/bin/python"
 
 # Any answer below $2 (default 500); the backend's /ok must be a success (300).
 answers() {
@@ -40,9 +40,9 @@ answers() {
 }
 
 show_logs() {
-  echo "--- EvoSci output"
+  echo "--- metasci-scribe output"
   cat "$1" || true
-  for f in "$HOME/.config/evoscientist/langgraph_dev.log" "$HOME/.config/evoscientist/webui.log"; do
+  for f in "$HOME/.config/metasci-scribe/langgraph_dev.log" "$HOME/.config/metasci-scribe/webui.log"; do
     echo "--- $f"
     tail -n 80 "$f" || true
   done
@@ -54,7 +54,7 @@ launch_check() {
   local work log pid i up=0
   work=$(mktemp -d)
   log="$work.log"
-  "$EVOSCI" --ui webui --workdir "$work" </dev/null >"$log" 2>&1 &
+  "$METASCI_SCRIBE" --ui webui --workdir "$work" </dev/null >"$log" 2>&1 &
   pid=$!
   for i in $(seq 1 240); do
     if answers "$BACKEND_URL" 300 && answers "$WEBUI_URL"; then
@@ -74,7 +74,7 @@ launch_check() {
   sleep 3
   if ! kill -TERM "$pid" 2>/dev/null; then
     show_logs "$log"
-    fail "EvoSci exited by itself after the WebUI came up"
+    fail "metasci-scribe exited by itself after the WebUI came up"
   fi
   for i in $(seq 1 30); do
     kill -0 "$pid" 2>/dev/null || break
@@ -83,12 +83,12 @@ launch_check() {
   if kill -0 "$pid" 2>/dev/null; then
     kill -KILL "$pid" || true
     show_logs "$log"
-    fail "EvoSci did not stop within 30 s of SIGTERM"
+    fail "metasci-scribe did not stop within 30 s of SIGTERM"
   fi
   sleep 2
   if answers "$BACKEND_URL" || answers "$WEBUI_URL"; then
     show_logs "$log"
-    fail "The backend or the WebUI still answers after EvoSci stopped"
+    fail "The backend or the WebUI still answers after metasci-scribe stopped"
   fi
   echo "WebUI launch ok"
 }
@@ -101,7 +101,7 @@ expected_version() {
   "$PYTHON" - "$INDEX_URL" <<'EOF'
 import json, re, sys, urllib.request
 from packaging.version import Version
-req = urllib.request.Request(sys.argv[1] + "/evoscientist/", headers={"Accept": "application/vnd.pypi.simple.v1+json"})
+req = urllib.request.Request(sys.argv[1] + "/metasci-scribe/", headers={"Accept": "application/vnd.pypi.simple.v1+json"})
 with urllib.request.urlopen(req, timeout=60) as resp:
     versions = json.load(resp)["versions"]
 print(max((v for v in versions if re.fullmatch(r"\d+(\.\d+)*", v)), key=Version))
@@ -111,18 +111,18 @@ EOF
 online() {
   local expected actual constraints frozen out
   expected=$(expected_version)
-  actual=$("$EVOSCI" --version --json | "$PYTHON" -c 'import json, sys; print(json.load(sys.stdin)["version"])')
-  [ "$actual" = "$expected" ] || fail "EvoSci --version --json reports $actual, expected $expected"
+  actual=$("$METASCI_SCRIBE" --version --json | "$PYTHON" -c 'import json, sys; print(json.load(sys.stdin)["version"])')
+  [ "$actual" = "$expected" ] || fail "metasci-scribe --version --json reports $actual, expected $expected"
   echo "version ok: $actual"
 
   local file
-  file=$("$PYTHON" -c 'import EvoScientist; print(EvoScientist.__file__)')
+  file=$("$PYTHON" -c 'import metasci_scribe; print(metasci_scribe.__file__)')
   case "$file" in
     "$TOOL_DIR"/*) echo "imported from the tool environment: $file" ;;
-    *) fail "EvoScientist is imported from $file, outside $TOOL_DIR" ;;
+    *) fail "Metasci Scribe is imported from $file, outside $TOOL_DIR" ;;
   esac
 
-  constraints="${EVOSCI_INSTALL_CONSTRAINTS:-}"
+  constraints="${METASCI_SCRIBE_INSTALL_CONSTRAINTS:-}"
   if [ -z "$constraints" ]; then
     constraints=$(mktemp)
     curl -fsSL -o "$constraints" "https://raw.githubusercontent.com/EvoScientist/EvoScientist/v$actual/constraints.txt"
@@ -137,9 +137,9 @@ online() {
   echo "$out" | grep -q 'Would make no changes' || fail "The installed versions differ from constraints.txt: $out"
   echo "installed versions match constraints.txt"
 
-  out=$("$EVOSCI" setup --json </dev/null) || fail "The second EvoSci setup failed: $out"
+  out=$("$METASCI_SCRIBE" setup --json </dev/null) || fail "The second metasci-scribe setup failed: $out"
   if echo "$out" | grep -Eq '"(Downloading |Installing |Creating the virtual)'; then
-    fail "The second EvoSci setup downloaded or installed something: $out"
+    fail "The second metasci-scribe setup downloaded or installed something: $out"
   fi
   echo "second setup downloaded nothing"
 
@@ -148,9 +148,9 @@ online() {
   local versions oldest newest version
   versions=$("$PYTHON" - <<'EOF'
 from packaging.version import Version
-from EvoScientist.config import load_config
-from EvoScientist.setup.node import DEFAULT_NPM_REGISTRY, NPM_REGISTRIES
-from EvoScientist.setup.webui import WEBUI_COMPAT, fetch_metadata, in_range
+from metasci_scribe.config import load_config
+from metasci_scribe.setup.node import DEFAULT_NPM_REGISTRY, NPM_REGISTRIES
+from metasci_scribe.setup.webui import WEBUI_COMPAT, fetch_metadata, in_range
 registry = NPM_REGISTRIES.get(load_config().mirror, DEFAULT_NPM_REGISTRY).rstrip("/")
 found = sorted((v for v in fetch_metadata(registry)["versions"] if in_range(v, WEBUI_COMPAT)), key=Version)
 print(found[0], found[-1])
@@ -159,16 +159,16 @@ EOF
   read -r oldest newest <<<"$versions"
   for version in $(printf '%s\n' "$oldest" "$newest" | uniq); do
     echo "WebUI $version"
-    out=$(EVOSCIENTIST_WEBUI_COMPAT="==$version" "$EVOSCI" setup --stage webui --json </dev/null) ||
-      fail "EvoSci setup --stage webui failed for WebUI $version: $out"
+    out=$(METASCI_SCRIBE_WEBUI_COMPAT="==$version" "$METASCI_SCRIBE" setup --stage webui --json </dev/null) ||
+      fail "metasci-scribe setup --stage webui failed for WebUI $version: $out"
     echo "$out" | grep -q "\"Using WebUI $version " || fail "WebUI $version was not installed: $out"
-    EVOSCIENTIST_WEBUI_COMPAT="==$version" launch_check
+    METASCI_SCRIBE_WEBUI_COMPAT="==$version" launch_check
   done
 }
 
 offline() {
   local out
-  out=$("$EVOSCI" setup --json </dev/null) || fail "EvoSci setup failed offline: $out"
+  out=$("$METASCI_SCRIBE" setup --json </dev/null) || fail "metasci-scribe setup failed offline: $out"
   echo "$out" | grep -Eq '"stage": *"webui", *"status": *"done"' ||
     fail "The webui stage did not end with done offline: $out"
   echo "offline setup ok"
@@ -182,29 +182,29 @@ blocked() {
   echo "network blocked"
 }
 
-# EvoSci update to a release through this code's updater. With
-# EVOSCI_INSTALL_SOURCE (a pull request) the install is the newest release
+# metasci-scribe update to a release through this code's updater. With
+# METASCI_SCRIBE_INSTALL_SOURCE (a pull request) the install is the newest release
 # from the scripts, whose receipt the update reads, and this wheel goes over
 # it with uv pip, which leaves the receipt alone; the update then moves it to
 # the newest release. Without it, the installed release is reinstalled, once
-# a release has EvoSci update.
+# a release has metasci-scribe update.
 update() {
   local key=version check target base
-  if [ -n "${EVOSCI_INSTALL_SOURCE:-}" ]; then
+  if [ -n "${METASCI_SCRIBE_INSTALL_SOURCE:-}" ]; then
     # uv splits a -c path at spaces (astral-sh/uv#12639): by name, from its folder.
-    (cd "$(dirname "$EVOSCI_INSTALL_CONSTRAINTS")" &&
-      "$UV" pip install -q --python "$PYTHON" --reinstall-package evoscientist \
-        -c "$(basename "$EVOSCI_INSTALL_CONSTRAINTS")" "$EVOSCI_INSTALL_SOURCE")
+    (cd "$(dirname "$METASCI_SCRIBE_INSTALL_CONSTRAINTS")" &&
+      "$UV" pip install -q --python "$PYTHON" --reinstall-package metasci-scribe \
+        -c "$(basename "$METASCI_SCRIBE_INSTALL_CONSTRAINTS")" "$METASCI_SCRIBE_INSTALL_SOURCE")
     key=latest
-  elif ! "$EVOSCI" update --help >/dev/null 2>&1; then
-    echo "This release has no EvoSci update yet; nothing to check."
+  elif ! "$METASCI_SCRIBE" update --help >/dev/null 2>&1; then
+    echo "This release has no metasci-scribe update yet; nothing to check."
     return 0
   fi
-  check=$("$EVOSCI" update --check --json </dev/null | tail -n 1)
+  check=$("$METASCI_SCRIBE" update --check --json </dev/null | tail -n 1)
   target=$("$PYTHON" -c 'import json, sys; print(json.loads(sys.argv[1])["detail"][sys.argv[2]])' "$check" "$key")
   # Not the environment's Python: it would run from the install being replaced.
   base=$("$PYTHON" -c 'import sys; print(sys._base_executable)')
-  "$base" "$(dirname "$0")/install_smoke_update.py" "$EVOSCI" "$target"
+  "$base" "$(dirname "$0")/install_smoke_update.py" "$METASCI_SCRIBE" "$target"
 }
 
 case "${1:-}" in

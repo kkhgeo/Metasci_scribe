@@ -1,4 +1,4 @@
-"""Tests for EvoScientist.proactive.serve (serve's proactive controller)."""
+"""Tests for metasci_scribe.proactive.serve (serve's proactive controller)."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from EvoScientist.paths import Workspace
-from EvoScientist.proactive.commit import read_proactive_tag
-from EvoScientist.proactive.serve import (
+from metasci_scribe.paths import Workspace
+from metasci_scribe.proactive.commit import read_proactive_tag
+from metasci_scribe.proactive.serve import (
     CRON_THREAD_MAX_AGE_SECONDS,
     DECISION_MAX_AGE_SECONDS,
     MAX_POLL_BACKOFF_SECONDS,
@@ -356,7 +356,7 @@ def test_moving_workspace_leaves_the_old_armed_threads_behind(setup, tmp_path):
 
 
 def test_a_successful_move_ends_an_earlier_failed_move(setup, tmp_path):
-    from EvoScientist.proactive.serve import MOVE_FAILED_REASON
+    from metasci_scribe.proactive.serve import MOVE_FAILED_REASON
 
     controller, _, _, _ = setup
     controller.unavailable_reason = MOVE_FAILED_REASON
@@ -715,8 +715,8 @@ def test_on_the_real_main_graph_a_push_leaves_nothing_to_run(workspace, monkeypa
     from langchain_core.messages import AIMessage, HumanMessage
     from langgraph.checkpoint.memory import InMemorySaver
 
-    import EvoScientist.EvoScientist as es_mod
-    from EvoScientist.config.settings import EvoScientistConfig
+    import metasci_scribe.agent as es_mod
+    from metasci_scribe.config.settings import ScribeConfig
 
     class Fake(GenericFakeChatModel):
         def bind_tools(self, tools, **kwargs):
@@ -726,7 +726,7 @@ def test_on_the_real_main_graph_a_push_leaves_nothing_to_run(workspace, monkeypa
     graph = es_mod.create_cli_agent(
         work_dir=workspace.root,
         checkpointer=InMemorySaver(),
-        config=EvoScientistConfig(),
+        config=ScribeConfig(),
         chat_model=Fake(messages=iter([AIMessage(content="hello")])),
         workspace=workspace,
     )

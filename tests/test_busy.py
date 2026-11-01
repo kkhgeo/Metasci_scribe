@@ -1,8 +1,8 @@
-"""Tests for the backend busy check (``EvoScientist.deploy.busy``)."""
+"""Tests for the backend busy check (``metasci_scribe.deploy.busy``)."""
 
 from __future__ import annotations
 
-from EvoScientist.deploy import busy
+from metasci_scribe.deploy import busy
 
 
 def _patch_probe(monkeypatch, *, reachable, result=None, exc=None):

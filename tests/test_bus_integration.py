@@ -9,9 +9,9 @@ import asyncio
 
 import pytest
 
-from EvoScientist.channels.bus.events import InboundMessage
-from EvoScientist.channels.bus.message_bus import MessageBus
-from EvoScientist.channels.channel_manager import ChannelManager
+from metasci_scribe.channels.bus.events import InboundMessage
+from metasci_scribe.channels.bus.message_bus import MessageBus
+from metasci_scribe.channels.channel_manager import ChannelManager
 from tests.fakes.common import QueueFakeChannel as FakeChannel
 
 
@@ -27,9 +27,9 @@ def _drain_queue(q):
 @pytest.fixture(autouse=True)
 def clean_channel_state():
     """Reset shared channel bridge state before and after each test."""
-    from EvoScientist.cli import channel as channel_mod
-    from EvoScientist.cli.channel import _message_queue
-    from EvoScientist.stream import display as display_mod
+    from metasci_scribe.cli import channel as channel_mod
+    from metasci_scribe.cli.channel import _message_queue
+    from metasci_scribe.stream import display as display_mod
 
     def _reset() -> None:
         _drain_queue(_message_queue)
@@ -58,7 +58,7 @@ class TestBusInboundConsumer:
 
     async def test_processes_inbound_and_publishes_outbound(self, tmp_path):
         """InboundMessage -> queue -> response -> OutboundMessage flow."""
-        from EvoScientist.cli.channel import (
+        from metasci_scribe.cli.channel import (
             _bus_inbound_consumer,
             _message_queue,
             _set_channel_response,
@@ -113,7 +113,7 @@ class TestBusInboundConsumer:
     async def test_already_sent_sentinel_suppresses_reply(self, tmp_path):
         """A command whose output already reached the channel must not get a
         second "Command executed" style reply from the consumer."""
-        from EvoScientist.cli.channel import (
+        from metasci_scribe.cli.channel import (
             COMMAND_OUTPUT_ALREADY_SENT,
             _bus_inbound_consumer,
             _message_queue,
@@ -159,7 +159,7 @@ class TestBusInboundConsumer:
 
     async def test_no_response_fallback(self, tmp_path):
         """Empty response is replaced with 'No response' fallback."""
-        from EvoScientist.cli.channel import (
+        from metasci_scribe.cli.channel import (
             _bus_inbound_consumer,
             _message_queue,
             _set_channel_response,
@@ -208,8 +208,8 @@ class TestBusInboundConsumer:
         self, monkeypatch, tmp_path
     ):
         """A response that arrives after the bridge timeout is still forwarded."""
-        from EvoScientist.cli import channel as channel_mod
-        from EvoScientist.cli.channel import (
+        from metasci_scribe.cli import channel as channel_mod
+        from metasci_scribe.cli.channel import (
             _bus_inbound_consumer,
             _message_queue,
             _set_channel_response,
@@ -270,15 +270,15 @@ class TestBusInboundConsumer:
         self, monkeypatch, tmp_path
     ):
         """Late timeout must not discard an active request's cancel scope."""
-        from EvoScientist.cli import channel as channel_mod
-        from EvoScientist.cli.channel import (
+        from metasci_scribe.cli import channel as channel_mod
+        from metasci_scribe.cli.channel import (
             _channel_message_cancel_scope,
             _channel_request_state,
             _claim_channel_request,
             _handle_bus_message,
             _message_queue,
         )
-        from EvoScientist.stream import display as display_mod
+        from metasci_scribe.stream import display as display_mod
 
         monkeypatch.setattr(channel_mod, "_RESPONSE_TIMEOUT", 0.05)
         monkeypatch.setattr(channel_mod, "_LATE_RESPONSE_TIMEOUT", 0.05)
@@ -341,8 +341,8 @@ class TestBusInboundConsumer:
 
     async def test_cancelled_wait_cleans_pending_response(self, tmp_path):
         """Cancelling a pending bus message should not leak its response slot."""
-        from EvoScientist.cli import channel as channel_mod
-        from EvoScientist.cli.channel import _handle_bus_message, _message_queue
+        from metasci_scribe.cli import channel as channel_mod
+        from metasci_scribe.cli.channel import _handle_bus_message, _message_queue
 
         bus = MessageBus()
         manager = ChannelManager(bus, media_dir=tmp_path)
@@ -380,8 +380,8 @@ class TestBusInboundConsumer:
 
     async def test_consumer_shutdown_cleans_pending_response(self, tmp_path):
         """Stopping the consumer should cancel late waits and clear state."""
-        from EvoScientist.cli import channel as channel_mod
-        from EvoScientist.cli.channel import _bus_inbound_consumer, _message_queue
+        from metasci_scribe.cli import channel as channel_mod
+        from metasci_scribe.cli.channel import _bus_inbound_consumer, _message_queue
 
         bus = MessageBus()
         manager = ChannelManager(bus, media_dir=tmp_path)
@@ -422,8 +422,8 @@ class TestBusInboundConsumer:
         interception sits ahead of normal enqueue, so the message never
         becomes a fresh agent turn.
         """
-        from EvoScientist.cli import channel as channel_mod
-        from EvoScientist.cli.channel import _bus_inbound_consumer, _message_queue
+        from metasci_scribe.cli import channel as channel_mod
+        from metasci_scribe.cli.channel import _bus_inbound_consumer, _message_queue
 
         bus = MessageBus()
         manager = ChannelManager(bus, media_dir=tmp_path)
@@ -467,8 +467,8 @@ class TestBusInboundConsumer:
         self, tmp_path
     ):
         """`/stop` should cancel a queued request instead of only acking."""
-        from EvoScientist.cli import channel as channel_mod
-        from EvoScientist.cli.channel import (
+        from metasci_scribe.cli import channel as channel_mod
+        from metasci_scribe.cli.channel import (
             _claim_or_complete_channel_request,
             _handle_bus_message,
             _message_queue,
@@ -539,8 +539,8 @@ class TestBusInboundConsumer:
 
     async def test_stop_leaves_resolved_response_available_for_delivery(self):
         """`/stop` must not steal a response whose waiter already resolved."""
-        from EvoScientist.cli import channel as channel_mod
-        from EvoScientist.cli.channel import (
+        from metasci_scribe.cli import channel as channel_mod
+        from metasci_scribe.cli.channel import (
             ChannelMessage,
             _cancel_channel_session,
             _claim_channel_request,
@@ -584,7 +584,7 @@ class TestBusInboundConsumer:
 
     async def test_message_counting(self, tmp_path):
         """Messages are counted via record_message."""
-        from EvoScientist.cli.channel import (
+        from metasci_scribe.cli.channel import (
             _bus_inbound_consumer,
             _message_queue,
             _set_channel_response,
@@ -629,7 +629,7 @@ class TestBusInboundConsumer:
 
     async def test_channel_message_carries_metadata(self, tmp_path):
         """ChannelMessage carries metadata, chat_id, and message_id."""
-        from EvoScientist.cli.channel import (
+        from metasci_scribe.cli.channel import (
             _bus_inbound_consumer,
             _message_queue,
             _set_channel_response,

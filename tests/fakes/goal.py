@@ -15,12 +15,12 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 from pydantic import Field
 
-from EvoScientist.config import EvoScientistConfig
-from EvoScientist.EvoScientist import create_cli_agent
-from EvoScientist.message_meta import this_run_messages
-from EvoScientist.middleware.goal import GoalContextMiddleware, GoalMiddleware
-from EvoScientist.middleware.rubric import create_rubric_middleware
-from EvoScientist.paths import Workspace
+from metasci_scribe.agent import create_cli_agent
+from metasci_scribe.config import ScribeConfig
+from metasci_scribe.message_meta import this_run_messages
+from metasci_scribe.middleware.goal import GoalContextMiddleware, GoalMiddleware
+from metasci_scribe.middleware.rubric import create_rubric_middleware
+from metasci_scribe.paths import Workspace
 from tests.fakes.rubric import FAIL, PASS, ScriptedGrader
 
 ACCEPT = {"answers": ["Accept"], "status": "answered"}
@@ -250,7 +250,7 @@ class AllRoles(BaseChatModel):
 
 def cli_goal_agent(tmp_path, **model_kwargs):
     model = AllRoles(**model_kwargs)
-    cfg = EvoScientistConfig(enable_async_subagents=False, memory_workers_enabled=False)
+    cfg = ScribeConfig(enable_async_subagents=False, memory_workers_enabled=False)
     agent = create_cli_agent(
         workspace=Workspace(tmp_path),
         config=cfg,

@@ -1,6 +1,6 @@
-"""Tests for EvoScientist/stream/utils.py pure functions."""
+"""Tests for metasci_scribe/stream/utils.py pure functions."""
 
-from EvoScientist.stream.utils import (
+from metasci_scribe.stream.utils import (
     _shorten_path,
     count_lines,
     format_tool_compact,
@@ -168,8 +168,8 @@ class TestFormatToolCompact:
         assert write_result == "Updating memory"
 
     def test_profile_memory_inference_uses_profile_template_headings(self, monkeypatch):
-        from EvoScientist.middleware import memory
-        from EvoScientist.stream import utils
+        from metasci_scribe.middleware import memory
+        from metasci_scribe.stream import utils
 
         monkeypatch.setitem(
             memory.PROFILE_TEMPLATES,
@@ -190,7 +190,7 @@ class TestFormatToolCompact:
         assert result == "Reading memory"
 
     def test_profile_memory_headings_skip_user_profile_frontmatter(self):
-        from EvoScientist.stream import utils
+        from metasci_scribe.stream import utils
 
         utils._profile_memory_headings.cache_clear()
         try:

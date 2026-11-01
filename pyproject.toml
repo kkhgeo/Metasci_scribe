@@ -1,17 +1,14 @@
 [project]
-name = "EvoScientist"
-version = "0.3.8"
-description = "EvoScientist: Towards Self-Evolving AI Scientists for End-to-End Scientific Discovery"
+name = "metasci-scribe"
+version = "0.1.0.dev0"
+description = "Metasci Scribe: a terminal writing agent for scientific manuscripts (fork of EvoScientist v0.3.8)"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 authors = [
-    { name = "Xi Zhang" },
+    { name = "Metasci Scribe contributors" },
 ]
-maintainers = [
-    { name = "Xi Zhang" },
-]
-keywords = ["ai-scientific", "scientific-discovery", "self-evolving", "ai-scientists", "end-to-end"]
+keywords = ["scientific-writing", "manuscript", "terminal-agent"]
 classifiers = [
     "Programming Language :: Python :: 3",
 ]
@@ -106,25 +103,20 @@ all-channels = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/EvoScientist/EvoScientist"
-"Bug Tracker" = "https://github.com/EvoScientist/EvoScientist/issues"
-"Documentation" = "https://github.com/EvoScientist/EvoScientist#readme"
+"Upstream (EvoScientist v0.3.8)" = "https://github.com/EvoScientist/EvoScientist"
 
 [project.scripts]
-evoscientist = "EvoScientist.cli:main"
-EvoScientist = "EvoScientist.cli:main"
-evosci = "EvoScientist.cli:main"
-EvoSci = "EvoScientist.cli:main"
+metasci-scribe = "metasci_scribe.cli:main"
 
 [build-system]
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["EvoScientist*"]
+include = ["metasci_scribe*"]
 
 [tool.setuptools.package-data]
-EvoScientist = [
+metasci_scribe = [
     "subagents/*.yaml",
     "langgraph_dev/*.json",
     "skills/**/*",

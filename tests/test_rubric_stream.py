@@ -12,8 +12,8 @@ from langchain_core.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
-from EvoScientist.middleware.rubric import create_rubric_middleware
-from EvoScientist.stream.events import stream_agent_events
+from metasci_scribe.middleware.rubric import create_rubric_middleware
+from metasci_scribe.stream.events import stream_agent_events
 from tests.fakes.rubric import FAIL, PASS, MainModel, ScriptedGrader
 
 
@@ -28,7 +28,7 @@ def _deep(tmp_path, verdicts, replies, **middleware_kwargs):
         backend=backend,
         middleware=[rubric],
         checkpointer=InMemorySaver(),
-        name="EvoScientist",
+        name="metasci-scribe",
     )
     return agent, grader
 
@@ -136,7 +136,7 @@ async def _parked_at_an_approval(tmp_path):
         interrupt_on={"needs_approval": True},
         middleware=[rubric],
         checkpointer=InMemorySaver(),
-        name="EvoScientist",
+        name="metasci-scribe",
     )
     first = await _collect(agent, "do it", "t", rubric="- c1")
     assert any(event["type"] == "interrupt" for event in first)

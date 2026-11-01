@@ -9,7 +9,7 @@ import sys
 import pytest
 import typer
 
-from EvoScientist.cli.commands import (
+from metasci_scribe.cli.commands import (
     RUBRIC_UNMET_EXIT_CODE,
     _grader_failure_on_one_line,
     _resolve_rubric_option,
@@ -95,8 +95,8 @@ def test_exit_code(rubric, result, expected):
 def test_background_dispatch_switch_also_covers_experts(tmp_path):
     from types import SimpleNamespace
 
-    from EvoScientist.paths import Workspace
-    from EvoScientist.subagents.expert_container_async import (
+    from metasci_scribe.paths import Workspace
+    from metasci_scribe.subagents.expert_container_async import (
         build_expert_async_subagent_specs,
     )
 
@@ -108,9 +108,9 @@ def _invoke(monkeypatch, argv, config=None):
     """Run the CLI up to get_effective_config and return (overrides, result)."""
     from typer.testing import CliRunner
 
-    import EvoScientist.config as cfg_mod
-    from EvoScientist.cli._app import app
-    from EvoScientist.stream.console import console
+    import metasci_scribe.config as cfg_mod
+    from metasci_scribe.cli._app import app
+    from metasci_scribe.stream.console import console
 
     captured: dict[str, object] = {}
 
@@ -140,9 +140,9 @@ def test_the_process_config_keeps_the_users_background_dispatch(monkeypatch, arg
 
 
 def test_only_the_agents_copy_turns_background_dispatch_off():
-    from EvoScientist.config import EvoScientistConfig
+    from metasci_scribe.config import ScribeConfig
 
-    config = EvoScientistConfig()
+    config = ScribeConfig()
     agent_config = _single_shot_agent_config(config, "- a")
     assert agent_config is not config
     assert agent_config.enable_async_subagents is False
@@ -156,14 +156,14 @@ def _single_shot(monkeypatch, tmp_path, *, load_agent, verdict=None):
     from types import SimpleNamespace
     from unittest.mock import AsyncMock, MagicMock
 
-    import EvoScientist.cli.commands as cmd_mod
-    import EvoScientist.cli.interactive as interactive_mod
-    import EvoScientist.gateway as gateway_mod
-    import EvoScientist.sessions as sessions_mod
-    from EvoScientist.config import EvoScientistConfig
-    from EvoScientist.langgraph_dev.manager import _server_config_fingerprint
+    import metasci_scribe.cli.commands as cmd_mod
+    import metasci_scribe.cli.interactive as interactive_mod
+    import metasci_scribe.gateway as gateway_mod
+    import metasci_scribe.sessions as sessions_mod
+    from metasci_scribe.config import ScribeConfig
+    from metasci_scribe.langgraph_dev.manager import _server_config_fingerprint
 
-    config = EvoScientistConfig(ui_backend="cli")
+    config = ScribeConfig(ui_backend="cli")
     seen: dict[str, object] = {"plain": _server_config_fingerprint(config)}
 
     @asynccontextmanager
@@ -231,7 +231,7 @@ def test_the_exit_line_says_whether_the_run_was_graded(
     import io
     from unittest.mock import MagicMock
 
-    from EvoScientist.stream.console import console
+    from metasci_scribe.stream.console import console
 
     # The turn runs on the runtime's own thread, out of reach of a capture.
     printed = io.StringIO()
@@ -294,7 +294,7 @@ def test_the_console_gets_a_one_line_copy_of_a_grader_failure(message):
 
 
 def test_other_records_reach_the_console_as_they_are():
-    elsewhere = _raised("EvoScientist.cli", "RubricMiddleware grader failed (m)")
+    elsewhere = _raised("metasci_scribe.cli", "RubricMiddleware grader failed (m)")
     another = _raised("deepagents.middleware.rubric", "on_evaluation callback raised")
     plain = logging.LogRecord(
         "deepagents.middleware.rubric",
@@ -330,9 +330,9 @@ def test_only_the_console_loses_the_grader_traceback(
 ):
     from types import SimpleNamespace
 
-    import EvoScientist.config as cfg_mod
-    from EvoScientist.cli.commands import _configure_logging
-    from EvoScientist.stream.console import console
+    import metasci_scribe.config as cfg_mod
+    from metasci_scribe.cli.commands import _configure_logging
+    from metasci_scribe.stream.console import console
 
     monkeypatch.setattr(
         cfg_mod,
@@ -384,7 +384,7 @@ def test_rubric_is_refused_on_the_server_gateway(monkeypatch):
 
 def test_runtime_fallback_keeps_the_rubric(monkeypatch):
     """When the first renderer fails, the retry must still be a graded run."""
-    from EvoScientist.cli import tui_runtime
+    from metasci_scribe.cli import tui_runtime
 
     class _FailingBackend:
         def run_streaming(self, **_kwargs):

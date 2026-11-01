@@ -1,13 +1,13 @@
 # `stream-json` output protocol
 
-`EvoSci --output-format stream-json` runs a single-shot (`-p`) session and emits
-EvoScientist's **native event stream** as line-delimited JSON (JSONL) on stdout —
+`metasci-scribe --output-format stream-json` runs a single-shot (`-p`) session and emits
+Metasci Scribe's **native event stream** as line-delimited JSON (JSONL) on stdout —
 one self-describing JSON object per line. This is the integration surface for
-programmatic clients that drive EvoScientist headlessly (for example, an agent
+programmatic clients that drive Metasci Scribe headlessly (for example, an agent
 runtime that assigns work and renders live progress).
 
 ```bash
-EvoSci -p "Summarize the attention mechanism into notes.md" \
+metasci-scribe -p "Summarize the attention mechanism into notes.md" \
        --output-format stream-json \
        --auto-mode \
        --workdir /path/to/task

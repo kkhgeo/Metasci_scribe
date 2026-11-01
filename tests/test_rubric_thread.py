@@ -7,8 +7,8 @@ from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
-from EvoScientist.message_meta import this_run_messages
-from EvoScientist.middleware.rubric import create_rubric_middleware
+from metasci_scribe.message_meta import this_run_messages
+from metasci_scribe.middleware.rubric import create_rubric_middleware
 from tests.fakes.rubric import FAIL, PASS, MainModel, ScriptedGrader
 
 GRADER_NODE = "EvoRubricMiddleware.after_agent"

@@ -4,16 +4,16 @@ import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from EvoScientist import paths
-from EvoScientist.config import (
-    EvoScientistConfig,
+from metasci_scribe import paths
+from metasci_scribe.config import (
     MemorySkillSynthesisCadence,
     MemorySkillSynthesisMode,
+    ScribeConfig,
     save_config,
     set_config_value,
 )
-from EvoScientist.memory.autoskills.candidates import autoskill_candidates
-from EvoScientist.memory.autoskills.proposals import (
+from metasci_scribe.memory.autoskills.candidates import autoskill_candidates
+from metasci_scribe.memory.autoskills.proposals import (
     approve_skill_proposal,
     autoskill_proposals_dir,
     list_skill_proposals,
@@ -21,15 +21,15 @@ from EvoScientist.memory.autoskills.proposals import (
     reject_skill_proposal,
     submit_autoskill_proposal,
 )
-from EvoScientist.memory.autoskills.schedule import (
+from metasci_scribe.memory.autoskills.schedule import (
     AUTOSKILL_GRAPH_ID,
     AUTOSKILL_RUN_KIND,
     alist_autoskill_schedules,
     autoskill_cron,
     reconcile_autoskill_schedule,
 )
-from EvoScientist.memory.autoskills.tools import create_submit_autoskill_proposal_tool
-from EvoScientist.memory.observations import (
+from metasci_scribe.memory.autoskills.tools import create_submit_autoskill_proposal_tool
+from metasci_scribe.memory.observations import (
     MemoryScope,
     MemorySourceType,
     MemoryType,
@@ -37,7 +37,7 @@ from EvoScientist.memory.observations import (
     link_observation_files,
     record_observation_file,
 )
-from EvoScientist.paths import Workspace
+from metasci_scribe.paths import Workspace
 
 
 def _record(
@@ -57,7 +57,7 @@ def _record(
         scope=MemoryScope.PROJECT,
         source_type=MemorySourceType.TURN,
         source_session_id="thread-1",
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
 
 
@@ -268,7 +268,7 @@ def test_skill_proposal_lifecycle_promotes_to_workspace_skill(tmp_path):
     assert pending[0].proposal_id == "focused-validation"
 
     with patch(
-        "EvoScientist.memory.autoskills.proposals._notify_approved_skill"
+        "metasci_scribe.memory.autoskills.proposals._notify_approved_skill"
     ) as notify:
         approved = approve_skill_proposal(
             memory_dir,
@@ -793,12 +793,12 @@ def test_submit_tool_reads_live_autoskill_mode_without_rebuild(
     monkeypatch,
 ):
     monkeypatch.setattr(
-        "EvoScientist.config.settings.find_dotenv",
+        "metasci_scribe.config.settings.find_dotenv",
         lambda *a, **k: str(tmp_path / ".env"),
     )
-    monkeypatch.delenv("EVOSCIENTIST_MEMORY_SKILL_SYNTHESIS_MODE", raising=False)
+    monkeypatch.delenv("METASCI_SCRIBE_MEMORY_SKILL_SYNTHESIS_MODE", raising=False)
     save_config(
-        EvoScientistConfig(
+        ScribeConfig(
             memory_skill_synthesis_mode=MemorySkillSynthesisMode.REVIEW,
         )
     )
@@ -894,7 +894,7 @@ def test_reject_skill_proposal_marks_processed(tmp_path):
     )
 
     with patch(
-        "EvoScientist.memory.autoskills.proposals._notify_approved_skill"
+        "metasci_scribe.memory.autoskills.proposals._notify_approved_skill"
     ) as notify:
         rejected = reject_skill_proposal(memory_dir, proposal["proposal_id"])
 
@@ -959,7 +959,7 @@ async def test_alist_autoskill_schedules_uses_async_client(
     monkeypatch.setattr("langgraph_sdk.get_client", lambda **_kwargs: client)
 
     rows = await alist_autoskill_schedules(
-        EvoScientistConfig(),
+        ScribeConfig(),
         workspace_dir=workspace.root,
     )
 
@@ -975,12 +975,12 @@ def test_reconcile_autoskill_schedule_creates_updates_and_disables(
     crons = _FakeCrons()
     client = SimpleNamespace(crons=crons)
     monkeypatch.setattr(
-        "EvoScientist.langgraph_dev.manager.is_langgraph_dev_running",
+        "metasci_scribe.langgraph_dev.manager.is_langgraph_dev_running",
         lambda **_kwargs: True,
     )
     monkeypatch.setattr("langgraph_sdk.get_sync_client", lambda **_kwargs: client)
 
-    cfg = EvoScientistConfig(
+    cfg = ScribeConfig(
         memory_skill_synthesis_enabled=True,
         memory_skill_synthesis_cadence=MemorySkillSynthesisCadence.WEEKLY,
         memory_skill_synthesis_time="03:00",
@@ -990,7 +990,7 @@ def test_reconcile_autoskill_schedule_creates_updates_and_disables(
     created = reconcile_autoskill_schedule(cfg, workspace_dir=tmp_path)
     unchanged = reconcile_autoskill_schedule(cfg, workspace_dir=tmp_path)
     updated = reconcile_autoskill_schedule(
-        EvoScientistConfig(
+        ScribeConfig(
             memory_skill_synthesis_enabled=True,
             memory_skill_synthesis_cadence=MemorySkillSynthesisCadence.NIGHTLY,
             memory_skill_synthesis_time="03:00",
@@ -999,7 +999,7 @@ def test_reconcile_autoskill_schedule_creates_updates_and_disables(
         workspace_dir=tmp_path,
     )
     disabled = reconcile_autoskill_schedule(
-        EvoScientistConfig(memory_skill_synthesis_enabled=False),
+        ScribeConfig(memory_skill_synthesis_enabled=False),
         workspace_dir=tmp_path,
     )
 

@@ -1,8 +1,8 @@
-"""Unit tests for helpers in ``EvoScientist.commands.base``."""
+"""Unit tests for helpers in ``metasci_scribe.commands.base``."""
 
 from __future__ import annotations
 
-from EvoScientist.commands.base import ChannelRuntime, active_teams_configurable_extra
+from metasci_scribe.commands.base import ChannelRuntime, active_teams_configurable_extra
 
 
 class TestActiveTeamsConfigurableExtra:

@@ -1,4 +1,4 @@
-"""Serve wiring of the proactive controller (EvoScientist.cli.commands)."""
+"""Serve wiring of the proactive controller (metasci_scribe.cli.commands)."""
 
 from __future__ import annotations
 
@@ -7,19 +7,19 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from langgraph.graph.state import CompiledStateGraph
 
-from EvoScientist.cli.commands import (
+from metasci_scribe.cli.commands import (
     ServeRuntimeState,
     _make_serve_handle_session_resume_cb,
     _make_serve_proactive_switch,
     _serve_proactive_call,
     _serve_proactive_controller,
 )
-from EvoScientist.commands.base import ChannelRuntime
-from EvoScientist.config import EvoScientistConfig
-from EvoScientist.gateway import RuntimeGateways
-from EvoScientist.gateway.composite import CompositeGraphGateway
-from EvoScientist.paths import SessionDirs, Workspace
-from EvoScientist.runtime import AsyncRuntime
+from metasci_scribe.commands.base import ChannelRuntime
+from metasci_scribe.config import ScribeConfig
+from metasci_scribe.gateway import RuntimeGateways
+from metasci_scribe.gateway.composite import CompositeGraphGateway
+from metasci_scribe.paths import SessionDirs, Workspace
+from metasci_scribe.runtime import AsyncRuntime
 from tests.fakes.common import FakeGraphGateway, FakeThreadStore
 
 
@@ -42,7 +42,7 @@ def test_controller_is_unavailable_without_the_server_gateway(
     workspace, backend, reason
 ):
     controller = _serve_proactive_controller(
-        EvoScientistConfig(),
+        ScribeConfig(),
         _gateways(),
         gateway_backend=backend,
         workspace=workspace,
@@ -54,11 +54,11 @@ def test_controller_is_unavailable_without_the_server_gateway(
 def test_controller_is_available_on_the_server_gateway(workspace):
     composite = MagicMock(spec=CompositeGraphGateway)
     with patch(
-        "EvoScientist.langgraph_dev.sdk.get_langgraph_sync_client",
+        "metasci_scribe.langgraph_dev.sdk.get_langgraph_sync_client",
         return_value=MagicMock(),
     ) as build:
         controller = _serve_proactive_controller(
-            EvoScientistConfig(),
+            ScribeConfig(),
             _gateways(composite),
             gateway_backend="langgraph_server",
             workspace=workspace,
@@ -70,15 +70,15 @@ def test_controller_is_available_on_the_server_gateway(workspace):
 
 
 def test_the_controller_can_put_back_an_origin_it_forgot(workspace):
-    from EvoScientist.cli.channel import forget_channel_origin, restore_channel_origin
+    from metasci_scribe.cli.channel import forget_channel_origin, restore_channel_origin
 
     composite = MagicMock(spec=CompositeGraphGateway)
     with patch(
-        "EvoScientist.langgraph_dev.sdk.get_langgraph_sync_client",
+        "metasci_scribe.langgraph_dev.sdk.get_langgraph_sync_client",
         return_value=MagicMock(),
     ):
         controller = _serve_proactive_controller(
-            EvoScientistConfig(),
+            ScribeConfig(),
             _gateways(composite),
             gateway_backend="langgraph_server",
             workspace=workspace,
@@ -109,7 +109,7 @@ def _state(dirs: SessionDirs) -> ServeRuntimeState:
         agent=MagicMock(spec=CompiledStateGraph),
         thread_id="old-tid",
         dirs=dirs,
-        config=EvoScientistConfig(),
+        config=ScribeConfig(),
         runtime_gateways=_gateways(),
         async_runtime=MagicMock(spec=AsyncRuntime),
     )
@@ -155,9 +155,9 @@ async def test_resume_into_another_workspace_moves_the_cron_with_the_server():
 
     cb = _make_serve_handle_session_resume_cb(state, runtime, config=state.config)
     with (
-        patch("EvoScientist.cli.commands._load_agent", return_value=MagicMock()),
+        patch("metasci_scribe.cli.commands._load_agent", return_value=MagicMock()),
         patch(
-            "EvoScientist.cli.commands._move_server_or_keep_session",
+            "metasci_scribe.cli.commands._move_server_or_keep_session",
             new=AsyncMock(side_effect=move),
         ),
     ):
@@ -176,7 +176,7 @@ async def test_resume_into_another_workspace_moves_the_cron_with_the_server():
 
 
 async def test_a_restart_in_the_workspace_serve_moved_from_restores_nothing(tmp_path):
-    from EvoScientist.proactive.serve import ProactiveServe
+    from metasci_scribe.proactive.serve import ProactiveServe
     from tests.fakes.serve import FakeProactiveClient, seed_source_thread
 
     old_ws, new_ws = (Workspace(tmp_path / name) for name in ("ws1", "ws2"))
@@ -191,9 +191,9 @@ async def test_a_restart_in_the_workspace_serve_moved_from_restores_nothing(tmp_
     )
     cb = _make_serve_handle_session_resume_cb(state, runtime, config=state.config)
     with (
-        patch("EvoScientist.cli.commands._load_agent", return_value=MagicMock()),
+        patch("metasci_scribe.cli.commands._load_agent", return_value=MagicMock()),
         patch(
-            "EvoScientist.cli.commands._move_server_or_keep_session",
+            "metasci_scribe.cli.commands._move_server_or_keep_session",
             new=AsyncMock(return_value=True),
         ),
     ):
@@ -205,8 +205,8 @@ async def test_a_restart_in_the_workspace_serve_moved_from_restores_nothing(tmp_
 
 
 async def test_a_refused_server_move_keeps_the_current_thread_armed(tmp_path):
-    from EvoScientist.langgraph_dev.manager import WorkspaceMismatchError
-    from EvoScientist.proactive.serve import ProactiveServe
+    from metasci_scribe.langgraph_dev.manager import WorkspaceMismatchError
+    from metasci_scribe.proactive.serve import ProactiveServe
     from tests.fakes.serve import FakeProactiveClient, seed_source_thread
 
     old_ws, new_ws = (Workspace(tmp_path / name) for name in ("ws1", "ws2"))
@@ -222,9 +222,9 @@ async def test_a_refused_server_move_keeps_the_current_thread_armed(tmp_path):
     )
     cb = _make_serve_handle_session_resume_cb(state, runtime, config=state.config)
     with (
-        patch("EvoScientist.cli.commands._load_agent", return_value=MagicMock()),
+        patch("metasci_scribe.cli.commands._load_agent", return_value=MagicMock()),
         patch(
-            "EvoScientist.cli.commands._move_server_or_keep_session",
+            "metasci_scribe.cli.commands._move_server_or_keep_session",
             new=AsyncMock(side_effect=WorkspaceMismatchError("held elsewhere")),
         ),
         pytest.raises(WorkspaceMismatchError),
@@ -243,8 +243,8 @@ async def test_a_refused_move_right_after_a_restart_keeps_the_restored_thread(
 ):
     from types import SimpleNamespace
 
-    from EvoScientist.langgraph_dev.manager import WorkspaceMismatchError
-    from EvoScientist.proactive.serve import ProactiveServe
+    from metasci_scribe.langgraph_dev.manager import WorkspaceMismatchError
+    from metasci_scribe.proactive.serve import ProactiveServe
     from tests.fakes.serve import FakeProactiveClient, seed_source_thread
 
     old_ws, new_ws = (Workspace(tmp_path / name) for name in ("ws1", "ws2"))
@@ -274,9 +274,9 @@ async def test_a_refused_move_right_after_a_restart_keeps_the_restored_thread(
     )
     cb = _make_serve_handle_session_resume_cb(state, runtime, config=state.config)
     with (
-        patch("EvoScientist.cli.commands._load_agent", return_value=MagicMock()),
+        patch("metasci_scribe.cli.commands._load_agent", return_value=MagicMock()),
         patch(
-            "EvoScientist.cli.commands._move_server_or_keep_session",
+            "metasci_scribe.cli.commands._move_server_or_keep_session",
             new=AsyncMock(side_effect=WorkspaceMismatchError("held elsewhere")),
         ),
         pytest.raises(WorkspaceMismatchError),
@@ -294,8 +294,8 @@ async def test_a_refused_move_right_after_a_restart_keeps_the_restored_thread(
 async def test_a_refused_server_move_does_not_arm_a_thread_that_was_not_armed(
     tmp_path,
 ):
-    from EvoScientist.langgraph_dev.manager import WorkspaceMismatchError
-    from EvoScientist.proactive.serve import ProactiveServe
+    from metasci_scribe.langgraph_dev.manager import WorkspaceMismatchError
+    from metasci_scribe.proactive.serve import ProactiveServe
     from tests.fakes.serve import FakeProactiveClient, seed_source_thread
 
     old_ws, new_ws = (Workspace(tmp_path / name) for name in ("ws1", "ws2"))
@@ -312,9 +312,9 @@ async def test_a_refused_server_move_does_not_arm_a_thread_that_was_not_armed(
     )
     cb = _make_serve_handle_session_resume_cb(state, runtime, config=state.config)
     with (
-        patch("EvoScientist.cli.commands._load_agent", return_value=MagicMock()),
+        patch("metasci_scribe.cli.commands._load_agent", return_value=MagicMock()),
         patch(
-            "EvoScientist.cli.commands._move_server_or_keep_session",
+            "metasci_scribe.cli.commands._move_server_or_keep_session",
             new=AsyncMock(side_effect=WorkspaceMismatchError("held elsewhere")),
         ),
         pytest.raises(WorkspaceMismatchError),
@@ -336,9 +336,9 @@ async def test_a_failed_server_move_turns_proactive_off_for_the_session():
     )
     cb = _make_serve_handle_session_resume_cb(state, runtime, config=state.config)
     with (
-        patch("EvoScientist.cli.commands._load_agent", return_value=MagicMock()),
+        patch("metasci_scribe.cli.commands._load_agent", return_value=MagicMock()),
         patch(
-            "EvoScientist.cli.commands._move_server_or_keep_session",
+            "metasci_scribe.cli.commands._move_server_or_keep_session",
             new=AsyncMock(return_value=False),
         ),
     ):
@@ -358,10 +358,10 @@ def test_a_push_to_the_restored_thread_resumes_it_in_its_folders(workspace):
     apply = AsyncMock()
     with (
         patch(
-            "EvoScientist.sessions.get_thread_metadata",
+            "metasci_scribe.sessions.get_thread_metadata",
             new=AsyncMock(return_value={"workspace_dir": workspace.key}),
         ),
-        patch("EvoScientist.cli.commands._apply_serve_resume_state", new=apply),
+        patch("metasci_scribe.cli.commands._apply_serve_resume_state", new=apply),
     ):
         switch("restored-tid")
 
@@ -373,7 +373,7 @@ def test_a_push_to_the_restored_thread_resumes_it_in_its_folders(workspace):
 def test_serve_restores_then_reconciles_and_deletes_the_cron_when_it_stops(
     monkeypatch, tmp_path
 ):
-    from EvoScientist.cli import commands
+    from metasci_scribe.cli import commands
     from tests.fakes.serve import run_serve_once, serve_config
 
     calls = []

@@ -1,4 +1,4 @@
-"""Tests for EvoScientist.proactive.commit."""
+"""Tests for metasci_scribe.proactive.commit."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import logging
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
-from EvoScientist.proactive.commit import (
+from metasci_scribe.proactive.commit import (
     MAX_PUSH_CHARS,
     build_proactive_tag,
     decide_commit,
@@ -86,7 +86,7 @@ def test_stale_when_the_head_moved():
 
 def test_logs_never_carry_the_reply_text(caplog):
     secret = "the secret reply text"
-    with caplog.at_level(logging.DEBUG, logger="EvoScientist.proactive.commit"):
+    with caplog.at_level(logging.DEBUG, logger="metasci_scribe.proactive.commit"):
         _decide(secret)
         _decide(secret, current_head="h2")
         _decide("<tool_call>" + secret)
@@ -95,7 +95,7 @@ def test_logs_never_carry_the_reply_text(caplog):
 
 
 @pytest.mark.parametrize(
-    "kwargs", [None, "x", {}, {"evoscientist": "x"}, {"evoscientist": {}}]
+    "kwargs", [None, "x", {}, {"metasci-scribe": "x"}, {"metasci-scribe": {}}]
 )
 def test_read_proactive_tag_rejects_non_tags(kwargs):
     assert read_proactive_tag(kwargs) is None

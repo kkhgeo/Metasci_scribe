@@ -13,7 +13,7 @@ import pytest
 import typer
 from langchain_core.messages import AIMessage, HumanMessage
 
-from EvoScientist.gateway import (
+from metasci_scribe.gateway import (
     GraphTarget,
     LangGraphServerGateway,
     LangGraphServerThreadStore,
@@ -22,10 +22,10 @@ from EvoScientist.gateway import (
     RuntimeGateways,
     create_runtime_gateways,
 )
-from EvoScientist.gateway.server import _THREAD_SEARCH_LIMIT
-from EvoScientist.gateway.types import DEFAULT_GRAPH_ID
-from EvoScientist.paths import SessionDirs, Workspace
-from EvoScientist.stream import display as display_mod
+from metasci_scribe.gateway.server import _THREAD_SEARCH_LIMIT
+from metasci_scribe.gateway.types import DEFAULT_GRAPH_ID
+from metasci_scribe.paths import SessionDirs, Workspace
+from metasci_scribe.stream import display as display_mod
 from tests.fakes.common import (
     TEST_WORKSPACE,
     FakeGraphGateway,
@@ -66,7 +66,7 @@ async def test_local_gateway_streams_from_injected_streamer():
         )
         return [event async for event in gateway.stream_events(request)]
 
-    with patch("EvoScientist.stream.events.stream_agent_events", new=_streamer):
+    with patch("metasci_scribe.stream.events.stream_agent_events", new=_streamer):
         events = await _collect()
 
     assert events == [
@@ -198,11 +198,11 @@ async def test_local_gateway_get_run_status_reads_dev_server_run(monkeypatch):
     client = MagicMock()
     client.runs.get = AsyncMock(return_value={"status": "error"})
     monkeypatch.setattr(
-        "EvoScientist.langgraph_dev.sdk.configured_langgraph_dev_url",
+        "metasci_scribe.langgraph_dev.sdk.configured_langgraph_dev_url",
         lambda: "http://dev",
     )
     monkeypatch.setattr(
-        "EvoScientist.langgraph_dev.sdk.cached_langgraph_async_client",
+        "metasci_scribe.langgraph_dev.sdk.cached_langgraph_async_client",
         lambda url: client,
     )
     gateway = LocalGraphGateway()
@@ -238,7 +238,7 @@ async def test_local_gateway_get_process_status_reads_registry(monkeypatch):
     # Background processes launched by the in-process main graph live in this
     # process's registry, so get_process_status reads it directly.
     monkeypatch.setattr(
-        "EvoScientist.background.poll_status", lambda process_id: "interrupted"
+        "metasci_scribe.background.poll_status", lambda process_id: "interrupted"
     )
     gateway = LocalGraphGateway()
 
@@ -251,17 +251,17 @@ def _query_dev_server(monkeypatch, client=None, *, enabled=True, url="http://dev
     needs = MagicMock(return_value=enabled)
     scoped = MagicMock()
     scoped.return_value.__aenter__.return_value = client
-    monkeypatch.setattr("EvoScientist.background.poll_status", lambda _: "unknown")
+    monkeypatch.setattr("metasci_scribe.background.poll_status", lambda _: "unknown")
     monkeypatch.setattr(
-        "EvoScientist.EvoScientist._ensure_config", lambda: SimpleNamespace()
+        "metasci_scribe.agent._ensure_config", lambda: SimpleNamespace()
     )
-    monkeypatch.setattr("EvoScientist.gateway.local.needs_langgraph_dev", needs)
+    monkeypatch.setattr("metasci_scribe.gateway.local.needs_langgraph_dev", needs)
     monkeypatch.setattr(
-        "EvoScientist.langgraph_dev.sdk.configured_langgraph_dev_url", lambda: url
+        "metasci_scribe.langgraph_dev.sdk.configured_langgraph_dev_url", lambda: url
     )
     if client is not None:
         monkeypatch.setattr(
-            "EvoScientist.langgraph_dev.sdk.langgraph_async_client_scoped", scoped
+            "metasci_scribe.langgraph_dev.sdk.langgraph_async_client_scoped", scoped
         )
     return needs, scoped
 
@@ -338,7 +338,7 @@ async def test_local_process_status_other_errors_propagate(monkeypatch, error):
 @pytest.mark.parametrize("status", ["running", "success", "error", "interrupted"])
 async def test_known_local_process_never_queries_server(monkeypatch, status):
     needs, scoped = _query_dev_server(monkeypatch, MagicMock())
-    monkeypatch.setattr("EvoScientist.background.poll_status", lambda _: status)
+    monkeypatch.setattr("metasci_scribe.background.poll_status", lambda _: status)
     assert (
         await LocalGraphGateway().get_process_status(GraphTarget(), "thread", "process")
         == status
@@ -389,7 +389,7 @@ async def test_local_stream_events_delegates_aclose_to_inner():
         await stream.aclose()
         assert cleanup_ran is True
 
-    with patch("EvoScientist.stream.events.stream_agent_events", new=_streamer):
+    with patch("metasci_scribe.stream.events.stream_agent_events", new=_streamer):
         await _run()
 
 
@@ -402,7 +402,7 @@ def test_run_streaming_can_consume_injected_gateway():
         ]
     )
 
-    with patch("EvoScientist.stream.display.Live"):
+    with patch("metasci_scribe.stream.display.Live"):
         result = display_mod._run_streaming(
             agent=agent,
             message="hello",
@@ -425,8 +425,8 @@ def test_run_streaming_can_consume_injected_gateway():
 
 
 async def test_resume_command_consumes_context_gateway():
-    from EvoScientist.commands.base import CommandContext
-    from EvoScientist.commands.implementation.session import ResumeCommand
+    from metasci_scribe.commands.base import CommandContext
+    from metasci_scribe.commands.implementation.session import ResumeCommand
 
     ui = MagicMock()
     ui.handle_session_resume = AsyncMock()
@@ -451,7 +451,7 @@ async def test_resume_command_consumes_context_gateway():
 
 
 def test_cmd_run_passes_local_graph_gateway(monkeypatch):
-    from EvoScientist.cli import interactive
+    from metasci_scribe.cli import interactive
 
     thread_store = FakeThreadStore(generated_thread_id="generated-thread")
 
@@ -485,7 +485,7 @@ def test_cmd_run_passes_local_graph_gateway(monkeypatch):
 
 
 def test_cmd_run_converts_stream_failure_to_controlled_exit(monkeypatch):
-    from EvoScientist.cli import interactive
+    from metasci_scribe.cli import interactive
 
     runtime_gateways = RuntimeGateways(
         thread_store=FakeThreadStore(),
@@ -519,7 +519,7 @@ async def test_langgraph_server_thread_store_delegates_to_sdk_threads():
                 "thread_id": "abc12345",
                 "created_at": "2026-01-01T00:00:00Z",
                 "updated_at": "2026-01-02T00:00:00Z",
-                "metadata": {"graph_id": "EvoScientist", "workspace_dir": "/tmp/ws"},
+                "metadata": {"graph_id": "metasci-scribe", "workspace_dir": "/tmp/ws"},
             },
             {
                 "thread_id": "worker123",
@@ -566,8 +566,8 @@ async def test_langgraph_server_thread_store_delegates_to_sdk_threads():
     assert len(threads.created) == 1
     assert threads.created[0]["thread_id"] == "server-thread"
     created_metadata = threads.created[0]["metadata"]
-    assert created_metadata["graph_id"] == "EvoScientist"
-    assert created_metadata["agent_name"] == "EvoScientist"
+    assert created_metadata["graph_id"] == "metasci-scribe"
+    assert created_metadata["agent_name"] == "metasci-scribe"
     assert created_metadata["workspace_dir"] == "/tmp/new-ws"
     assert created_metadata["model"] == "test-model"
     assert isinstance(created_metadata["updated_at"], str)
@@ -579,7 +579,7 @@ async def test_langgraph_server_thread_store_delegates_to_sdk_threads():
             "workspace_dir": "/tmp/ws",
             "run_dir": None,
             "model": None,
-            "metadata": {"graph_id": "EvoScientist", "workspace_dir": "/tmp/ws"},
+            "metadata": {"graph_id": "metasci-scribe", "workspace_dir": "/tmp/ws"},
             "message_count": 2,
             "preview": "hello from server",
         },
@@ -597,7 +597,7 @@ async def test_langgraph_server_thread_store_delegates_to_sdk_threads():
     ]
     assert result["resolution"] == ("abc12345", [])
     assert result["metadata"] == {
-        "graph_id": "EvoScientist",
+        "graph_id": "metasci-scribe",
         "workspace_dir": "/tmp/ws",
     }
     assert [message.type for message in result["messages"]] == ["human", "ai"]
@@ -610,7 +610,7 @@ async def test_langgraph_server_thread_store_limit_zero_pages_all_threads():
     rows = [
         {
             "thread_id": f"thread-{index}",
-            "metadata": {"graph_id": "EvoScientist"},
+            "metadata": {"graph_id": "metasci-scribe"},
         }
         for index in range(_THREAD_SEARCH_LIMIT + 1)
     ]
@@ -635,7 +635,7 @@ async def test_langgraph_server_thread_store_positive_limit_uses_single_search()
         threads=[
             {
                 "thread_id": f"thread-{index}",
-                "metadata": {"graph_id": "EvoScientist"},
+                "metadata": {"graph_id": "metasci-scribe"},
             }
             for index in range(3)
         ]
@@ -657,7 +657,7 @@ async def test_langgraph_server_thread_store_prefix_resolution_skips_exact_looku
         threads=[
             {
                 "thread_id": "abc12345",
-                "metadata": {"graph_id": "EvoScientist"},
+                "metadata": {"graph_id": "metasci-scribe"},
             }
         ]
     )
@@ -676,14 +676,14 @@ async def test_langgraph_server_thread_store_prefix_resolution_pages_all_threads
     rows = [
         {
             "thread_id": f"thread-{index}",
-            "metadata": {"graph_id": "EvoScientist"},
+            "metadata": {"graph_id": "metasci-scribe"},
         }
         for index in range(_THREAD_SEARCH_LIMIT)
     ]
     rows.append(
         {
             "thread_id": "older-thread-match",
-            "metadata": {"graph_id": "EvoScientist"},
+            "metadata": {"graph_id": "metasci-scribe"},
         }
     )
     threads = FakeLangGraphThreadsClient(threads=rows)
@@ -706,7 +706,7 @@ async def test_langgraph_server_thread_store_uuid_resolution_uses_exact_lookup()
         threads=[
             {
                 "thread_id": thread_id,
-                "metadata": {"graph_id": "EvoScientist"},
+                "metadata": {"graph_id": "metasci-scribe"},
             }
         ]
     )
@@ -878,7 +878,7 @@ def test_runtime_gateways_can_use_langgraph_server_backend():
 
 async def test_langgraph_server_gateway_reads_state_values():
     threads = FakeLangGraphThreadsClient(
-        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "EvoScientist"}}],
+        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "metasci-scribe"}}],
         states={"abc12345": {"values": {"async_tasks": {"task-1": {}}}}},
     )
     gateway = LangGraphServerGateway(
@@ -894,7 +894,7 @@ async def test_langgraph_server_gateway_reads_state_values():
 
 async def test_langgraph_server_gateway_reads_state_snapshot():
     threads = FakeLangGraphThreadsClient(
-        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "EvoScientist"}}],
+        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "metasci-scribe"}}],
         states={
             "abc12345": {
                 "values": {"async_tasks": {"task-1": {}}},
@@ -921,7 +921,7 @@ async def test_langgraph_server_gateway_reads_state_snapshot():
 
 async def test_langgraph_server_gateway_messages_apply_summarization_event():
     threads = FakeLangGraphThreadsClient(
-        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "EvoScientist"}}],
+        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "metasci-scribe"}}],
         states={
             "abc12345": {
                 "values": {
@@ -956,7 +956,7 @@ async def test_langgraph_server_gateway_messages_apply_summarization_event():
 
 async def test_langgraph_server_gateway_updates_state_values():
     threads = FakeLangGraphThreadsClient(
-        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "EvoScientist"}}],
+        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "metasci-scribe"}}],
     )
     gateway = LangGraphServerGateway(
         LangGraphServerThreadStore(
@@ -1025,7 +1025,7 @@ async def test_langgraph_server_gateway_streams_root_protocol_events():
     live_cfg = SimpleNamespace(
         model="live-model", provider="live-provider", recursion_limit=4242
     )
-    with patch("EvoScientist.EvoScientist._ensure_config", return_value=live_cfg):
+    with patch("metasci_scribe.agent._ensure_config", return_value=live_cfg):
         events = await _collect()
 
     assert len(threads.created) == 1
@@ -1037,9 +1037,7 @@ async def test_langgraph_server_gateway_streams_root_protocol_events():
     assert isinstance(created_metadata["updated_at"], str)
     assert threads.metadata_updates == [("abc12345", threads.created[0]["metadata"])]
     assert threads.stream_calls == [("abc12345", "writing-agent")]
-    run_request_id = stream.run.starts[0]["metadata"].get(
-        "_evoscientist_gateway_request_id"
-    )
+    run_request_id = stream.run.starts[0]["metadata"].get("_scribe_gateway_request_id")
     assert isinstance(run_request_id, str)
     assert run_request_id
     assert stream.run.starts == [
@@ -1060,7 +1058,7 @@ async def test_langgraph_server_gateway_streams_root_protocol_events():
             },
             "metadata": {
                 "workspace_dir": "/tmp/ws",
-                "_evoscientist_gateway_request_id": run_request_id,
+                "_scribe_gateway_request_id": run_request_id,
             },
         }
     ]
@@ -1122,12 +1120,10 @@ async def test_langgraph_server_gateway_forwards_configurable_extra():
     live_cfg = SimpleNamespace(
         model="live-model", provider="live-provider", recursion_limit=4242
     )
-    with patch("EvoScientist.EvoScientist._ensure_config", return_value=live_cfg):
+    with patch("metasci_scribe.agent._ensure_config", return_value=live_cfg):
         events = await _collect()
 
-    run_request_id = stream.run.starts[0]["metadata"].get(
-        "_evoscientist_gateway_request_id"
-    )
+    run_request_id = stream.run.starts[0]["metadata"].get("_scribe_gateway_request_id")
     assert isinstance(run_request_id, str)
     assert run_request_id
     assert stream.run.starts == [
@@ -1148,7 +1144,7 @@ async def test_langgraph_server_gateway_forwards_configurable_extra():
                 },
                 "recursion_limit": 4242,
             },
-            "metadata": {"_evoscientist_gateway_request_id": run_request_id},
+            "metadata": {"_scribe_gateway_request_id": run_request_id},
         }
     ]
     assert events == [
@@ -1189,7 +1185,7 @@ async def test_langgraph_server_gateway_delivers_custom_middleware_events():
         events=[
             _custom_stream_event(
                 {
-                    "evoscientist": {
+                    "metasci-scribe": {
                         "kind": "tool_selection_started",
                         "total_tools": 9,
                     }
@@ -1197,7 +1193,7 @@ async def test_langgraph_server_gateway_delivers_custom_middleware_events():
             ),
             _custom_stream_event(
                 {
-                    "evoscientist": {
+                    "metasci-scribe": {
                         "kind": "tool_selection",
                         "selected": ["read_file"],
                         "total_tools": 9,
@@ -1216,14 +1212,14 @@ async def test_langgraph_server_gateway_delivers_custom_middleware_events():
             },
             _custom_stream_event(
                 {
-                    "evoscientist": {
+                    "metasci-scribe": {
                         "kind": "fallback_notice",
                         "text": "fb",
                         "style": "red",
                     }
                 }
             ),
-            _custom_stream_event({"evoscientist": {"kind": "tool_selection_ended"}}),
+            _custom_stream_event({"metasci-scribe": {"kind": "tool_selection_ended"}}),
             {
                 "method": "messages",
                 "params": {
@@ -1243,7 +1239,7 @@ async def test_langgraph_server_gateway_delivers_custom_middleware_events():
     # emit a tool_selection event (frontends render that event type on both
     # backends).
     fallback_lines: list[tuple[str, str]] = []
-    from EvoScientist.stream.sink import SessionEventSink
+    from metasci_scribe.stream.sink import SessionEventSink
 
     sink = SessionEventSink(
         fallback_display=lambda text, style: fallback_lines.append((text, style))
@@ -1292,11 +1288,13 @@ async def test_langgraph_server_gateway_ignores_untagged_custom_events():
         "abc12345",
         events=[
             _custom_stream_event({"someone_else": {"kind": "tool_selection_started"}}),
-            _custom_stream_event({"evoscientist": {"kind": "tool_selection_started"}}),
             _custom_stream_event(
-                {"evoscientist": {"kind": "tool_selection", "selected": "not-a-list"}}
+                {"metasci-scribe": {"kind": "tool_selection_started"}}
             ),
-            _custom_stream_event({"evoscientist": {"kind": "unknown_kind"}}),
+            _custom_stream_event(
+                {"metasci-scribe": {"kind": "tool_selection", "selected": "not-a-list"}}
+            ),
+            _custom_stream_event({"metasci-scribe": {"kind": "unknown_kind"}}),
             {
                 "method": "messages",
                 "params": {
@@ -1338,7 +1336,7 @@ async def test_langgraph_server_gateway_custom_events_dropped_headless():
         "abc12345",
         events=[
             _custom_stream_event(
-                {"evoscientist": {"kind": "tool_selection_started", "total_tools": 1}}
+                {"metasci-scribe": {"kind": "tool_selection_started", "total_tools": 1}}
             ),
             {
                 "method": "messages",
@@ -1385,7 +1383,7 @@ def test_runtime_gateways_attach_events_to_server_backend():
 async def test_resolve_per_run_config_extras_win_over_per_run_overrides():
     """An explicit per-run ``configurable_extra.model`` beats the session
     default — explicit injection is more specific than session state."""
-    from EvoScientist.gateway.types import resolve_per_run_config
+    from metasci_scribe.gateway.types import resolve_per_run_config
 
     run_config = resolve_per_run_config(
         "t1",
@@ -1405,7 +1403,7 @@ def test_resolve_per_run_config_default_shape_is_extras_only():
     """Without per-run overrides the shape is the always-written suppression
     key + caller extras + thread_id. Pure assembly - there is no config
     parameter to consult at all."""
-    from EvoScientist.gateway.types import resolve_per_run_config
+    from metasci_scribe.gateway.types import resolve_per_run_config
 
     run_config = resolve_per_run_config("t1", {"active_teams": ["a"]})
     assert run_config == {
@@ -1420,14 +1418,14 @@ def test_resolve_per_run_config_default_shape_is_extras_only():
 def test_resolve_per_run_config_hitl_suppression_local():
     """An unattended (auto_mode) run injects hitl_suppressed so the
     always-armed graph disarms the interrupt for THIS run."""
-    from EvoScientist.gateway.types import resolve_per_run_config
+    from metasci_scribe.gateway.types import resolve_per_run_config
 
     run_config = resolve_per_run_config("t1", None, hitl_suppressed=True)
     assert run_config["configurable"]["hitl_suppressed"] is True
 
 
 def test_resolve_per_run_config_hitl_suppression_server():
-    from EvoScientist.gateway.types import resolve_per_run_config
+    from metasci_scribe.gateway.types import resolve_per_run_config
 
     run_config = resolve_per_run_config(
         "t1", None, per_run_overrides={"model": "m"}, hitl_suppressed=True
@@ -1440,7 +1438,7 @@ def test_resolve_per_run_config_attended_run_writes_false():
     """Every gateway run writes the key; an attended run writes it False, so a
     gateway run's arming is fixed by its own config and never falls back to the
     serving process's auto_approve on an absent key."""
-    from EvoScientist.gateway.types import resolve_per_run_config
+    from metasci_scribe.gateway.types import resolve_per_run_config
 
     run_config = resolve_per_run_config("t1", None, hitl_suppressed=False)
     assert run_config["configurable"]["hitl_suppressed"] is False
@@ -1451,9 +1449,9 @@ def test_gateway_assembled_config_is_authoritative_for_is_hitl_suppressed(monkey
     is_hitl_suppressed, ignores the serving process's auto_approve. A suppressed
     run reads True and an attended run reads False even when the server itself
     was launched auto-approving — the server-path leak this closes."""
-    import EvoScientist.EvoScientist as evo_mod
-    from EvoScientist.backends import is_hitl_suppressed
-    from EvoScientist.gateway.types import resolve_per_run_config
+    import metasci_scribe.agent as evo_mod
+    from metasci_scribe.backends import is_hitl_suppressed
+    from metasci_scribe.gateway.types import resolve_per_run_config
 
     # Serving process is auto-approving; without the always-written key this
     # would leak into every keyless run via the fallback.
@@ -1472,7 +1470,7 @@ def test_gateway_assembled_config_is_authoritative_for_is_hitl_suppressed(monkey
 
 def test_resolve_per_run_config_caller_extra_overrides_suppression():
     """An explicit per-run configurable_extra beats the derived value."""
-    from EvoScientist.gateway.types import resolve_per_run_config
+    from metasci_scribe.gateway.types import resolve_per_run_config
 
     run_config = resolve_per_run_config(
         "t1", {"hitl_suppressed": False}, hitl_suppressed=True
@@ -1486,14 +1484,14 @@ async def test_server_gateway_resolves_per_run_overrides_from_live_session_confi
     cfg = SimpleNamespace(model="m", provider="p", recursion_limit=0)
     stream = FakeLangGraphThreadStream("abc12345", events=[])
     threads = FakeLangGraphThreadsClient(
-        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "EvoScientist"}}],
+        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "metasci-scribe"}}],
         states={"abc12345": {"values": {}}},
         streams={"abc12345": stream},
     )
     gateway = LangGraphServerGateway(
         LangGraphServerThreadStore(client=FakeLangGraphClient(threads))
     )
-    with patch("EvoScientist.EvoScientist._ensure_config", return_value=cfg):
+    with patch("metasci_scribe.agent._ensure_config", return_value=cfg):
         async for _event in gateway.stream_events(
             RunRequest(message="hi", thread_id="abc12345")
         ):
@@ -1510,14 +1508,14 @@ async def test_server_gateway_forwards_valid_recursion_limit_per_run():
     cfg = SimpleNamespace(model="m", provider="p", recursion_limit=100)
     stream = FakeLangGraphThreadStream("abc12345", events=[])
     threads = FakeLangGraphThreadsClient(
-        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "EvoScientist"}}],
+        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "metasci-scribe"}}],
         states={"abc12345": {"values": {}}},
         streams={"abc12345": stream},
     )
     gateway = LangGraphServerGateway(
         LangGraphServerThreadStore(client=FakeLangGraphClient(threads))
     )
-    with patch("EvoScientist.EvoScientist._ensure_config", return_value=cfg):
+    with patch("metasci_scribe.agent._ensure_config", return_value=cfg):
         async for _event in gateway.stream_events(
             RunRequest(message="hi", thread_id="abc12345")
         ):
@@ -1551,7 +1549,7 @@ async def test_metadata_refresh_failure_does_not_drop_turn(resume, caplog):
         )
     ]
     assert events[-1]["type"] == "done"
-    records = [r for r in caplog.records if r.name == "EvoScientist.gateway.server"]
+    records = [r for r in caplog.records if r.name == "metasci_scribe.gateway.server"]
     assert any(
         r.levelno == logging.WARNING and "abc12345" in r.getMessage() for r in records
     )
@@ -1594,14 +1592,14 @@ async def test_server_gateway_suppresses_hitl_for_auto_mode_session():
     cfg = SimpleNamespace(model="m", provider="p", auto_mode=True)
     stream = FakeLangGraphThreadStream("abc12345", events=[])
     threads = FakeLangGraphThreadsClient(
-        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "EvoScientist"}}],
+        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "metasci-scribe"}}],
         states={"abc12345": {"values": {}}},
         streams={"abc12345": stream},
     )
     gateway = LangGraphServerGateway(
         LangGraphServerThreadStore(client=FakeLangGraphClient(threads))
     )
-    with patch("EvoScientist.EvoScientist._ensure_config", return_value=cfg):
+    with patch("metasci_scribe.agent._ensure_config", return_value=cfg):
         async for _event in gateway.stream_events(
             RunRequest(message="hi", thread_id="abc12345")
         ):
@@ -1617,14 +1615,14 @@ async def test_server_gateway_never_forwards_the_session_grant():
     cfg = SimpleNamespace(model="m", provider="p", auto_mode=False, auto_approve=False)
     stream = FakeLangGraphThreadStream("abc12345", events=[])
     threads = FakeLangGraphThreadsClient(
-        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "EvoScientist"}}],
+        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "metasci-scribe"}}],
         states={"abc12345": {"values": {}}},
         streams={"abc12345": stream},
     )
     gateway = LangGraphServerGateway(
         LangGraphServerThreadStore(client=FakeLangGraphClient(threads))
     )
-    with patch("EvoScientist.EvoScientist._ensure_config", return_value=cfg):
+    with patch("metasci_scribe.agent._ensure_config", return_value=cfg):
         async for _event in gateway.stream_events(
             RunRequest(
                 message="hi",
@@ -1645,7 +1643,7 @@ async def test_server_gateway_never_forwards_the_session_grant():
 
 
 def test_local_run_config_carries_the_session_grant():
-    from EvoScientist.gateway.types import resolve_per_run_config
+    from metasci_scribe.gateway.types import resolve_per_run_config
 
     run_config = resolve_per_run_config(
         "t1", {"hitl_approve_all": True}, hitl_suppressed=False
@@ -1690,7 +1688,7 @@ async def test_langgraph_server_gateway_warns_on_pre_run_state_fetch_failure(
         )
     )
 
-    with caplog.at_level("WARNING", logger="EvoScientist.gateway.server"):
+    with caplog.at_level("WARNING", logger="metasci_scribe.gateway.server"):
         events = [
             event
             async for event in gateway.stream_events(
@@ -1968,9 +1966,9 @@ async def test_langgraph_server_gateway_emits_state_interrupt_before_done():
 def test_the_server_tracker_says_when_a_child_only_paused(interrupts, paused):
     """The result of the task a child run belongs to tells whether the child
     stopped at an interrupt or finished."""
-    from EvoScientist.gateway.server import _ServerSubagentTracker
-    from EvoScientist.stream.emitter import StreamEventEmitter
-    from EvoScientist.stream.events import _SubagentRegistry
+    from metasci_scribe.gateway.server import _ServerSubagentTracker
+    from metasci_scribe.stream.emitter import StreamEventEmitter
+    from metasci_scribe.stream.events import _SubagentRegistry
 
     tracker = _ServerSubagentTracker(
         emitter=StreamEventEmitter(), registry=_SubagentRegistry()
@@ -2001,9 +1999,9 @@ def test_the_server_tracker_says_when_a_child_only_paused(interrupts, paused):
 def test_the_server_tracker_does_not_call_a_child_paused_when_the_stream_stops():
     """A child that is still open when the stream ends gets an end event, and
     nothing says that it paused."""
-    from EvoScientist.gateway.server import _ServerSubagentTracker
-    from EvoScientist.stream.emitter import StreamEventEmitter
-    from EvoScientist.stream.events import _SubagentRegistry
+    from metasci_scribe.gateway.server import _ServerSubagentTracker
+    from metasci_scribe.stream.emitter import StreamEventEmitter
+    from metasci_scribe.stream.events import _SubagentRegistry
 
     tracker = _ServerSubagentTracker(
         emitter=StreamEventEmitter(), registry=_SubagentRegistry()
@@ -2048,7 +2046,7 @@ async def test_langgraph_server_gateway_streams_subagent_protocol_events():
         ],
     )
     threads = FakeLangGraphThreadsClient(
-        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "EvoScientist"}}],
+        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "metasci-scribe"}}],
         states={"abc12345": {"values": {}}},
         streams={"abc12345": stream},
     )
@@ -2100,7 +2098,7 @@ async def test_langgraph_server_gateway_resumes_interrupt_with_thread_stream():
         interrupts=[{"interrupt_id": "interrupt-1"}],
     )
     threads = FakeLangGraphThreadsClient(
-        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "EvoScientist"}}],
+        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "metasci-scribe"}}],
         states={"abc12345": {"values": {}}},
         streams={"abc12345": stream},
     )
@@ -2152,7 +2150,7 @@ async def test_langgraph_server_gateway_resume_raises_on_poll_timeout_without_st
         interrupts=[],
     )
     threads = FakeLangGraphThreadsClient(
-        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "EvoScientist"}}],
+        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "metasci-scribe"}}],
         states={
             "abc12345": {
                 "values": {},
@@ -2209,7 +2207,7 @@ async def test_langgraph_server_gateway_resume_raises_on_id_mismatch():
         interrupts=[{"interrupt_id": "interrupt-1"}],
     )
     threads = FakeLangGraphThreadsClient(
-        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "EvoScientist"}}],
+        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "metasci-scribe"}}],
         streams={"abc12345": stream},
     )
     gateway = LangGraphServerGateway(
@@ -2243,7 +2241,7 @@ async def test_langgraph_server_gateway_resume_forwards_non_hitl_single_key_payl
         interrupts=[{"interrupt_id": "interrupt-1"}],
     )
     threads = FakeLangGraphThreadsClient(
-        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "EvoScientist"}}],
+        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "metasci-scribe"}}],
         streams={"abc12345": stream},
     )
     gateway = LangGraphServerGateway(
@@ -2273,7 +2271,7 @@ async def test_langgraph_server_gateway_resume_matches_one_of_multiple_interrupt
         interrupts=[{"interrupt_id": "interrupt-a"}, {"interrupt_id": "interrupt-b"}],
     )
     threads = FakeLangGraphThreadsClient(
-        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "EvoScientist"}}],
+        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "metasci-scribe"}}],
         states={"abc12345": {"values": {}}},
         streams={"abc12345": stream},
     )
@@ -2308,7 +2306,7 @@ async def test_langgraph_server_gateway_resume_raises_on_unmatched_multiple_inte
         interrupts=[{"interrupt_id": "interrupt-a"}, {"interrupt_id": "interrupt-b"}],
     )
     threads = FakeLangGraphThreadsClient(
-        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "EvoScientist"}}],
+        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "metasci-scribe"}}],
         states={"abc12345": {"values": {}}},
         streams={"abc12345": stream},
     )
@@ -2339,7 +2337,7 @@ async def test_langgraph_server_gateway_resume_raises_on_no_interrupt():
         interrupts=[],
     )
     threads = FakeLangGraphThreadsClient(
-        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "EvoScientist"}}],
+        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "metasci-scribe"}}],
         states={"abc12345": {"values": {}}},
         streams={"abc12345": stream},
     )
@@ -2512,7 +2510,7 @@ async def test_state_repair_requires_this_request_to_attempt_a_run(
         threads.create = AsyncMock(side_effect=RuntimeError("before run"))
     elif failure == "input":
         monkeypatch.setattr(
-            "EvoScientist.gateway.server.build_agent_stream_input",
+            "metasci_scribe.gateway.server.build_agent_stream_input",
             AsyncMock(side_effect=RuntimeError("before run")),
         )
     elif failure == "resume-validation":
@@ -2705,7 +2703,7 @@ async def test_langgraph_server_gateway_repair_swallows_update_state_failure(
         LangGraphServerThreadStore(client=client),
     )
 
-    with caplog.at_level("DEBUG", logger="EvoScientist.gateway.server"):
+    with caplog.at_level("DEBUG", logger="metasci_scribe.gateway.server"):
         with pytest.raises(RuntimeError, match="provider connection lost"):
             async for _event in gateway.stream_events(
                 RunRequest(message="hi", thread_id="abc12345")
@@ -2920,7 +2918,7 @@ async def test_server_gateway_scopes_resumed_run_on_consumer_abort(
     )
     client = FakeLangGraphClient(threads)
     cancel_calls: list[tuple[str, list[str]]] = []
-    monkeypatch.setattr("EvoScientist.gateway.server._RUN_LOOKUP_PAGE_SIZE", 1)
+    monkeypatch.setattr("metasci_scribe.gateway.server._RUN_LOOKUP_PAGE_SIZE", 1)
 
     class _FakeRunsClient:
         async def list(self, thread_id: str, *, limit: int, offset: int, status: str):
@@ -2943,7 +2941,7 @@ async def test_server_gateway_scopes_resumed_run_on_consumer_abort(
             thread_id="abc12345",
         )
     )
-    with caplog.at_level("WARNING", logger="EvoScientist.gateway.server"):
+    with caplog.at_level("WARNING", logger="metasci_scribe.gateway.server"):
         await gen.__anext__()
         await gen.aclose()
 
@@ -2975,7 +2973,7 @@ async def test_server_gateway_successful_resume_does_not_list_active_runs(
     client.runs = SimpleNamespace(list=AsyncMock(return_value=[]))
     gateway = LangGraphServerGateway(LangGraphServerThreadStore(client=client))
 
-    with caplog.at_level("WARNING", logger="EvoScientist.gateway.server"):
+    with caplog.at_level("WARNING", logger="metasci_scribe.gateway.server"):
         async for _ in gateway.stream_events(
             RunRequest(
                 message=Command(
@@ -3039,7 +3037,7 @@ async def test_server_gateway_cleans_up_resume_accepted_before_respond_finishes(
     cancel_calls = []
     # Exercise pagination as well as both active statuses; the neighbour shares
     # the interrupt id but has a different response and must never be cancelled.
-    monkeypatch.setattr("EvoScientist.gateway.server._RUN_LOOKUP_PAGE_SIZE", 1)
+    monkeypatch.setattr("metasci_scribe.gateway.server._RUN_LOOKUP_PAGE_SIZE", 1)
 
     class _FakeRunsClient:
         async def list(self, thread_id, *, limit, offset, status):
@@ -3125,7 +3123,7 @@ async def test_server_gateway_resume_cleanup_skips_incomplete_run_listing(
     )
     client = FakeLangGraphClient(threads)
     cancel = AsyncMock()
-    monkeypatch.setattr("EvoScientist.gateway.server._RUN_LOOKUP_PAGE_SIZE", 1)
+    monkeypatch.setattr("metasci_scribe.gateway.server._RUN_LOOKUP_PAGE_SIZE", 1)
 
     async def _list(thread_id, *, limit, offset, status):
         if not stream.run.responses or status != "pending":
@@ -3145,7 +3143,7 @@ async def test_server_gateway_resume_cleanup_skips_incomplete_run_listing(
     gen = gateway.stream_events(
         RunRequest(message=Command(resume="yes"), thread_id="thread")
     )
-    with caplog.at_level("WARNING", logger="EvoScientist.gateway.server"):
+    with caplog.at_level("WARNING", logger="metasci_scribe.gateway.server"):
         await gen.__anext__()
         await gen.aclose()
 
@@ -3243,7 +3241,7 @@ async def test_server_gateway_recovers_run_accepted_before_start_timeout():
 
     assert cancel_calls == [("abc12345", ["accepted-run"])]
     metadata = stream.run.starts[0]["metadata"]
-    assert metadata["_evoscientist_gateway_request_id"]
+    assert metadata["_scribe_gateway_request_id"]
 
 
 async def test_langgraph_server_gateway_does_not_cancel_on_normal_completion():
@@ -3370,7 +3368,7 @@ def server_gateway() -> LangGraphServerGateway:
         threads=[
             {
                 "thread_id": "parity-1",
-                "metadata": {"graph_id": "EvoScientist", "workspace_dir": "/ws"},
+                "metadata": {"graph_id": "metasci-scribe", "workspace_dir": "/ws"},
             }
         ],
         states={
@@ -3529,7 +3527,7 @@ async def test_divergence_server_enqueue_serializes_concurrent_runs():
     of the langgraph dev server, not the gateway — this test pins the contract:
     both backends accept the second request without rejection."""
     threads = FakeLangGraphThreadsClient(
-        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "EvoScientist"}}],
+        threads=[{"thread_id": "abc12345", "metadata": {"graph_id": "metasci-scribe"}}],
         states={"abc12345": {"values": {}}},
         streams={
             "abc12345": FakeLangGraphThreadStream(
@@ -3577,7 +3575,7 @@ def test_run_streaming_puts_the_rubric_on_the_run_request():
         ]
     )
 
-    with patch("EvoScientist.stream.display.Live"):
+    with patch("metasci_scribe.stream.display.Live"):
         display_mod._run_streaming(
             agent=agent,
             message="hello",
@@ -3594,7 +3592,7 @@ def test_run_streaming_puts_the_rubric_on_the_run_request():
 def _cmd_run_with_fake_stream(monkeypatch, *, verdict, **cmd_kwargs):
     from types import SimpleNamespace
 
-    from EvoScientist.cli import interactive
+    from metasci_scribe.cli import interactive
 
     thread_store = FakeThreadStore(generated_thread_id="generated-thread")
     runtime_gateways = RuntimeGateways(
@@ -3640,7 +3638,7 @@ def test_cmd_run_without_a_rubric_tracks_nothing(monkeypatch):
 
 
 def test_resolve_per_run_config_marks_only_a_graded_run():
-    from EvoScientist.gateway.types import resolve_per_run_config
+    from metasci_scribe.gateway.types import resolve_per_run_config
 
     marked = resolve_per_run_config("t1", None, rubric_run=True)
     assert marked["configurable"]["rubric_run"] == {"mode": "input"}
@@ -3648,7 +3646,7 @@ def test_resolve_per_run_config_marks_only_a_graded_run():
 
 
 def test_input_mode_wins_over_a_client_marker_but_keeps_its_changes():
-    from EvoScientist.gateway.types import resolve_per_run_config
+    from metasci_scribe.gateway.types import resolve_per_run_config
 
     change = {"session": "s", "seq": 1, "sticky": "- a"}
     extra = {"rubric_run": {"mode": "thread", "changes": [change]}}
@@ -3674,7 +3672,7 @@ async def test_langgraph_server_gateway_marks_a_graded_run():
     live_cfg = SimpleNamespace(
         model="live-model", provider="live-provider", recursion_limit=4242
     )
-    with patch("EvoScientist.EvoScientist._ensure_config", return_value=live_cfg):
+    with patch("metasci_scribe.agent._ensure_config", return_value=live_cfg):
         async for _event in gateway.stream_events(
             RunRequest(message="hi", thread_id="abc12345", rubric="- a")
         ):
@@ -3687,12 +3685,12 @@ async def test_langgraph_server_gateway_marks_a_graded_run():
 
 def test_server_gateway_run_carries_the_retry_key(monkeypatch):
     """A -p --auto-mode run on the server gateway must bring its own tier."""
-    import EvoScientist.EvoScientist as evo_mod
-    from EvoScientist.backends import MODEL_RETRY_RUN_KEY
-    from EvoScientist.config import EvoScientistConfig
-    from EvoScientist.gateway import server as server_mod
+    import metasci_scribe.agent as evo_mod
+    from metasci_scribe.backends import MODEL_RETRY_RUN_KEY
+    from metasci_scribe.config import ScribeConfig
+    from metasci_scribe.gateway import server as server_mod
 
-    cfg = EvoScientistConfig(auto_mode=True, auto_mode_retry_wait_seconds=1800)
+    cfg = ScribeConfig(auto_mode=True, auto_mode_retry_wait_seconds=1800)
     monkeypatch.setattr(evo_mod, "_ensure_config", lambda: cfg)
     gateway = server_mod.LangGraphServerGateway.__new__(
         server_mod.LangGraphServerGateway

@@ -1,0 +1,37 @@
+Metasci Scribe
+Copyright 2026 Metasci Scribe contributors
+
+This product is a derivative work of EvoScientist.
+
+  Original project : EvoScientist
+  Source           : https://github.com/EvoScientist/EvoScientist
+  Imported version : v0.3.8
+  Imported commit  : e2eef1487963f77abca3dbdae5d739eda73c6e71
+  Original license : Apache License, Version 2.0
+  Original notice  : Copyright 2026 EvoScientist
+
+The imported code is used under the terms of the Apache License, Version 2.0.
+The full text is in the LICENSE file, which is the unmodified license file of
+the original project.
+
+Changes made to the original work (Apache License 2.0, section 4(b)):
+
+  * The Python package EvoScientist was renamed to metasci_scribe, and the
+    module EvoScientist/EvoScientist.py became metasci_scribe/agent.py.
+  * The configuration class EvoScientistConfig was renamed to ScribeConfig.
+  * The environment variable prefixes EVOSCIENTIST_ and EVOSCI_ were replaced
+    by METASCI_SCRIBE_, and the data directory ~/.evoscientist became
+    ~/.metasci-scribe.
+  * The command line entry points evoscientist, EvoScientist, evosci and
+    EvoSci were replaced by the single command metasci-scribe.
+  * The one-time migration of old session databases (migrate_legacy_sessions_db)
+    was removed, together with its tests.
+  * The Dockerfile, docker-compose.yml, .dockerignore, README.zh-CN.md and the
+    .github/assets images (EvoScientist logos, badges and benchmark figures)
+    were removed, and README.md was replaced.
+  * Links that point at the original project were left unchanged on purpose.
+  * Further changes are recorded in the git history of this repository. The
+    tool tools/rename_map.py performs the mechanical part of the rename.
+
+Metasci Scribe is not affiliated with or endorsed by the EvoScientist project.
+The names and logos of EvoScientist are not used to promote this work.

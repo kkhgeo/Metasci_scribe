@@ -1,6 +1,6 @@
-"""Tests for EvoScientist/stream/emitter.py."""
+"""Tests for metasci_scribe/stream/emitter.py."""
 
-from EvoScientist.stream.emitter import StreamEvent, StreamEventEmitter
+from metasci_scribe.stream.emitter import StreamEvent, StreamEventEmitter
 
 
 class TestStreamEventEmitter:

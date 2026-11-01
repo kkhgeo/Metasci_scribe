@@ -20,7 +20,7 @@ class TestPanelWidgetState:
     """PanelWidget state transitions independent of the compositor."""
 
     def test_construction(self):
-        from EvoScientist.cli.widgets.panel_widget import PanelWidget
+        from metasci_scribe.cli.widgets.panel_widget import PanelWidget
 
         w = PanelWidget("ci_eval_1")
         assert w.eval_id == "ci_eval_1"
@@ -28,7 +28,7 @@ class TestPanelWidgetState:
         assert w._is_active is True
 
     def test_summary_counts_all_running(self):
-        from EvoScientist.cli.widgets.panel_widget import PanelWidget, _DispatchRow
+        from metasci_scribe.cli.widgets.panel_widget import PanelWidget, _DispatchRow
 
         w = PanelWidget("e1")
         w._rows["d1"] = _DispatchRow("innovator", "a")
@@ -37,7 +37,7 @@ class TestPanelWidgetState:
         assert (running, ok, err) == (2, 0, 0)
 
     def test_summary_counts_mixed(self):
-        from EvoScientist.cli.widgets.panel_widget import PanelWidget, _DispatchRow
+        from metasci_scribe.cli.widgets.panel_widget import PanelWidget, _DispatchRow
 
         w = PanelWidget("e1")
         r1 = _DispatchRow("innovator", "a")
@@ -56,7 +56,7 @@ class TestDispatchRow(unittest.TestCase):
     """_DispatchRow state transitions."""
 
     def test_construction_sets_running(self):
-        from EvoScientist.cli.widgets.panel_widget import _DispatchRow
+        from metasci_scribe.cli.widgets.panel_widget import _DispatchRow
 
         row = _DispatchRow("idea-brainstorm", "innovator voice")
         assert row._subagent_type == "idea-brainstorm"
@@ -65,7 +65,7 @@ class TestDispatchRow(unittest.TestCase):
         assert row._duration_ms is None
 
     def test_elapsed_display_uses_recorded_duration(self):
-        from EvoScientist.cli.widgets.panel_widget import _DispatchRow
+        from metasci_scribe.cli.widgets.panel_widget import _DispatchRow
 
         row = _DispatchRow("x", "y")
         row._duration_ms = 2500
@@ -88,7 +88,7 @@ class TestPanelWidgetReentry:
     async def _boot_panel(self):
         from textual.app import App, ComposeResult
 
-        from EvoScientist.cli.widgets.panel_widget import PanelWidget
+        from metasci_scribe.cli.widgets.panel_widget import PanelWidget
 
         class _PanelApp(App[None]):
             def compose(self) -> ComposeResult:
@@ -106,7 +106,7 @@ class TestPanelWidgetReentry:
         return "".join(seg.text for seg in header.render_line(0)).strip()
 
     async def test_reentry_after_finalize_rearms_panel(self):
-        from EvoScientist.cli.widgets.panel_widget import PanelWidget
+        from metasci_scribe.cli.widgets.panel_widget import PanelWidget
 
         app = await self._boot_panel()
         async with app.run_test(size=(120, 20)) as pilot:
@@ -171,7 +171,7 @@ class TestPanelWidgetFinalizeEmpty:
     async def test_finalize_running_stops_timer_with_no_rows(self):
         from textual.app import App, ComposeResult
 
-        from EvoScientist.cli.widgets.panel_widget import PanelWidget
+        from metasci_scribe.cli.widgets.panel_widget import PanelWidget
 
         class _PanelApp(App[None]):
             def compose(self) -> ComposeResult:

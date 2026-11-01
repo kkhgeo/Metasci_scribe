@@ -12,13 +12,13 @@ pytest.importorskip("textual")
 from textual.app import App
 from textual.widgets import Static
 
-import EvoScientist.channels.hitl_budget as budget_mod
-import EvoScientist.cli.tui_interactive as tui_mod
-from EvoScientist.channels.interaction import ApprovalOutcome
-from EvoScientist.cli.widgets.subagent_widget import SubAgentWidget
-from EvoScientist.cli.widgets.tool_call_widget import ToolCallWidget
-from EvoScientist.gateway import RuntimeGateways
-from EvoScientist.stream import display as display_mod
+import metasci_scribe.channels.hitl_budget as budget_mod
+import metasci_scribe.cli.tui_interactive as tui_mod
+from metasci_scribe.channels.interaction import ApprovalOutcome
+from metasci_scribe.cli.widgets.subagent_widget import SubAgentWidget
+from metasci_scribe.cli.widgets.tool_call_widget import ToolCallWidget
+from metasci_scribe.gateway import RuntimeGateways
+from metasci_scribe.stream import display as display_mod
 from tests.fakes.common import FakeGraphGateway, no_config_rule
 from tests.fakes.tui import (
     APPROVE,

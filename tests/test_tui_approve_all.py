@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("textual")
 
-from EvoScientist.channels.interaction import ApprovalOutcome
+from metasci_scribe.channels.interaction import ApprovalOutcome
 from tests.fakes.common import no_config_rule as _no_config_rule
 from tests.fakes.tui import (
     APPROVE,
@@ -54,7 +54,7 @@ async def test_the_granting_answer_is_sent_unkeyed(monkeypatch, workspace):
 
 
 async def test_a_config_rule_answer_is_not_keyed(monkeypatch, workspace):
-    import EvoScientist.channels.interaction as interaction_mod
+    import metasci_scribe.channels.interaction as interaction_mod
 
     monkeypatch.setattr(
         interaction_mod, "config_policy_snapshot", lambda reqs: (list(APPROVE), {})
@@ -134,7 +134,7 @@ async def test_an_answer_not_from_the_grant_drops_a_key_the_turn_started_with(
 ):
     """The turn starts keyed; an approval that still arrives and is answered by
     a config rule must go back unkeyed, whatever the previous call carried."""
-    import EvoScientist.channels.interaction as interaction_mod
+    import metasci_scribe.channels.interaction as interaction_mod
 
     monkeypatch.setattr(
         interaction_mod, "config_policy_snapshot", lambda reqs: (list(APPROVE), {})
@@ -252,8 +252,8 @@ async def test_the_channel_handler_passes_its_chats_grant(
 ):
     """The handler, not the loop, knows the chat: a turn must start keyed for a
     granted chat and never for a chat that only shares the process with one."""
-    from EvoScientist.cli import channel as channel_mod
-    from EvoScientist.cli.channel import ChannelMessage, _register_channel_request
+    from metasci_scribe.cli import channel as channel_mod
+    from metasci_scribe.cli.channel import ChannelMessage, _register_channel_request
 
     app = await capture_app(monkeypatch, workspace)
     msg = ChannelMessage(

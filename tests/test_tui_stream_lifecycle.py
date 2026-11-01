@@ -9,8 +9,8 @@ import pytest
 
 pytest.importorskip("textual")
 
-from EvoScientist.gateway import RuntimeGateways
-from EvoScientist.middleware import events as mw_events
+from metasci_scribe.gateway import RuntimeGateways
+from metasci_scribe.middleware import events as mw_events
 from tests.fakes.common import FakeGraphGateway
 from tests.fakes.tui import capture_app
 

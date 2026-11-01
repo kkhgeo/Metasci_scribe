@@ -1,4 +1,4 @@
-"""Shared fixtures for EvoScientist tests."""
+"""Shared fixtures for Metasci Scribe tests."""
 
 import errno
 import ipaddress
@@ -17,23 +17,23 @@ _test_home: Path | None = None
 
 
 def pytest_configure(config):
-    """Point the home folder at an empty one before EvoScientist is imported.
+    """Point the home folder at an empty one before Metasci Scribe is imported.
 
-    ``EvoScientist.paths`` resolves the data and config folders from it at
+    ``metasci_scribe.paths`` resolves the data and config folders from it at
     import, and the import itself migrates files there, so a fixture would
-    act too late. ``XDG_CONFIG_HOME`` and ``EVOSCIENTIST_DATA_DIR`` would
+    act too late. ``XDG_CONFIG_HOME`` and ``METASCI_SCRIBE_DATA_DIR`` would
     override it, so they go too.
     """
     global _test_home
-    if "EvoScientist" in sys.modules:
+    if "metasci-scribe" in sys.modules:
         raise pytest.UsageError(
-            "EvoScientist was imported before tests/conftest.py could isolate "
+            "Metasci Scribe was imported before tests/conftest.py could isolate "
             "the home folder; import it inside fixtures or tests instead"
         )
-    _test_home = Path(tempfile.mkdtemp(prefix="evosci-test-home-"))
+    _test_home = Path(tempfile.mkdtemp(prefix="metasci-scribe-test-home-"))
     os.environ["HOME"] = str(_test_home)
     os.environ["USERPROFILE"] = str(_test_home)
-    for name in ("XDG_CONFIG_HOME", "EVOSCIENTIST_DATA_DIR"):
+    for name in ("XDG_CONFIG_HOME", "METASCI_SCRIBE_DATA_DIR"):
         os.environ.pop(name, None)
 
 
@@ -42,7 +42,7 @@ def pytest_unconfigure(config):
         shutil.rmtree(_test_home, ignore_errors=True)
 
 
-_CLEARED_ENV_PREFIXES = ("EVOSCIENTIST_", "LANGCHAIN_", "LANGSMITH_")
+_CLEARED_ENV_PREFIXES = ("METASCI_SCRIBE_", "LANGCHAIN_", "LANGSMITH_")
 _CLEARED_ENV_SUFFIXES = ("_API_KEY", "_BASE_URL")
 _CLEARED_ENV_NAMES = frozenset(
     {"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"}
@@ -51,7 +51,7 @@ _CLEARED_ENV_NAMES = frozenset(
 
 
 def _cleared_env_name(name: str) -> bool:
-    from EvoScientist.config.settings import _ENV_MAPPINGS
+    from metasci_scribe.config.settings import _ENV_MAPPINGS
 
     return (
         name in _CLEARED_ENV_NAMES
@@ -63,7 +63,7 @@ def _cleared_env_name(name: str) -> bool:
 
 @pytest.hookimpl(wrapper=True)
 def pytest_runtest_protocol(item, nextitem):
-    """Start every test without the developer's provider, EvoScientist,
+    """Start every test without the developer's provider, Metasci Scribe,
     tracing and proxy settings, and undo whatever it writes to the
     environment. Production code (``apply_config_to_env``, the ccproxy setup)
     assigns ``os.environ`` directly, which monkeypatch cannot undo.
@@ -112,8 +112,8 @@ def _no_network(monkeypatch):
     uvloop connects in C, past both patches; a test that installs it is not
     guarded.
     """
-    from EvoScientist import update_check
-    from EvoScientist.langgraph_dev.sdk import DEFAULT_LANGGRAPH_DEV_PORT
+    from metasci_scribe import update_check
+    from metasci_scribe.langgraph_dev.sdk import DEFAULT_LANGGRAPH_DEV_PORT
 
     attempts: list[str] = []
     real_connect = socket.socket.connect
@@ -259,7 +259,7 @@ def _fresh_langgraph_dev_state(monkeypatch):
     in module globals; a test that leaves one set (a fake ``Popen`` among
     them) changes what the next test's ``ensure_langgraph_dev`` does.
     """
-    from EvoScientist.langgraph_dev import manager
+    from metasci_scribe.langgraph_dev import manager
 
     for name, value in {
         "_PROCESS": None,
@@ -295,7 +295,7 @@ def _no_health_server(monkeypatch):
     The default binds ``0.0.0.0:8080``: open to the LAN while tests run, and
     shared by every test that starts a runner at the same time.
     """
-    from EvoScientist.channels.channel_manager import ChannelManager
+    from metasci_scribe.channels.channel_manager import ChannelManager
 
     monkeypatch.setitem(ChannelManager.__init__.__kwdefaults__, "health_port", 0)
 
@@ -303,7 +303,7 @@ def _no_health_server(monkeypatch):
 @pytest.fixture(autouse=True)
 def _fresh_process_workspace():
     """``process_workspace()`` is read once per process; tests change env/cwd."""
-    from EvoScientist.paths import process_session_dirs, process_workspace
+    from metasci_scribe.paths import process_session_dirs, process_workspace
 
     process_workspace.cache_clear()
     process_session_dirs.cache_clear()
@@ -317,14 +317,14 @@ def no_mcp(monkeypatch):
     """For tests that build the real agent: it would load the user's MCP servers,
     which cannot start inside a running loop. Opt in with ``usefixtures``."""
     monkeypatch.setattr(
-        "EvoScientist.EvoScientist._load_mcp_tools_cached", lambda *a, **k: {}
+        "metasci_scribe.agent._load_mcp_tools_cached", lambda *a, **k: {}
     )
 
 
 @pytest.fixture
 def workspace(tmp_path):
     """A ``Workspace`` rooted at a fresh temporary folder."""
-    from EvoScientist.paths import Workspace
+    from metasci_scribe.paths import Workspace
 
     root = tmp_path / "ws"
     root.mkdir()
@@ -342,9 +342,9 @@ def runtime_paths(tmp_path, monkeypatch):
     Tests that need a variant of a single field can still call
     ``dataclasses.replace(runtime_paths, log_file=…)`` etc. — the
     baseline is already isolated, so forgetting a field just keeps it
-    under ``tmp_path``, never ``~/.config/evoscientist``.
+    under ``tmp_path``, never ``~/.config/metasci-scribe``.
     """
-    from EvoScientist.langgraph_dev import manager
+    from metasci_scribe.langgraph_dev import manager
 
     runtime = manager.LanggraphRuntimePaths.for_directory(tmp_path / "runtime")
     monkeypatch.setattr(manager, "RUNTIME", runtime)
@@ -359,7 +359,7 @@ def _isolate_dotenv(monkeypatch):
     would leak into every later test; a nonexistent path makes it a no-op.
     """
     monkeypatch.setattr(
-        "EvoScientist.config.settings.find_dotenv",
+        "metasci_scribe.config.settings.find_dotenv",
         lambda *args, **kwargs: _NONEXISTENT_DOTENV,
     )
 
@@ -369,19 +369,19 @@ def _isolate_user_dirs(tmp_path_factory, monkeypatch):
     """Keep the developer's real data and config folders out of every test.
 
     Both are read once at import (``paths.DATA_DIR``, ``paths.CONFIG_DIR``), so
-    setting ``EVOSCIENTIST_DATA_DIR`` or ``XDG_CONFIG_HOME`` in a test does not
+    setting ``METASCI_SCRIBE_DATA_DIR`` or ``XDG_CONFIG_HOME`` in a test does not
     move them; point them, and the copies taken at import, at fresh folders.
     """
-    from EvoScientist import paths, update_check
-    from EvoScientist.cli import tui_interactive
-    from EvoScientist.mcp import client as mcp_client
+    from metasci_scribe import paths, update_check
+    from metasci_scribe.cli import tui_interactive
+    from metasci_scribe.mcp import client as mcp_client
 
     # mktemp() lists the whole base folder, which gains a folder every test.
     users = tmp_path_factory.getbasetemp() / "users"
     users.mkdir(exist_ok=True)
     root = Path(tempfile.mkdtemp(dir=users))
-    data_dir = root / ".evoscientist"
-    config_dir = root / "config" / "evoscientist"
+    data_dir = root / ".metasci-scribe"
+    config_dir = root / "config" / "metasci-scribe"
     monkeypatch.setattr(paths, "DATA_DIR", data_dir)
     monkeypatch.setattr(paths, "GLOBAL_SKILLS_DIR", data_dir / "skills")
     monkeypatch.setattr(paths, "GLOBAL_MEMORIES_DIR", data_dir / "memories")
@@ -406,7 +406,7 @@ def _no_agent_python_probe(monkeypatch):
     python, no environment"; ``tests/test_setup_research_env.py`` restores
     the real functions for its own tests.
     """
-    from EvoScientist.setup import research_env
+    from metasci_scribe.setup import research_env
 
     monkeypatch.setattr(research_env, "_agent_python", lambda: (None, None))
 
@@ -419,7 +419,7 @@ def _no_uv_probes(monkeypatch):
     ``shutil.which``). ``tests/test_uv_tool.py`` tests the real functions."""
     import shutil
 
-    from EvoScientist import uv_tool
+    from metasci_scribe import uv_tool
 
     monkeypatch.setattr(uv_tool, "_knows_system_certs", lambda uv: True)
     monkeypatch.setattr(uv_tool, "find_uv", lambda: shutil.which("uv"))
@@ -437,7 +437,7 @@ def _no_agent_bash(monkeypatch):
     OS, and its once-per-process log is silenced
     (``tests/test_setup_research_env.py`` restores it).
     """
-    from EvoScientist import agent_shell
+    from metasci_scribe import agent_shell
 
     monkeypatch.setattr(agent_shell, "agent_bash", lambda: None)
     monkeypatch.setattr(agent_shell, "_bash_missing", lambda: False)
@@ -448,7 +448,7 @@ def _no_agent_bash(monkeypatch):
 def no_git(tmp_path, monkeypatch):
     """Run as if git were not installed.
 
-    ``EvoScientist.git_cli.subprocess.run`` is the process-wide
+    ``metasci_scribe.git_cli.subprocess.run`` is the process-wide
     ``subprocess.run``, so the fake asserts the command is git: a test must not
     pass because some other subprocess call failed. ``DATA_DIR`` points at an
     empty dir, so on Windows the retry with a recorded PortableGit finds none
@@ -456,7 +456,7 @@ def no_git(tmp_path, monkeypatch):
     """
     from unittest.mock import patch
 
-    from EvoScientist import paths
+    from metasci_scribe import paths
 
     monkeypatch.setattr(paths, "DATA_DIR", tmp_path / "no-git-data")
 
@@ -464,5 +464,5 @@ def no_git(tmp_path, monkeypatch):
         assert argv[0] == "git", f"unexpected subprocess.run call: {argv!r}"
         raise FileNotFoundError(2, "No such file or directory", "git")
 
-    with patch("EvoScientist.git_cli.subprocess.run", side_effect=fake_run):
+    with patch("metasci_scribe.git_cli.subprocess.run", side_effect=fake_run):
         yield

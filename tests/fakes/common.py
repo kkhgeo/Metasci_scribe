@@ -14,10 +14,10 @@ from unittest.mock import MagicMock, patch
 import httpx
 from langgraph_sdk.client import LangGraphClient
 
-from EvoScientist.channels.base import Channel
-from EvoScientist.channels.bus.events import InboundMessage, OutboundMessage
-from EvoScientist.commands.base import CommandUI
-from EvoScientist.gateway import (
+from metasci_scribe.channels.base import Channel
+from metasci_scribe.channels.bus.events import InboundMessage, OutboundMessage
+from metasci_scribe.commands.base import CommandUI
+from metasci_scribe.gateway import (
     GraphEvent,
     GraphGateway,
     GraphStateValues,
@@ -26,10 +26,10 @@ from EvoScientist.gateway import (
     ThreadResolution,
     ThreadStore,
 )
-from EvoScientist.paths import Workspace
+from metasci_scribe.paths import Workspace
 
 # A path value for tests whose code never touches the workspace folder.
-TEST_WORKSPACE = Workspace("/nonexistent/evosci-test-workspace")
+TEST_WORKSPACE = Workspace("/nonexistent/metasci-scribe-test-workspace")
 
 _DEFAULT_COPY_RESPONSE = object()
 
@@ -837,7 +837,7 @@ def close_result(text: str) -> tuple[str, str, bool]:
     a ``ParkedCloseReason``. Read off the sentences in ``backends``, so a test
     states the facts without repeating the wording.
     """
-    from EvoScientist import backends
+    from metasci_scribe import backends
 
     banned = backends._NO_RETRY in text
     for reason, template in backends._ASKED_RESULT.items():
@@ -874,7 +874,7 @@ def interrupt_event(n: int) -> dict:
 def attended_config(monkeypatch) -> None:
     """A session in which no config rule answers an approval."""
     monkeypatch.setattr(
-        "EvoScientist.EvoScientist._ensure_config",
+        "metasci_scribe.agent._ensure_config",
         lambda: SimpleNamespace(
             auto_approve=False, dangerous_mode=False, shell_allow_list=""
         ),
@@ -883,7 +883,7 @@ def attended_config(monkeypatch) -> None:
 
 def no_config_rule(monkeypatch) -> None:
     """The config policy leaves every approval to a human."""
-    import EvoScientist.channels.interaction as interaction_mod
+    import metasci_scribe.channels.interaction as interaction_mod
 
     monkeypatch.setattr(
         interaction_mod, "config_policy_snapshot", lambda reqs: (None, {})
@@ -904,18 +904,18 @@ def _mock_config():
 
 
 def build_default_middleware(workspace, *, for_async_subagent: bool):
-    from EvoScientist.EvoScientist import _get_default_middleware
+    from metasci_scribe.agent import _get_default_middleware
 
     with (
         patch(
-            "EvoScientist.middleware.create_tool_selector_middleware",
+            "metasci_scribe.middleware.create_tool_selector_middleware",
             return_value=[MagicMock()],
         ),
         patch(
-            "EvoScientist.EvoScientist._ensure_chat_model",
+            "metasci_scribe.agent._ensure_chat_model",
             return_value=MagicMock(profile={"max_input_tokens": 200_000}),
         ),
-        patch("EvoScientist.EvoScientist._ensure_config", return_value=_mock_config()),
+        patch("metasci_scribe.agent._ensure_config", return_value=_mock_config()),
     ):
         return _get_default_middleware(
             workspace=workspace, for_async_subagent=for_async_subagent
@@ -924,7 +924,7 @@ def build_default_middleware(workspace, *, for_async_subagent: bool):
 
 def status_snapshot():
     """A status bar snapshot with a model and a little context in use."""
-    from EvoScientist.cli.status_bar import SessionStatusSnapshot
+    from metasci_scribe.cli.status_bar import SessionStatusSnapshot
 
     return SessionStatusSnapshot(
         model_full="claude-sonnet-4-6",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from EvoScientist.middleware.goal import (
+from metasci_scribe.middleware.goal import (
     GOAL_CRITERIA_LIMIT,
     GOAL_NOTE_LIMIT,
     GOAL_OBJECTIVE_LIMIT,
@@ -15,7 +15,7 @@ from EvoScientist.middleware.goal import (
     merge_goal,
     new_goal_request,
 )
-from EvoScientist.rubric_session import thread_goal
+from metasci_scribe.rubric_session import thread_goal
 
 GOAL = {
     "objective": "ship it",

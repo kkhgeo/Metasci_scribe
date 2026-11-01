@@ -2,7 +2,7 @@
 
 
 def test_hitl_interrupt_on_arms_expected_tools():
-    from EvoScientist.EvoScientist import HITL_INTERRUPT_ON
+    from metasci_scribe.agent import HITL_INTERRUPT_ON
 
     assert HITL_INTERRUPT_ON == {
         "execute": True,

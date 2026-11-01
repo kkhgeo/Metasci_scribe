@@ -18,7 +18,7 @@ def lgapi_utils(langgraph_api_env):
     """``langgraph_api.utils``, imported with the variables its config needs."""
     import langgraph_api.utils
 
-    import EvoScientist.llm.patches as patches
+    import metasci_scribe.llm.patches as patches
 
     # Re-invoke the patch now that the variables are set. Earlier imports of
     # patches.py ran without them, so importing ``langgraph_api.utils``
@@ -142,6 +142,6 @@ def test_no_docstring_still_handled(lgapi_utils):
 
 
 def test_patch_flag_set():
-    from EvoScientist.llm.patches import _langgraph_schema_silenced_patched
+    from metasci_scribe.llm.patches import _langgraph_schema_silenced_patched
 
     assert _langgraph_schema_silenced_patched is True

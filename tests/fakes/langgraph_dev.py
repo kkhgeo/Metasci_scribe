@@ -7,7 +7,7 @@ import subprocess
 import threading
 from pathlib import Path
 
-from EvoScientist.langgraph_dev import manager
+from metasci_scribe.langgraph_dev import manager
 
 
 class LockHolder:
@@ -45,7 +45,7 @@ def patch_start_prereqs(monkeypatch, tmp_path: Path, runtime_paths) -> dict:
     Returns a ``captured`` dict that the test populates from the fake Popen."""
     captured: dict = {}
 
-    from EvoScientist.mcp import client as mcp_client
+    from metasci_scribe.mcp import client as mcp_client
 
     monkeypatch.setattr(mcp_client, "load_mcp_config", lambda: {})
     monkeypatch.setattr(manager, "_langgraph_exe", lambda: "/usr/bin/langgraph")

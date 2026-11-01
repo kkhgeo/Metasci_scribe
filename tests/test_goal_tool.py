@@ -162,7 +162,7 @@ class TestWhenTheModelIsOfferedTheTool:
     def test_a_provider_tool_given_as_a_dict_is_left_alone(self):
         from types import SimpleNamespace
 
-        from EvoScientist.middleware.goal import _without_update_goal, update_goal
+        from metasci_scribe.middleware.goal import _without_update_goal, update_goal
 
         server_tool = {"type": "web_search_20250305", "name": "web_search"}
         request = SimpleNamespace(tools=[server_tool, update_goal])
@@ -180,7 +180,7 @@ class TestWhenTheModelIsOfferedTheTool:
     def test_the_tool_given_as_a_dict_is_taken_off_as_well(self, as_dict):
         from types import SimpleNamespace
 
-        from EvoScientist.middleware.goal import _without_update_goal
+        from metasci_scribe.middleware.goal import _without_update_goal
 
         other = {"type": "function", "function": {"name": "lookup"}}
         request = SimpleNamespace(tools=[other, as_dict])
@@ -190,7 +190,7 @@ class TestWhenTheModelIsOfferedTheTool:
     def test_a_request_without_the_tool_is_passed_on_as_it_is(self):
         from types import SimpleNamespace
 
-        from EvoScientist.middleware.goal import _without_update_goal
+        from metasci_scribe.middleware.goal import _without_update_goal
 
         request = SimpleNamespace(tools=[{"name": "web_search"}])
         assert _without_update_goal(request) is request
@@ -205,7 +205,7 @@ class TestWhenTheModelIsOfferedTheTool:
 
 def test_the_tool_selector_never_drops_the_tool():
     """With many MCP tools the selector trims the list; the goal tool must stay."""
-    from EvoScientist.middleware.tool_selector import DEFAULT_ALWAYS_INCLUDE_TOOLS
+    from metasci_scribe.middleware.tool_selector import DEFAULT_ALWAYS_INCLUDE_TOOLS
 
     assert "update_goal" in DEFAULT_ALWAYS_INCLUDE_TOOLS
 

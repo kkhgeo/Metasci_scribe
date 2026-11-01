@@ -10,13 +10,13 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from EvoScientist.cli.channel import (
+from metasci_scribe.cli.channel import (
     ChannelMessage,
 )
-from EvoScientist.cli.channel import (
+from metasci_scribe.cli.channel import (
     dispatch_channel_slash_command as _dispatch_channel_slash_command,
 )
-from EvoScientist.paths import SessionDirs, Workspace
+from metasci_scribe.paths import SessionDirs, Workspace
 from tests.fakes.common import TEST_WORKSPACE, FakeGraphGateway, FakeThreadStore
 
 
@@ -66,10 +66,10 @@ async def test_unresolved_slash_returns_unknown_command_response():
     msg = _make_msg(content="/unknown-cmd")
     append = MagicMock()
     with patch(
-        "EvoScientist.commands.manager.manager.resolve",
+        "metasci_scribe.commands.manager.manager.resolve",
         return_value=None,
     ):
-        with patch("EvoScientist.cli.channel._set_channel_response") as mock_response:
+        with patch("metasci_scribe.cli.channel._set_channel_response") as mock_response:
             handled = await dispatch_channel_slash_command(
                 msg,
                 agent=None,
@@ -93,14 +93,14 @@ async def test_successful_slash_execution_sets_response_and_breadcrumb():
     append = MagicMock()
     with (
         patch(
-            "EvoScientist.commands.manager.manager.resolve",
+            "metasci_scribe.commands.manager.manager.resolve",
             return_value=(fake_cmd, ["core"]),
         ),
         patch(
-            "EvoScientist.commands.manager.manager.execute",
+            "metasci_scribe.commands.manager.manager.execute",
             new=AsyncMock(return_value=True),
         ) as mock_execute,
-        patch("EvoScientist.cli.channel._set_channel_response") as mock_set_resp,
+        patch("metasci_scribe.cli.channel._set_channel_response") as mock_set_resp,
     ):
         handled = await dispatch_channel_slash_command(
             msg,
@@ -122,7 +122,7 @@ async def test_successful_slash_execution_sets_response_and_breadcrumb():
 async def test_slash_with_flushed_output_suppresses_executed_ack():
     """When the command's own output already reached the channel, the
     response is the already-sent sentinel, not a second ack message."""
-    from EvoScientist.cli.channel import COMMAND_OUTPUT_ALREADY_SENT
+    from metasci_scribe.cli.channel import COMMAND_OUTPUT_ALREADY_SENT
 
     msg = _make_msg()
     fake_cmd = MagicMock()
@@ -134,14 +134,14 @@ async def test_slash_with_flushed_output_suppresses_executed_ack():
 
     with (
         patch(
-            "EvoScientist.commands.manager.manager.resolve",
+            "metasci_scribe.commands.manager.manager.resolve",
             return_value=(fake_cmd, ["core"]),
         ),
         patch(
-            "EvoScientist.commands.manager.manager.execute",
+            "metasci_scribe.commands.manager.manager.execute",
             new=AsyncMock(side_effect=_execute_with_output),
         ),
-        patch("EvoScientist.cli.channel._set_channel_response") as mock_set_resp,
+        patch("metasci_scribe.cli.channel._set_channel_response") as mock_set_resp,
     ):
         handled = await dispatch_channel_slash_command(
             msg,
@@ -157,7 +157,7 @@ async def test_slash_with_flushed_output_suppresses_executed_ack():
 
 async def test_real_help_command_publishes_help_once():
     """Exercise the registered /help command rather than a mocked command."""
-    from EvoScientist.cli.channel import COMMAND_OUTPUT_ALREADY_SENT
+    from metasci_scribe.cli.channel import COMMAND_OUTPUT_ALREADY_SENT
 
     bus = SimpleNamespace(publish_outbound=AsyncMock())
     msg = _make_msg(content="/help")
@@ -165,8 +165,8 @@ async def test_real_help_command_publishes_help_once():
     msg.bus_ref = bus
 
     with (
-        patch("EvoScientist.cli.channel._bus_loop", asyncio.get_running_loop()),
-        patch("EvoScientist.cli.channel._set_channel_response") as mock_set_resp,
+        patch("metasci_scribe.cli.channel._bus_loop", asyncio.get_running_loop()),
+        patch("metasci_scribe.cli.channel._set_channel_response") as mock_set_resp,
     ):
         handled = await dispatch_channel_slash_command(
             msg,
@@ -201,14 +201,14 @@ async def test_slash_dispatch_passes_graph_gateway_to_command_context():
 
     with (
         patch(
-            "EvoScientist.commands.manager.manager.resolve",
+            "metasci_scribe.commands.manager.manager.resolve",
             return_value=(fake_cmd, ["core"]),
         ),
         patch(
-            "EvoScientist.commands.manager.manager.execute",
+            "metasci_scribe.commands.manager.manager.execute",
             new=AsyncMock(side_effect=_execute),
         ),
-        patch("EvoScientist.cli.channel._set_channel_response"),
+        patch("metasci_scribe.cli.channel._set_channel_response"),
     ):
         handled = await dispatch_channel_slash_command(
             msg,
@@ -239,14 +239,14 @@ async def test_needs_agent_awaits_loader_and_passes_result():
 
     with (
         patch(
-            "EvoScientist.commands.manager.manager.resolve",
+            "metasci_scribe.commands.manager.manager.resolve",
             return_value=(fake_cmd, []),
         ),
         patch(
-            "EvoScientist.commands.manager.manager.execute",
+            "metasci_scribe.commands.manager.manager.execute",
             new=AsyncMock(return_value=True),
         ) as mock_execute,
-        patch("EvoScientist.cli.channel._set_channel_response"),
+        patch("metasci_scribe.cli.channel._set_channel_response"),
     ):
         handled = await dispatch_channel_slash_command(
             msg,
@@ -275,10 +275,10 @@ async def test_await_agent_ready_failure_sets_error_response():
 
     with (
         patch(
-            "EvoScientist.commands.manager.manager.resolve",
+            "metasci_scribe.commands.manager.manager.resolve",
             return_value=(fake_cmd, []),
         ),
-        patch("EvoScientist.cli.channel._set_channel_response") as mock_set_resp,
+        patch("metasci_scribe.cli.channel._set_channel_response") as mock_set_resp,
     ):
         handled = await dispatch_channel_slash_command(
             msg,
@@ -304,14 +304,14 @@ async def test_cmd_manager_raises_returns_true_with_error():
     append = MagicMock()
     with (
         patch(
-            "EvoScientist.commands.manager.manager.resolve",
+            "metasci_scribe.commands.manager.manager.resolve",
             return_value=(fake_cmd, []),
         ),
         patch(
-            "EvoScientist.commands.manager.manager.execute",
+            "metasci_scribe.commands.manager.manager.execute",
             new=AsyncMock(side_effect=RuntimeError("boom")),
         ),
-        patch("EvoScientist.cli.channel._set_channel_response") as mock_set_resp,
+        patch("metasci_scribe.cli.channel._set_channel_response") as mock_set_resp,
     ):
         handled = await dispatch_channel_slash_command(
             msg,
@@ -350,14 +350,14 @@ async def test_on_cmd_completed_awaited_with_ctx_original_agent_and_cmd():
 
     with (
         patch(
-            "EvoScientist.commands.manager.manager.resolve",
+            "metasci_scribe.commands.manager.manager.resolve",
             return_value=(fake_cmd, []),
         ),
         patch(
-            "EvoScientist.commands.manager.manager.execute",
+            "metasci_scribe.commands.manager.manager.execute",
             new=_fake_execute,
         ),
-        patch("EvoScientist.cli.channel._set_channel_response"),
+        patch("metasci_scribe.cli.channel._set_channel_response"),
     ):
         handled = await dispatch_channel_slash_command(
             msg,
@@ -388,14 +388,14 @@ async def test_on_cmd_completed_receives_cmd_for_new_and_compact():
 
         with (
             patch(
-                "EvoScientist.commands.manager.manager.resolve",
+                "metasci_scribe.commands.manager.manager.resolve",
                 return_value=(fake_cmd, []),
             ),
             patch(
-                "EvoScientist.commands.manager.manager.execute",
+                "metasci_scribe.commands.manager.manager.execute",
                 new=AsyncMock(return_value=True),
             ),
-            patch("EvoScientist.cli.channel._set_channel_response"),
+            patch("metasci_scribe.cli.channel._set_channel_response"),
         ):
             await dispatch_channel_slash_command(
                 _make_msg(content=cmd_name),
@@ -419,7 +419,7 @@ async def test_on_cmd_completed_skipped_on_fall_through_and_error():
         completed(*args, **kwargs)
 
     # Non-slash
-    with patch("EvoScientist.cli.channel._set_channel_response"):
+    with patch("metasci_scribe.cli.channel._set_channel_response"):
         await dispatch_channel_slash_command(
             _make_msg(content="hi"),
             agent=None,
@@ -431,10 +431,10 @@ async def test_on_cmd_completed_skipped_on_fall_through_and_error():
     # Unresolved slash
     with (
         patch(
-            "EvoScientist.commands.manager.manager.resolve",
+            "metasci_scribe.commands.manager.manager.resolve",
             return_value=None,
         ),
-        patch("EvoScientist.cli.channel._set_channel_response"),
+        patch("metasci_scribe.cli.channel._set_channel_response"),
     ):
         await dispatch_channel_slash_command(
             _make_msg(content="/nope"),
@@ -447,14 +447,14 @@ async def test_on_cmd_completed_skipped_on_fall_through_and_error():
     # Execute raises
     with (
         patch(
-            "EvoScientist.commands.manager.manager.resolve",
+            "metasci_scribe.commands.manager.manager.resolve",
             return_value=(fake_cmd, []),
         ),
         patch(
-            "EvoScientist.commands.manager.manager.execute",
+            "metasci_scribe.commands.manager.manager.execute",
             new=AsyncMock(side_effect=RuntimeError("boom")),
         ),
-        patch("EvoScientist.cli.channel._set_channel_response"),
+        patch("metasci_scribe.cli.channel._set_channel_response"),
     ):
         await dispatch_channel_slash_command(
             _make_msg(),
@@ -483,14 +483,14 @@ async def test_command_error_skips_completion_hook_and_reports_error():
 
     with (
         patch(
-            "EvoScientist.commands.manager.manager.resolve",
+            "metasci_scribe.commands.manager.manager.resolve",
             return_value=(fake_cmd, ["abc"]),
         ),
         patch(
-            "EvoScientist.commands.manager.manager.execute",
+            "metasci_scribe.commands.manager.manager.execute",
             side_effect=_execute,
         ),
-        patch("EvoScientist.cli.channel._set_channel_response") as mock_set_resp,
+        patch("metasci_scribe.cli.channel._set_channel_response") as mock_set_resp,
     ):
         handled = await dispatch_channel_slash_command(
             msg,
@@ -509,7 +509,7 @@ async def test_command_error_skips_completion_hook_and_reports_error():
 
 async def test_command_error_with_flushed_output_suppresses_second_error():
     """CommandManager already flushes its error text to channel UIs."""
-    from EvoScientist.cli.channel import COMMAND_OUTPUT_ALREADY_SENT
+    from metasci_scribe.cli.channel import COMMAND_OUTPUT_ALREADY_SENT
 
     msg = _make_msg(content="/resume abc")
     fake_cmd = MagicMock()
@@ -522,14 +522,14 @@ async def test_command_error_with_flushed_output_suppresses_second_error():
 
     with (
         patch(
-            "EvoScientist.commands.manager.manager.resolve",
+            "metasci_scribe.commands.manager.manager.resolve",
             return_value=(fake_cmd, ["abc"]),
         ),
         patch(
-            "EvoScientist.commands.manager.manager.execute",
+            "metasci_scribe.commands.manager.manager.execute",
             side_effect=_execute,
         ),
-        patch("EvoScientist.cli.channel._set_channel_response") as mock_set_resp,
+        patch("metasci_scribe.cli.channel._set_channel_response") as mock_set_resp,
     ):
         handled = await dispatch_channel_slash_command(
             msg,
@@ -557,14 +557,14 @@ async def test_empty_command_error_still_reports_error():
 
     with (
         patch(
-            "EvoScientist.commands.manager.manager.resolve",
+            "metasci_scribe.commands.manager.manager.resolve",
             return_value=(fake_cmd, ["abc"]),
         ),
         patch(
-            "EvoScientist.commands.manager.manager.execute",
+            "metasci_scribe.commands.manager.manager.execute",
             side_effect=_execute,
         ),
-        patch("EvoScientist.cli.channel._set_channel_response") as mock_set_resp,
+        patch("metasci_scribe.cli.channel._set_channel_response") as mock_set_resp,
     ):
         handled = await dispatch_channel_slash_command(
             msg,
@@ -592,14 +592,14 @@ async def test_on_cmd_completed_exception_is_absorbed():
 
     with (
         patch(
-            "EvoScientist.commands.manager.manager.resolve",
+            "metasci_scribe.commands.manager.manager.resolve",
             return_value=(fake_cmd, []),
         ),
         patch(
-            "EvoScientist.commands.manager.manager.execute",
+            "metasci_scribe.commands.manager.manager.execute",
             new=AsyncMock(return_value=True),
         ),
-        patch("EvoScientist.cli.channel._set_channel_response") as mock_set_resp,
+        patch("metasci_scribe.cli.channel._set_channel_response") as mock_set_resp,
     ):
         handled = await dispatch_channel_slash_command(
             msg,
@@ -624,10 +624,10 @@ async def test_top_level_exception_is_absorbed():
     msg = _make_msg()
     with (
         patch(
-            "EvoScientist.commands.manager.manager.resolve",
+            "metasci_scribe.commands.manager.manager.resolve",
             side_effect=RuntimeError("exploded during resolve"),
         ),
-        patch("EvoScientist.cli.channel._set_channel_response") as mock_set_resp,
+        patch("metasci_scribe.cli.channel._set_channel_response") as mock_set_resp,
     ):
         handled = await dispatch_channel_slash_command(
             msg,
@@ -652,14 +652,14 @@ async def test_cmd_execute_returning_false_falls_through():
     append = MagicMock()
     with (
         patch(
-            "EvoScientist.commands.manager.manager.resolve",
+            "metasci_scribe.commands.manager.manager.resolve",
             return_value=(fake_cmd, []),
         ),
         patch(
-            "EvoScientist.commands.manager.manager.execute",
+            "metasci_scribe.commands.manager.manager.execute",
             new=AsyncMock(return_value=False),
         ),
-        patch("EvoScientist.cli.channel._set_channel_response") as mock_set_resp,
+        patch("metasci_scribe.cli.channel._set_channel_response") as mock_set_resp,
     ):
         handled = await dispatch_channel_slash_command(
             msg,
@@ -677,12 +677,12 @@ async def test_skill_slash_falls_through_to_the_agent():
     msg = _make_msg(content="/paper-writing draft the intro")
     append = MagicMock()
     with (
-        patch("EvoScientist.commands.manager.manager.resolve", return_value=None),
+        patch("metasci_scribe.commands.manager.manager.resolve", return_value=None),
         patch(
-            "EvoScientist.commands.skill_slash.skill_slash_names",
+            "metasci_scribe.commands.skill_slash.skill_slash_names",
             return_value=["paper-writing"],
         ),
-        patch("EvoScientist.cli.channel._set_channel_response") as mock_response,
+        patch("metasci_scribe.cli.channel._set_channel_response") as mock_response,
     ):
         handled = await dispatch_channel_slash_command(
             msg,

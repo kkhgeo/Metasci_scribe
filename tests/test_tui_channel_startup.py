@@ -8,8 +8,8 @@ import pytest
 
 pytest.importorskip("textual")
 
-from EvoScientist.cli import tui_interactive as tui_mod
-from EvoScientist.commands.base import ChannelRuntime
+from metasci_scribe.cli import tui_interactive as tui_mod
+from metasci_scribe.commands.base import ChannelRuntime
 
 
 async def test_channel_startup_worker_keeps_event_loop_responsive(
@@ -93,20 +93,20 @@ async def test_channel_startup_worker_stops_channels_after_exit(monkeypatch, tmp
     ("hint", "drift", "expected"),
     [
         (None, None, []),
-        ("run EvoSci setup", None, ["run EvoSci setup"]),
+        ("run metasci-scribe setup", None, ["run metasci-scribe setup"]),
         (None, "server python differs", ["server python differs"]),
         (
-            "run EvoSci setup",
+            "run metasci-scribe setup",
             "server python differs",
-            ["run EvoSci setup", "server python differs"],
+            ["run metasci-scribe setup", "server python differs"],
         ),
     ],
 )
 def test_agent_shell_notices(monkeypatch, hint, drift, expected):
     """The TUI hides terminal output while it runs, so the hint and the
     server-python warning become in-app notices."""
-    from EvoScientist import agent_shell
-    from EvoScientist.langgraph_dev import manager
+    from metasci_scribe import agent_shell
+    from metasci_scribe.langgraph_dev import manager
 
     monkeypatch.setattr(agent_shell, "setup_hint", lambda: hint)
     monkeypatch.setattr(manager, "AGENT_SHELL_DRIFT", drift)

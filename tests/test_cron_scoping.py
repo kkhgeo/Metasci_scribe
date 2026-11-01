@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from EvoScientist.cron import schedule as crons
-from EvoScientist.paths import SessionDirs, Workspace
+from metasci_scribe.cron import schedule as crons
+from metasci_scribe.paths import SessionDirs, Workspace
 
 
 def _cron(cron_id: str, workspace_dir: str | None = None, **metadata) -> dict:
@@ -93,8 +93,8 @@ def test_startup_adoption_needs_server_serving_the_workspace(
     """Moved and untagged tasks are taken over only from a server known to
     hold this workspace's store; a reused server without a workspace record,
     or one moved to another workspace since, may hold another workspace's."""
-    from EvoScientist.cli import commands
-    from EvoScientist.langgraph_dev import manager
+    from metasci_scribe.cli import commands
+    from metasci_scribe.langgraph_dev import manager
 
     roots = {"unknown": None, "other": other.root, "workspace": workspace.root}
     monkeypatch.setattr(crons, "is_available", lambda: True)
@@ -112,9 +112,9 @@ def test_startup_autoskills_reconcile_needs_server_serving_the_workspace(
 ):
     """The reconcile replaces crons it counts as this workspace's, so it runs
     only on a server known to hold this workspace's store."""
-    from EvoScientist.cli import commands
-    from EvoScientist.langgraph_dev import manager
-    from EvoScientist.memory.autoskills import schedule as autoskills_schedule
+    from metasci_scribe.cli import commands
+    from metasci_scribe.langgraph_dev import manager
+    from metasci_scribe.memory.autoskills import schedule as autoskills_schedule
 
     calls = []
     roots = {"unknown": None, "other": other.root, "workspace": workspace.root}
@@ -194,7 +194,7 @@ def test_create_and_run_now_tag_workspace(workspace, client):
 
 
 def test_scheduling_tools_scoped_to_workspace(workspace, client, monkeypatch):
-    from EvoScientist.middleware.scheduler import make_scheduling_tools
+    from metasci_scribe.middleware.scheduler import make_scheduling_tools
 
     monkeypatch.setattr(crons, "is_available", lambda: True)
     tools = {t.name: t for t in make_scheduling_tools(workspace)}
@@ -213,8 +213,8 @@ def test_scheduling_tools_scoped_to_workspace(workspace, client, monkeypatch):
 
 
 async def test_schedule_command_scoped_to_workspace(workspace, client, monkeypatch):
-    from EvoScientist.commands.base import CommandContext
-    from EvoScientist.commands.implementation.schedule import ScheduleCommand
+    from metasci_scribe.commands.base import CommandContext
+    from metasci_scribe.commands.implementation.schedule import ScheduleCommand
 
     monkeypatch.setattr(crons, "is_available", lambda: True)
     ui = MagicMock()
@@ -242,7 +242,7 @@ async def test_schedule_command_scoped_to_workspace(workspace, client, monkeypat
 
 
 def _autoskill_cron(cron_id: str, workspace_dir: str, *, forwarded: bool) -> dict:
-    from EvoScientist.memory.autoskills.schedule import AUTOSKILL_RUN_KIND
+    from metasci_scribe.memory.autoskills.schedule import AUTOSKILL_RUN_KIND
 
     payload = {"config": {"configurable": {"workspace_dir": workspace_dir}}}
     return {
@@ -260,8 +260,8 @@ def _autoskill_cron(cron_id: str, workspace_dir: str, *, forwarded: bool) -> dic
 
 @pytest.fixture
 def autoskills(monkeypatch):
-    import EvoScientist.langgraph_dev.manager as manager
-    import EvoScientist.memory.autoskills.schedule as schedule
+    import metasci_scribe.langgraph_dev.manager as manager
+    import metasci_scribe.memory.autoskills.schedule as schedule
 
     fake = MagicMock()
     fake.crons.create.return_value = {"cron_id": "new"}

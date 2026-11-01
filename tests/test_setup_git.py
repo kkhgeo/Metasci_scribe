@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from EvoScientist.setup import git
-from EvoScientist.setup.protocol import HEARTBEAT_INTERVAL, StageError
+from metasci_scribe.setup import git
+from metasci_scribe.setup.protocol import HEARTBEAT_INTERVAL, StageError
 
 # The env fixture pins _arch() to x64; the platform tests restore this one.
 _REAL_ARCH = git._arch
@@ -154,9 +154,9 @@ class FakeSfx:
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     """Isolated DATA_DIR with a space and non-ASCII characters, no git on PATH."""
-    from EvoScientist import paths
+    from metasci_scribe import paths
 
-    data = tmp_path.resolve() / "Jan Kowalski ąę" / ".evoscientist"
+    data = tmp_path.resolve() / "Jan Kowalski ąę" / ".metasci-scribe"
     tools = data / "tools"
     monkeypatch.setattr(paths, "DATA_DIR", data)
     monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
@@ -322,7 +322,7 @@ def test_shim_on_path_resolves_the_real_install(env, monkeypatch):
 
 
 def test_own_portablegit_on_path_is_not_reported_as_system(env, monkeypatch):
-    """activate_runtime() runs before `EvoSci setup`, so our cmd dir is on PATH."""
+    """activate_runtime() runs before `metasci-scribe setup`, so our cmd dir is on PATH."""
     git.ensure_git()
     own_cmd = env["tools"] / f"git-{git.GIT_VERSION}" / "cmd"
     monkeypatch.setenv("PATH", str(own_cmd))
@@ -852,7 +852,7 @@ def test_probe_output_is_decoded_as_utf8(monkeypatch):
 
 def test_verified_download_rename_retries_a_scanner_lock(env, monkeypatch):
     """A scanner holding the just-closed download makes its first rename fail."""
-    from EvoScientist.setup import _install
+    from metasci_scribe.setup import _install
 
     real_replace = os.replace
     denied: list[str] = []

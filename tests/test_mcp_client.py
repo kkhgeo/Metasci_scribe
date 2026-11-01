@@ -1,4 +1,4 @@
-"""Tests for EvoScientist.mcp module."""
+"""Tests for metasci_scribe.mcp module."""
 
 import asyncio
 import os
@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from EvoScientist.mcp.client import (
+from metasci_scribe.mcp.client import (
     _build_connections,
     _filter_tools,
     _interpolate_env,
@@ -26,7 +26,7 @@ from EvoScientist.mcp.client import (
     parse_mcp_edit_args,
     remove_mcp_server,
 )
-from EvoScientist.runtime import AsyncRuntime, AsyncRuntimeError
+from metasci_scribe.runtime import AsyncRuntime, AsyncRuntimeError
 
 # ---- _interpolate_env ----
 
@@ -59,7 +59,7 @@ class TestInterpolateEnv:
 def mcp_config_file(monkeypatch, tmp_path):
     """Point USER_MCP_CONFIG to a temp file for isolated testing."""
     cfg = tmp_path / "mcp.yaml"
-    monkeypatch.setattr("EvoScientist.mcp.client.USER_MCP_CONFIG", cfg)
+    monkeypatch.setattr("metasci_scribe.mcp.client.USER_MCP_CONFIG", cfg)
     return cfg
 
 
@@ -137,7 +137,7 @@ class TestResolveCommand:
 
         monkeypatch.setattr("shutil.which", lambda _: None)
         monkeypatch.setattr(
-            "EvoScientist.mcp.client.sys.executable", str(bin_dir / "python")
+            "metasci_scribe.mcp.client.sys.executable", str(bin_dir / "python")
         )
 
         assert _resolve_command("my-mcp-tool") == str(fake_exe)
@@ -146,14 +146,14 @@ class TestResolveCommand:
         """Returns the original command when not found anywhere (let OS report the error)."""
         monkeypatch.setattr("shutil.which", lambda _: None)
         monkeypatch.setattr(
-            "EvoScientist.mcp.client.sys.executable", "/nonexistent/bin/python"
+            "metasci_scribe.mcp.client.sys.executable", "/nonexistent/bin/python"
         )
         assert _resolve_command("unknown-tool-xyz") == "unknown-tool-xyz"
 
     def test_build_connections_resolves_command(self, monkeypatch):
         """_build_connections uses _resolve_command so the full path appears in output."""
         monkeypatch.setattr(
-            "EvoScientist.mcp.client._resolve_command", lambda cmd: f"/resolved/{cmd}"
+            "metasci_scribe.mcp.client._resolve_command", lambda cmd: f"/resolved/{cmd}"
         )
         config = {"srv": {"transport": "stdio", "command": "mytool", "args": []}}
         conns = _build_connections(config)
@@ -312,12 +312,12 @@ class TestStdioErrlogSafetyPatch:
     when the parent's ``sys.stderr`` is a redirected stream with no fileno."""
 
     def test_bad_fileno_rejected(self):
-        from EvoScientist.mcp.client import _stdio_errlog_is_usable
+        from metasci_scribe.mcp.client import _stdio_errlog_is_usable
 
         assert _stdio_errlog_is_usable(_FakeTextualStderr()) is False
 
     def test_negative_fileno_rejected(self):
-        from EvoScientist.mcp.client import _stdio_errlog_is_usable
+        from metasci_scribe.mcp.client import _stdio_errlog_is_usable
 
         class _Neg:
             def fileno(self):
@@ -326,7 +326,7 @@ class TestStdioErrlogSafetyPatch:
         assert _stdio_errlog_is_usable(_Neg()) is False
 
     def test_fileno_raising_rejected(self):
-        from EvoScientist.mcp.client import _stdio_errlog_is_usable
+        from metasci_scribe.mcp.client import _stdio_errlog_is_usable
 
         class _Raises:
             def fileno(self):
@@ -335,14 +335,14 @@ class TestStdioErrlogSafetyPatch:
         assert _stdio_errlog_is_usable(_Raises()) is False
 
     def test_missing_fileno_rejected(self):
-        from EvoScientist.mcp.client import _stdio_errlog_is_usable
+        from metasci_scribe.mcp.client import _stdio_errlog_is_usable
 
         assert _stdio_errlog_is_usable(object()) is False
 
     def test_closed_fd_rejected(self):
         """A closed stream may still report its former positive fd; the helper
         must reject it via os.fstat so subprocess.Popen doesn't fail later."""
-        from EvoScientist.mcp.client import _stdio_errlog_is_usable
+        from metasci_scribe.mcp.client import _stdio_errlog_is_usable
 
         r, w = os.pipe()
         # Capture the descriptor number, then close both ends. The stub
@@ -362,7 +362,7 @@ class TestStdioErrlogSafetyPatch:
 
     def test_real_stderr_accepted(self):
 
-        from EvoScientist.mcp.client import _stdio_errlog_is_usable
+        from metasci_scribe.mcp.client import _stdio_errlog_is_usable
 
         # sys.__stderr__ is the original console handle; usable unless the
         # process is a GUI host (pythonw). Skip there since there's nothing
@@ -373,7 +373,10 @@ class TestStdioErrlogSafetyPatch:
 
     def test_safe_errlog_returns_usable_stream(self):
 
-        from EvoScientist.mcp.client import _safe_stdio_errlog, _stdio_errlog_is_usable
+        from metasci_scribe.mcp.client import (
+            _safe_stdio_errlog,
+            _stdio_errlog_is_usable,
+        )
 
         stream, opened_by_us = _safe_stdio_errlog()
         try:
@@ -388,10 +391,10 @@ class TestStdioErrlogSafetyPatch:
         """Importing the MCP client wraps ``mcp.client.stdio.stdio_client``."""
         import mcp.client.stdio as stdio_mod
 
-        # Importing EvoScientist.mcp.client applies the patch at module load.
-        import EvoScientist.mcp.client  # noqa: F401
+        # Importing metasci_scribe.mcp.client applies the patch at module load.
+        import metasci_scribe.mcp.client  # noqa: F401
 
-        assert getattr(stdio_mod.stdio_client, "_evosci_errlog_safe", False) is True
+        assert getattr(stdio_mod.stdio_client, "_scribe_errlog_safe", False) is True
 
     def test_wrapped_stdio_client_swaps_bad_errlog(self, monkeypatch):
         """The wrapped ``stdio_client`` substitutes a usable errlog when the
@@ -399,7 +402,7 @@ class TestStdioErrlogSafetyPatch:
         the wrapper-created fallback after the session exits."""
         import asyncio
 
-        from EvoScientist.mcp import client as mcp_client
+        from metasci_scribe.mcp import client as mcp_client
 
         captured = {}
         sentinel_server = object()
@@ -442,7 +445,7 @@ class TestStdioErrlogSafetyPatch:
         closed by the wrapper (it's caller-owned)."""
         import asyncio
 
-        from EvoScientist.mcp import client as mcp_client
+        from metasci_scribe.mcp import client as mcp_client
 
         if getattr(sys, "__stderr__", None) is None:
             pytest.skip("no console stderr in this host")
@@ -478,7 +481,7 @@ class TestStdioErrlogSafetyPatch:
         a usable fallback rather than forwarding the broken stream."""
         import asyncio
 
-        from EvoScientist.mcp import client as mcp_client
+        from metasci_scribe.mcp import client as mcp_client
 
         captured = {}
 
@@ -513,7 +516,7 @@ class TestStdioErrlogSafetyPatch:
         session exits — no fd leak across MCP reloads."""
         import asyncio
 
-        from EvoScientist.mcp import client as mcp_client
+        from metasci_scribe.mcp import client as mcp_client
 
         # Force the devnull fallback by making sys.__stderr__ unusable.
         monkeypatch.setattr("sys.__stderr__", None, raising=False)
@@ -559,7 +562,7 @@ class TestStdioErrlogSafetyPatch:
         construction-failure path."""
         import asyncio
 
-        from EvoScientist.mcp import client as mcp_client
+        from metasci_scribe.mcp import client as mcp_client
 
         # Force the devnull fallback by making sys.__stderr__ unusable.
         monkeypatch.setattr("sys.__stderr__", None, raising=False)
@@ -612,12 +615,12 @@ class TestStdioErrlogSafetyPatch:
         import mcp.client.stdio as stdio_mod
         from langchain_mcp_adapters import sessions as adapter_sessions
 
-        import EvoScientist.mcp.client  # noqa: F401 — applies the patch
+        import metasci_scribe.mcp.client  # noqa: F401 — applies the patch
 
         # Both the SDK module and the adapter must resolve to the same wrapped
         # object, regardless of which was imported first.
         assert adapter_sessions.stdio_client is stdio_mod.stdio_client
-        assert getattr(adapter_sessions.stdio_client, "_evosci_errlog_safe", False)
+        assert getattr(adapter_sessions.stdio_client, "_scribe_errlog_safe", False)
 
 
 # ---- stdio kill-on-cancel patch ----
@@ -665,7 +668,7 @@ class TestStdioKillOnCancelPatch:
     def _patch_with(monkeypatch, process, on_terminate=None):
         import mcp.client.stdio as stdio_mod
 
-        from EvoScientist.mcp import client as mcp_client
+        from metasci_scribe.mcp import client as mcp_client
 
         terminated: list = []
 
@@ -766,7 +769,7 @@ class TestStdioKillOnCancelPatch:
         """mcp 2.x shields its shutdown and never calls ``wait`` there."""
         import mcp.client.stdio as stdio_mod
 
-        from EvoScientist.mcp import client as mcp_client
+        from metasci_scribe.mcp import client as mcp_client
 
         async def fake_create(*args, **kwargs):
             return None
@@ -792,7 +795,7 @@ class TestStdioKillOnCancelPatch:
 
         import psutil
 
-        from EvoScientist.mcp import client as mcp_client
+        from metasci_scribe.mcp import client as mcp_client
 
         script = tmp_path / "stubborn_server.py"
         script.write_text(_STUBBORN_STDIO_SERVER)
@@ -829,7 +832,7 @@ class TestStdioKillOnCancelPatch:
 
         import psutil
 
-        from EvoScientist.mcp import client as mcp_client
+        from metasci_scribe.mcp import client as mcp_client
 
         script = tmp_path / "stubborn_server.py"
         script.write_text(_STUBBORN_STDIO_SERVER)
@@ -876,7 +879,7 @@ class TestOwnedRuntimeLoading:
             )
             return {"server": [tool]}
 
-        monkeypatch.setattr("EvoScientist.mcp.client._load_tools", fake_load)
+        monkeypatch.setattr("metasci_scribe.mcp.client._load_tools", fake_load)
         config = {"server": {"transport": "http", "url": "http://example.test"}}
 
         with AsyncRuntime(thread_name="test-mcp-runtime") as runtime:
@@ -899,14 +902,14 @@ class TestOwnedRuntimeLoading:
             execution["loop"] = asyncio.get_running_loop()
             return {"server": []}
 
-        monkeypatch.setattr("EvoScientist.mcp.client._load_tools", fake_load)
+        monkeypatch.setattr("metasci_scribe.mcp.client._load_tools", fake_load)
         config = {"server": {"transport": "http", "url": "http://example.test"}}
 
         assert load_mcp_tools(config) == {"main": []}
-        assert execution["thread"] == "evosci-mcp-runtime"
+        assert execution["thread"] == "metasci-scribe-mcp-runtime"
         assert isinstance(execution["loop"], asyncio.AbstractEventLoop)
         assert not any(
-            thread.name == "evosci-mcp-runtime" and thread.is_alive()
+            thread.name == "metasci-scribe-mcp-runtime" and thread.is_alive()
             for thread in threading.enumerate()
         )
 
@@ -1160,8 +1163,8 @@ def user_mcp_dir(tmp_path, monkeypatch):
     cfg_dir = tmp_path / "config"
     cfg_dir.mkdir()
     cfg_file = cfg_dir / "mcp.yaml"
-    monkeypatch.setattr("EvoScientist.mcp.client.USER_CONFIG_DIR", cfg_dir)
-    monkeypatch.setattr("EvoScientist.mcp.client.USER_MCP_CONFIG", cfg_file)
+    monkeypatch.setattr("metasci_scribe.mcp.client.USER_CONFIG_DIR", cfg_dir)
+    monkeypatch.setattr("metasci_scribe.mcp.client.USER_MCP_CONFIG", cfg_file)
     return cfg_file
 
 
@@ -1426,9 +1429,9 @@ class TestParseMcpEditArgs:
 
 def _use_tool_env(monkeypatch, env):
     """Run as if from the uv tool environment *env* (its receipt in
-    ``sys.prefix``, as under the ``EvoSci`` entry point) on uv's own Python,
+    ``sys.prefix``, as under the ``metasci-scribe`` entry point) on uv's own Python,
     on Linux, with ``uv`` as the uv to run."""
-    import EvoScientist.mcp.registry as reg
+    import metasci_scribe.mcp.registry as reg
 
     monkeypatch.setattr(reg.sys, "prefix", str(env))
     monkeypatch.setattr(reg.sys, "platform", "linux")
@@ -1442,7 +1445,7 @@ class TestUvToolCompat:
     # -- pip_install_hint --
 
     def test_pip_install_hint_uv_tool(self, monkeypatch, tmp_path):
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
         (tmp_path / "uv-receipt.toml").write_text("[tool]\n")
         _use_tool_env(monkeypatch, tmp_path)
@@ -1451,7 +1454,7 @@ class TestUvToolCompat:
 
     def test_pip_install_hint_uv_tool_windows(self, monkeypatch, tmp_path):
         """Pasted into PowerShell, a quoted path runs only after ``&``."""
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
         (tmp_path / "uv-receipt.toml").write_text("[tool]\n")
         _use_tool_env(monkeypatch, tmp_path)
@@ -1459,7 +1462,7 @@ class TestUvToolCompat:
         assert reg.pip_install_hint().startswith('& "uv" pip install --python ')
 
     def test_pip_install_hint_uv_no_tool(self, monkeypatch):
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
         monkeypatch.setattr(reg.uv_tool, "tool_env", lambda: None)
         monkeypatch.setattr(
@@ -1468,7 +1471,7 @@ class TestUvToolCompat:
         assert reg.pip_install_hint() == "uv pip install"
 
     def test_pip_install_hint_plain_pip(self, monkeypatch):
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
         monkeypatch.setattr(reg.uv_tool, "tool_env", lambda: None)
         monkeypatch.setattr(reg.shutil, "which", lambda x: None)
@@ -1480,15 +1483,15 @@ class TestUvToolCompat:
         self, monkeypatch, tmp_path
     ):
         """In a uv tool env, should use ``uv tool install --with`` for durability."""
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
         # Set up a fake uv tool env with receipt
-        venv = tmp_path / "uv" / "tools" / "evoscientist"
+        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
         venv.mkdir(parents=True)
         receipt = venv / "uv-receipt.toml"
         receipt.write_text(
             "[tool]\nrequirements = [\n"
-            '  { name = "evoscientist" },\n'
+            '  { name = "metasci-scribe" },\n'
             '  { name = "existing-pkg" },\n'
             "]\n"
         )
@@ -1509,11 +1512,11 @@ class TestUvToolCompat:
         assert len(captured) == 1
         cmd = captured[0]
         assert cmd[:3] == ["uv", "tool", "install"]
-        # EvoScientist stays on the installed version, on uv's Python of the
+        # Metasci Scribe stays on the installed version, on uv's Python of the
         # running X.Y.
         from importlib.metadata import version
 
-        assert cmd[-1] == f"EvoScientist=={version('EvoScientist')}"
+        assert cmd[-1] == f"metasci-scribe=={version('metasci-scribe')}"
         py = f"{sys.version_info.major}.{sys.version_info.minor}"
         assert cmd[cmd.index("--python") + 1] == py
         assert "--managed-python" in cmd
@@ -1527,13 +1530,13 @@ class TestUvToolCompat:
     def test_install_library_uv_tool_keeps_receipt(self, monkeypatch, tmp_path):
         """The reinstall keeps the extras, the Python, the constraints, and a
         --with entry's marker and source."""
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
-        venv = tmp_path / "uv" / "tools" / "evoscientist"
+        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
         venv.mkdir(parents=True)
         (venv / "uv-receipt.toml").write_text(
             "[tool]\nrequirements = [\n"
-            '  { name = "evoscientist", extras = ["oauth"], specifier = "==0.3.6" },\n'
+            '  { name = "metasci-scribe", extras = ["oauth"], specifier = "==0.3.6" },\n'
             '  { name = "idna", marker = "python_full_version >= \'3.8\'", specifier = ">=3" },\n'
             '  { name = "pyjokes", git = "https://github.com/pyjokes/pyjokes?rev=v0.6.0" },\n'
             "]\n"
@@ -1560,7 +1563,7 @@ class TestUvToolCompat:
         cmd = captured[0]
         from importlib.metadata import version
 
-        assert cmd[-1] == f"EvoScientist[oauth]=={version('EvoScientist')}"
+        assert cmd[-1] == f"metasci-scribe[oauth]=={version('metasci-scribe')}"
         assert cmd[cmd.index("--python") + 1] == "3.12"
         assert "--no-managed-python" in cmd
         assert constraint_texts == ["six==1.17.0\n"]
@@ -1577,12 +1580,12 @@ class TestUvToolCompat:
     ):
         """A failure while building the reinstall removes the constraints temp
         file and falls back to pip."""
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
-        venv = tmp_path / "uv" / "tools" / "evoscientist"
+        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
         venv.mkdir(parents=True)
         (venv / "uv-receipt.toml").write_text(
-            '[tool]\nrequirements = [{ name = "evoscientist" }]\n'
+            '[tool]\nrequirements = [{ name = "metasci-scribe" }]\n'
             'constraints = [{ name = "six", specifier = "==1.17.0" }]\n'
         )
         _use_tool_env(monkeypatch, venv)
@@ -1592,7 +1595,7 @@ class TestUvToolCompat:
         def broken(*args, **kwargs):
             from importlib.metadata import PackageNotFoundError
 
-            raise PackageNotFoundError("EvoScientist")
+            raise PackageNotFoundError("metasci-scribe")
 
         monkeypatch.setattr(reg, "_uv_tool_reinstall_cmd", broken)
         captured: list[list[str]] = []
@@ -1611,15 +1614,15 @@ class TestUvToolCompat:
         assert list((tmp_path / "tmp").iterdir()) == []
 
     def test_install_library_uv_tool_keeps_source_install(self, monkeypatch, tmp_path):
-        """EvoScientist installed from a directory stays on that directory."""
-        import EvoScientist.mcp.registry as reg
+        """Metasci Scribe installed from a directory stays on that directory."""
+        import metasci_scribe.mcp.registry as reg
 
-        venv = tmp_path / "uv" / "tools" / "evoscientist"
+        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
         venv.mkdir(parents=True)
         src = tmp_path / "checkout"
         (venv / "uv-receipt.toml").write_text(
             "[tool]\nrequirements = [\n"
-            f'  {{ name = "evoscientist", directory = "{src.as_posix()}" }},\n'
+            f'  {{ name = "metasci-scribe", directory = "{src.as_posix()}" }},\n'
             "]\n"
         )
         _use_tool_env(monkeypatch, venv)
@@ -1632,23 +1635,23 @@ class TestUvToolCompat:
             ),
         )
         assert reg.install_library("new-pkg") is True
-        assert captured[0][-1] == f"evoscientist @ {src.as_uri()}"
+        assert captured[0][-1] == f"metasci-scribe @ {src.as_uri()}"
 
     def test_install_library_own_extra_joins_own_requirement(
         self, monkeypatch, tmp_path
     ):
-        """``evoscientist[telegram]`` (a channel in EvoSci onboard) adds the
-        extra to EvoScientist's requirement instead of a second evoscientist
-        entry, which would leave a receipt EvoSci update refuses."""
+        """``metasci-scribe[telegram]`` (a channel in metasci-scribe onboard) adds the
+        extra to Metasci Scribe's requirement instead of a second metasci-scribe
+        entry, which would leave a receipt metasci-scribe update refuses."""
         from importlib.metadata import version
 
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
-        venv = tmp_path / "uv" / "tools" / "evoscientist"
+        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
         venv.mkdir(parents=True)
         (venv / "uv-receipt.toml").write_text(
             "[tool]\nrequirements = [\n"
-            '  { name = "evoscientist", extras = ["oauth"], specifier = "==0.3.6" },\n'
+            '  { name = "metasci-scribe", extras = ["oauth"], specifier = "==0.3.6" },\n'
             '  { name = "six" },\n'
             "]\n"
         )
@@ -1661,9 +1664,9 @@ class TestUvToolCompat:
                 captured.append(list(cmd)) or type("R", (), {"returncode": 0})()
             ),
         )
-        assert reg.install_library("evoscientist[telegram]") is True
+        assert reg.install_library("metasci-scribe[telegram]") is True
         (cmd,) = captured
-        assert cmd[-1] == f"EvoScientist[oauth,telegram]=={version('EvoScientist')}"
+        assert cmd[-1] == f"metasci-scribe[oauth,telegram]=={version('metasci-scribe')}"
         with_args = [cmd[i + 1] for i, v in enumerate(cmd) if v == "--with"]
         assert with_args == ["six"]
 
@@ -1672,12 +1675,12 @@ class TestUvToolCompat:
     ):
         """When uv cannot tell which Python the environment runs on, the
         environment is not rebuilt: uv pip install instead."""
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
-        venv = tmp_path / "uv" / "tools" / "evoscientist"
+        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
         venv.mkdir(parents=True)
         (venv / "uv-receipt.toml").write_text(
-            '[tool]\nrequirements = [{ name = "evoscientist", specifier = "==0.3.6" }]\n'
+            '[tool]\nrequirements = [{ name = "metasci-scribe", specifier = "==0.3.6" }]\n'
         )
         _use_tool_env(monkeypatch, venv)
         monkeypatch.setattr(reg.uv_tool, "runs_on_managed_python", lambda uv: None)
@@ -1694,20 +1697,20 @@ class TestUvToolCompat:
 
     def test_install_library_uv_tool_uses_uv_environment(self, monkeypatch, tmp_path):
         """The reinstall resolves through the configured mirror and the
-        system certificates, as EvoSci update does."""
-        import EvoScientist.mcp.registry as reg
-        from EvoScientist.update_check import CN_SIMPLE
+        system certificates, as metasci-scribe update does."""
+        import metasci_scribe.mcp.registry as reg
+        from metasci_scribe.update_check import CN_SIMPLE
 
         class CnConfig:
             mirror = "cn"
 
-        venv = tmp_path / "uv" / "tools" / "evoscientist"
+        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
         venv.mkdir(parents=True)
         (venv / "uv-receipt.toml").write_text(
-            '[tool]\nrequirements = [{ name = "evoscientist" }]\n'
+            '[tool]\nrequirements = [{ name = "metasci-scribe" }]\n'
         )
         _use_tool_env(monkeypatch, venv)
-        monkeypatch.setattr("EvoScientist.config.load_config", lambda: CnConfig())
+        monkeypatch.setattr("metasci_scribe.config.load_config", lambda: CnConfig())
         monkeypatch.delenv("UV_SYSTEM_CERTS", raising=False)
         envs: list[dict] = []
         monkeypatch.setattr(
@@ -1724,10 +1727,10 @@ class TestUvToolCompat:
     def test_install_library_windows_uses_recorded_uv(self, monkeypatch, tmp_path):
         """A Windows script install has no uv on PATH and no pip in its
         environment: uv pip install with the uv the scripts recorded."""
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
         (tmp_path / "uv-receipt.toml").write_text(
-            '[tool]\nrequirements = [{ name = "evoscientist" }]\n'
+            '[tool]\nrequirements = [{ name = "metasci-scribe" }]\n'
         )
         _use_tool_env(monkeypatch, tmp_path)
         monkeypatch.setattr(reg.sys, "platform", "win32")
@@ -1749,14 +1752,14 @@ class TestUvToolCompat:
     ):
         """An editable install cannot take extras through ``--editable``: no
         reinstall, uv pip install instead."""
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
-        venv = tmp_path / "uv" / "tools" / "evoscientist"
+        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
         venv.mkdir(parents=True)
         src = tmp_path / "checkout"
         (venv / "uv-receipt.toml").write_text(
             "[tool]\nrequirements = [\n"
-            f'  {{ name = "evoscientist", editable = "{src.as_posix()}" }},\n'
+            f'  {{ name = "metasci-scribe", editable = "{src.as_posix()}" }},\n'
             "]\n"
         )
         _use_tool_env(monkeypatch, venv)
@@ -1771,19 +1774,19 @@ class TestUvToolCompat:
                 captured.append(list(cmd)) or type("R", (), {"returncode": 0})()
             ),
         )
-        assert reg.install_library("evoscientist[telegram]") is True
+        assert reg.install_library("metasci-scribe[telegram]") is True
         assert [c[:3] for c in captured] == [["uv", "pip", "install"]]
 
     def test_install_library_uv_tool_env_skipped_on_windows(
         self, monkeypatch, tmp_path
     ):
         """On Windows the reinstall is not tried: uv pip install instead."""
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
-        venv = tmp_path / "uv" / "tools" / "evoscientist"
+        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
         venv.mkdir(parents=True)
         (venv / "uv-receipt.toml").write_text(
-            '[tool]\nrequirements = [\n  { name = "evoscientist" },\n]\n'
+            '[tool]\nrequirements = [\n  { name = "metasci-scribe" },\n]\n'
         )
         _use_tool_env(monkeypatch, venv)
         monkeypatch.setattr(reg.sys, "platform", "win32")
@@ -1804,9 +1807,9 @@ class TestUvToolCompat:
     def test_install_library_uv_tool_unreadable_receipt_falls_back(
         self, monkeypatch, tmp_path
     ):
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
-        venv = tmp_path / "uv" / "tools" / "evoscientist"
+        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
         venv.mkdir(parents=True)
         (venv / "uv-receipt.toml").write_text("not [ toml")
         _use_tool_env(monkeypatch, venv)
@@ -1826,14 +1829,14 @@ class TestUvToolCompat:
 
     def test_install_library_uv_tool_env_no_duplicate_with(self, monkeypatch, tmp_path):
         """If the package is already in the receipt, don't add it twice."""
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
-        venv = tmp_path / "uv" / "tools" / "evoscientist"
+        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
         venv.mkdir(parents=True)
         receipt = venv / "uv-receipt.toml"
         receipt.write_text(
             "[tool]\nrequirements = [\n"
-            '  { name = "evoscientist" },\n'
+            '  { name = "metasci-scribe" },\n'
             '  { name = "arxiv-mcp-server" },\n'
             "]\n"
         )
@@ -1856,14 +1859,14 @@ class TestUvToolCompat:
 
     def test_install_library_uv_tool_preserves_specifiers(self, monkeypatch, tmp_path):
         """Existing --with specs with extras/versions must be preserved."""
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
-        venv = tmp_path / "uv" / "tools" / "evoscientist"
+        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
         venv.mkdir(parents=True)
         receipt = venv / "uv-receipt.toml"
         receipt.write_text(
             "[tool]\nrequirements = [\n"
-            '  { name = "evoscientist" },\n'
+            '  { name = "metasci-scribe" },\n'
             '  { name = "rich", specifier = ">=13.0" },\n'
             '  { name = "requests", extras = ["socks"] },\n'
             "]\n"
@@ -1891,14 +1894,14 @@ class TestUvToolCompat:
         self, monkeypatch, tmp_path
     ):
         """Dedup must match bare name even if package arg has version spec."""
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
-        venv = tmp_path / "uv" / "tools" / "evoscientist"
+        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
         venv.mkdir(parents=True)
         receipt = venv / "uv-receipt.toml"
         receipt.write_text(
             "[tool]\nrequirements = [\n"
-            '  { name = "evoscientist" },\n'
+            '  { name = "metasci-scribe" },\n'
             '  { name = "rich", specifier = ">=13.0" },\n'
             "]\n"
         )
@@ -1925,13 +1928,13 @@ class TestUvToolCompat:
     def test_install_library_uv_tool_falls_back_on_failure(self, monkeypatch, tmp_path):
         """install_library: if ``uv tool install --with`` fails, fall back
         to ``uv pip install`` — standalone uv tool install is NEVER tried."""
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
-        venv = tmp_path / "uv" / "tools" / "evoscientist"
+        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
         venv.mkdir(parents=True)
         receipt = venv / "uv-receipt.toml"
         receipt.write_text(
-            '[tool]\nrequirements = [\n  { name = "evoscientist" },\n]\n'
+            '[tool]\nrequirements = [\n  { name = "metasci-scribe" },\n]\n'
         )
         _use_tool_env(monkeypatch, venv)
 
@@ -1960,13 +1963,13 @@ class TestUvToolCompat:
     ):
         """install_cli_tool: uv-tool env, --with fails → standalone uv tool
         install is tried, then pip fallback."""
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
-        venv = tmp_path / "uv" / "tools" / "evoscientist"
+        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
         venv.mkdir(parents=True)
         receipt = venv / "uv-receipt.toml"
         receipt.write_text(
-            '[tool]\nrequirements = [\n  { name = "evoscientist" },\n]\n'
+            '[tool]\nrequirements = [\n  { name = "metasci-scribe" },\n]\n'
         )
         _use_tool_env(monkeypatch, venv)
 
@@ -1995,7 +1998,7 @@ class TestUvToolCompat:
         """install_library outside a uv-tool env must skip ``uv tool install
         <pkg>`` entirely — standalone uv tools aren't importable."""
 
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
         captured: list[list[str]] = []
 
@@ -2019,7 +2022,7 @@ class TestUvToolCompat:
     ):
         """install_cli_tool outside a uv-tool env: standalone ``uv tool
         install <pkg>`` is preferred so the binary survives uv sync."""
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
         captured: list[list[str]] = []
 
@@ -2050,7 +2053,7 @@ class TestUvToolCompat:
         ``uv tool install`` (e.g. package has no console-script), fall
         through to ``uv pip install``."""
 
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
         captured: list[list[str]] = []
 
@@ -2077,7 +2080,7 @@ class TestUvToolCompat:
         """install_cli_tool: ``uv tool install`` success + binary present in
         uv-tool bin dir ⇒ no pip fallback, even if a stale copy exists in
         the venv on PATH."""
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
         captured: list[list[str]] = []
 
@@ -2113,7 +2116,7 @@ class TestUvToolCompat:
 
     def test_install_library_falls_back_to_pip_when_no_uv(self, monkeypatch):
 
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
         captured: list[list[str]] = []
 
@@ -2134,13 +2137,13 @@ class TestUvToolCompat:
     # -- _resolve_command_path --
 
     def test_resolve_command_path_absolute_passthrough(self):
-        from EvoScientist.mcp.registry import _resolve_command_path
+        from metasci_scribe.mcp.registry import _resolve_command_path
 
         assert _resolve_command_path("/usr/bin/my-tool") == "/usr/bin/my-tool"
 
     def test_resolve_command_path_found_in_bin_dir(self, monkeypatch, tmp_path):
 
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
         # Create a fake executable in a temp bin dir
         bin_dir = tmp_path / "bin"
@@ -2162,7 +2165,7 @@ class TestUvToolCompat:
     def test_resolve_command_path_windows_exe_suffix(self, monkeypatch, tmp_path):
         import os
 
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
         if os.name != "nt":
             pytest.skip("Windows-only behaviour")
@@ -2181,7 +2184,7 @@ class TestUvToolCompat:
         self, monkeypatch, tmp_path
     ):
 
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
         monkeypatch.setattr(reg.shutil, "which", lambda x: None)
         monkeypatch.setattr(reg, "_uv_tool_bin", lambda cmd: None)
@@ -2195,7 +2198,7 @@ class TestUvToolCompat:
         """When both ``uv tool dir --bin`` and a venv's ``bin/`` contain the
         command, prefer the uv-tool location so the path written to mcp.yaml
         survives ``uv sync``."""
-        import EvoScientist.mcp.registry as reg
+        import metasci_scribe.mcp.registry as reg
 
         uv_bin_dir = tmp_path / "uv-bin"
         uv_bin_dir.mkdir()
@@ -2243,7 +2246,7 @@ class TestLoadToolsProgressCallback:
         monkeypatch.setattr(lc_client, "MultiServerMCPClient", _FakeClient)
 
     async def test_success_emits_start_then_success_with_tool_count(self, monkeypatch):
-        from EvoScientist.mcp.client import _load_tools
+        from metasci_scribe.mcp.client import _load_tools
 
         events: list[tuple[str, str, str]] = []
         self._patch_client(
@@ -2264,7 +2267,7 @@ class TestLoadToolsProgressCallback:
         ]
 
     async def test_failure_emits_start_then_error_with_detail(self, monkeypatch):
-        from EvoScientist.mcp.client import _load_tools
+        from metasci_scribe.mcp.client import _load_tools
 
         events: list[tuple[str, str, str]] = []
         self._patch_client(monkeypatch, {"srv": RuntimeError("boom")})
@@ -2282,7 +2285,7 @@ class TestLoadToolsProgressCallback:
         ]
 
     async def test_mixed_fleet_reports_each_server_independently(self, monkeypatch):
-        from EvoScientist.mcp.client import _load_tools
+        from metasci_scribe.mcp.client import _load_tools
 
         events: list[tuple[str, str, str]] = []
         self._patch_client(
@@ -2310,7 +2313,7 @@ class TestLoadToolsProgressCallback:
         assert by_server["bad_srv"] == [("start", ""), ("error", "refused")]
 
     async def test_callback_errors_do_not_break_the_load(self, monkeypatch):
-        from EvoScientist.mcp.client import _load_tools
+        from metasci_scribe.mcp.client import _load_tools
 
         self._patch_client(monkeypatch, {"srv": ["tool1"]})
 
@@ -2326,7 +2329,7 @@ class TestLoadToolsProgressCallback:
         """Many configured servers must not all spawn at once."""
         import asyncio
 
-        from EvoScientist.mcp import client as mcp_client
+        from metasci_scribe.mcp import client as mcp_client
 
         inflight = {"count": 0, "peak": 0}
 
@@ -2361,7 +2364,7 @@ class TestLoadToolsProgressCallback:
         left out, and the other servers still load."""
         import asyncio
 
-        from EvoScientist.mcp import client as mcp_client
+        from metasci_scribe.mcp import client as mcp_client
 
         cancelled = asyncio.Event()
 
@@ -2413,7 +2416,7 @@ class TestLoadToolsProgressCallback:
     async def test_timeout_raised_inside_get_tools_keeps_its_message(self, monkeypatch):
         """A TimeoutError from the server itself (e.g. a websocket handshake)
         is not reported as our own deadline."""
-        from EvoScientist.mcp.client import _load_tools
+        from metasci_scribe.mcp.client import _load_tools
 
         events: list[tuple[str, str, str]] = []
         self._patch_client(
@@ -2439,11 +2442,11 @@ class TestLoadToolsProgressCallback:
     def test_default_timeout_by_transport_and_process(
         self, monkeypatch, server_process, transport
     ):
-        from EvoScientist.mcp import client as mcp_client
+        from metasci_scribe.mcp import client as mcp_client
 
-        monkeypatch.delenv("EVOSCIENTIST_SERVER_PROCESS", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_SERVER_PROCESS", raising=False)
         if server_process:
-            monkeypatch.setenv("EVOSCIENTIST_SERVER_PROCESS", "1")
+            monkeypatch.setenv("METASCI_SCRIBE_SERVER_PROCESS", "1")
         if transport != "stdio":
             expected = mcp_client._NETWORK_GET_TOOLS_TIMEOUT_SECONDS
         elif server_process:
@@ -2454,7 +2457,7 @@ class TestLoadToolsProgressCallback:
 
     async def test_loaders_delegate_default_deadlines_per_connection(self, monkeypatch):
         """The per-server loader determines defaults for each connection."""
-        from EvoScientist.mcp import client as mcp_client
+        from metasci_scribe.mcp import client as mcp_client
 
         seen: list[float | None] = []
 
@@ -2463,7 +2466,7 @@ class TestLoadToolsProgressCallback:
             return {}
 
         monkeypatch.setattr(mcp_client, "_load_tools", fake_load_tools)
-        monkeypatch.setenv("EVOSCIENTIST_SERVER_PROCESS", "1")
+        monkeypatch.setenv("METASCI_SCRIBE_SERVER_PROCESS", "1")
 
         config = {"srv": {"transport": "stdio", "command": "demo"}}
         await mcp_client.aload_mcp_tools(config)
@@ -2482,7 +2485,7 @@ class TestLoadToolsProgressCallback:
         and left to finish everywhere else."""
         import asyncio
 
-        from EvoScientist.mcp import client as mcp_client
+        from metasci_scribe.mcp import client as mcp_client
 
         class _SlowClient:
             def __init__(self, connections):
@@ -2497,9 +2500,9 @@ class TestLoadToolsProgressCallback:
         monkeypatch.setattr(lc_client, "MultiServerMCPClient", _SlowClient)
         monkeypatch.setattr(mcp_client, "_SERVER_GET_TOOLS_TIMEOUT_SECONDS", 0.05)
         if server_process is None:
-            monkeypatch.delenv("EVOSCIENTIST_SERVER_PROCESS", raising=False)
+            monkeypatch.delenv("METASCI_SCRIBE_SERVER_PROCESS", raising=False)
         else:
-            monkeypatch.setenv("EVOSCIENTIST_SERVER_PROCESS", server_process)
+            monkeypatch.setenv("METASCI_SCRIBE_SERVER_PROCESS", server_process)
 
         config = {"slow_srv": {"transport": "stdio", "command": "demo"}}
         result = mcp_client.load_mcp_tools(config)
@@ -2513,7 +2516,7 @@ class TestLoadToolsProgressCallback:
         import asyncio
         import logging
 
-        from EvoScientist.mcp import client as mcp_client
+        from metasci_scribe.mcp import client as mcp_client
 
         class _HangingClient:
             def __init__(self, connections):
@@ -2529,7 +2532,7 @@ class TestLoadToolsProgressCallback:
 
         monkeypatch.setattr(lc_client, "MultiServerMCPClient", _HangingClient)
         monkeypatch.setattr(mcp_client, "_SERVER_GET_TOOLS_TIMEOUT_SECONDS", 0.05)
-        monkeypatch.setenv("EVOSCIENTIST_SERVER_PROCESS", "1")
+        monkeypatch.setenv("METASCI_SCRIBE_SERVER_PROCESS", "1")
 
         config = {"slow_srv": {"transport": "stdio", "command": "demo"}}
         with caplog.at_level(logging.WARNING, logger=mcp_client.logger.name):
@@ -2551,7 +2554,7 @@ class TestNetworkDiscoveryDeadline:
     async def test_cli_skips_hung_network_server_and_loads_healthy_tools(
         self, monkeypatch, transport
     ):
-        from EvoScientist.mcp import client as mcp_client
+        from metasci_scribe.mcp import client as mcp_client
 
         cancelled = asyncio.Event()
         tool = SimpleNamespace(name="healthy_tool")
@@ -2568,7 +2571,7 @@ class TestNetworkDiscoveryDeadline:
                         cancelled.set()
                 return [tool]
 
-        monkeypatch.delenv("EVOSCIENTIST_SERVER_PROCESS", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_SERVER_PROCESS", raising=False)
         monkeypatch.setattr(mcp_client, "_NETWORK_GET_TOOLS_TIMEOUT_SECONDS", 0.02)
         monkeypatch.setattr(
             "langchain_mcp_adapters.client.MultiServerMCPClient", Client
@@ -2592,7 +2595,7 @@ class TestNetworkDiscoveryDeadline:
         assert ("success", "healthy", "1") in events
 
     async def test_server_that_hangs_while_closing_is_given_up_on(self, monkeypatch):
-        from EvoScientist.mcp import client as mcp_client
+        from metasci_scribe.mcp import client as mcp_client
 
         class Client:
             def __init__(self, connections):
@@ -2625,7 +2628,7 @@ class TestNetworkDiscoveryDeadline:
     async def test_cli_stdio_startup_is_not_cut_off_by_network_budget(
         self, monkeypatch
     ):
-        from EvoScientist.mcp import client as mcp_client
+        from metasci_scribe.mcp import client as mcp_client
 
         class Client:
             def __init__(self, connections):
@@ -2649,7 +2652,7 @@ class TestNetworkDiscoveryDeadline:
     async def test_explicit_deadline_takes_precedence_over_network_budget(
         self, monkeypatch
     ):
-        from EvoScientist.mcp import client as mcp_client
+        from metasci_scribe.mcp import client as mcp_client
 
         class Client:
             def __init__(self, connections):
@@ -2678,10 +2681,10 @@ class TestNetworkDiscoveryDeadline:
 class TestEnsureNodeForStdio:
     @pytest.fixture
     def calls(self, monkeypatch):
-        from EvoScientist.setup import node as setup_node
+        from metasci_scribe.setup import node as setup_node
 
         calls = {"ensure": 0, "activate": 0}
-        monkeypatch.delenv("EVOSCIENTIST_SERVER_PROCESS", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_SERVER_PROCESS", raising=False)
 
         def ensure(*_a, **_k):
             calls["ensure"] += 1
@@ -2694,7 +2697,7 @@ class TestEnsureNodeForStdio:
         return calls
 
     def test_installs_when_npx_missing(self, monkeypatch, calls):
-        from EvoScientist.mcp import client as mcp_client
+        from metasci_scribe.mcp import client as mcp_client
 
         monkeypatch.setattr(mcp_client.shutil, "which", lambda _c: None)
         mcp_client._ensure_node_for_stdio(
@@ -2711,7 +2714,7 @@ class TestEnsureNodeForStdio:
         ],
     )
     def test_skips_when_not_needed(self, monkeypatch, calls, server):
-        from EvoScientist.mcp import client as mcp_client
+        from metasci_scribe.mcp import client as mcp_client
 
         monkeypatch.setattr(
             mcp_client.shutil,
@@ -2722,14 +2725,14 @@ class TestEnsureNodeForStdio:
         assert calls == {"ensure": 0, "activate": 0}
 
     def test_failure_is_logged_not_raised(self, monkeypatch, caplog):
-        from EvoScientist.mcp import client as mcp_client
-        from EvoScientist.setup import node as setup_node
-        from EvoScientist.setup.protocol import StageError
+        from metasci_scribe.mcp import client as mcp_client
+        from metasci_scribe.setup import node as setup_node
+        from metasci_scribe.setup.protocol import StageError
 
         def offline(*_a, **_k):
             raise StageError("download_failed", "offline")
 
-        monkeypatch.delenv("EVOSCIENTIST_SERVER_PROCESS", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_SERVER_PROCESS", raising=False)
         monkeypatch.setattr(mcp_client.shutil, "which", lambda _c: None)
         monkeypatch.setattr(setup_node, "ensure_node", offline)
         with caplog.at_level("WARNING"):
@@ -2737,18 +2740,18 @@ class TestEnsureNodeForStdio:
                 {"fs": {"transport": "stdio", "command": "npx"}}
             )
         assert "offline" in caplog.text
-        assert "EvoSci setup" in caplog.text
+        assert "metasci-scribe setup" in caplog.text
 
     def test_unexpected_error_is_logged_not_raised(self, monkeypatch, caplog):
         """A non-StageError from the install must not abort the MCP load for
         every server."""
-        from EvoScientist.mcp import client as mcp_client
-        from EvoScientist.setup import node as setup_node
+        from metasci_scribe.mcp import client as mcp_client
+        from metasci_scribe.setup import node as setup_node
 
         def broken(*_a, **_k):
             raise NotImplementedError("compression type 99")
 
-        monkeypatch.delenv("EVOSCIENTIST_SERVER_PROCESS", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_SERVER_PROCESS", raising=False)
         monkeypatch.setattr(mcp_client.shutil, "which", lambda _c: None)
         monkeypatch.setattr(setup_node, "ensure_node", broken)
         with caplog.at_level("WARNING"):
@@ -2758,9 +2761,9 @@ class TestEnsureNodeForStdio:
         assert "compression type 99" in caplog.text
 
     def test_does_not_install_inside_langgraph_dev(self, monkeypatch, calls):
-        from EvoScientist.mcp import client as mcp_client
+        from metasci_scribe.mcp import client as mcp_client
 
-        monkeypatch.setenv("EVOSCIENTIST_SERVER_PROCESS", "1")
+        monkeypatch.setenv("METASCI_SCRIBE_SERVER_PROCESS", "1")
         monkeypatch.setattr(mcp_client.shutil, "which", lambda _c: None)
         mcp_client._ensure_node_for_stdio(
             {"fs": {"transport": "stdio", "command": "npx"}}
@@ -2770,7 +2773,7 @@ class TestEnsureNodeForStdio:
     async def test_load_tools_checks_node_before_building_connections(
         self, monkeypatch
     ):
-        from EvoScientist.mcp import client as mcp_client
+        from metasci_scribe.mcp import client as mcp_client
 
         order: list[str] = []
         monkeypatch.setattr(

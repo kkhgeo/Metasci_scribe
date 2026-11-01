@@ -1,4 +1,4 @@
-"""Unit tests for EvoScientist.middleware.utils helpers.
+"""Unit tests for metasci_scribe.middleware.utils helpers.
 
 Focuses on the ``system_message`` composition primitives shared across
 middleware modules. Model-side helpers (``disable_thinking``,
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from langchain_core.messages import SystemMessage
 
-from EvoScientist.middleware.utils import (
+from metasci_scribe.middleware.utils import (
     replace_block_by_sentinel,
 )
 

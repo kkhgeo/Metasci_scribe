@@ -14,12 +14,12 @@ pytest.importorskip("textual")
 
 from langchain_core.messages import AIMessage
 
-import EvoScientist.cli.tui_interactive as tui_mod
-from EvoScientist.channels.hitl_budget import HITL_BUDGET_STOP_NOTICE
-from EvoScientist.channels.interaction import ApprovalOutcome
-from EvoScientist.cli.widgets.tool_call_widget import ToolCallWidget
-from EvoScientist.gateway import RuntimeGateways
-from EvoScientist.stream import display as display_mod
+import metasci_scribe.cli.tui_interactive as tui_mod
+from metasci_scribe.channels.hitl_budget import HITL_BUDGET_STOP_NOTICE
+from metasci_scribe.channels.interaction import ApprovalOutcome
+from metasci_scribe.cli.widgets.tool_call_widget import ToolCallWidget
+from metasci_scribe.gateway import RuntimeGateways
+from metasci_scribe.stream import display as display_mod
 from tests.fakes.common import (
     FakeCheckpointAgent,
     FakeGraphGateway,
@@ -187,7 +187,7 @@ async def test_a_close_that_fails_ends_the_turn_with_one_short_log_line(
     agent = parked_agent(
         update_error=RuntimeError("409 conflict\nrun kwargs:\n" + "x" * 5000)
     )
-    with caplog.at_level(logging.DEBUG, logger="EvoScientist"):
+    with caplog.at_level(logging.DEBUG, logger="metasci-scribe"):
         turn = await _turn(
             monkeypatch,
             workspace,
@@ -368,7 +368,7 @@ async def test_after_a_decline_a_later_allow_listed_command_does_not_resume(
 ):
     """A sibling's command that config rules approve arrives after the user
     declined: it must not restart the turn (and bring the declined prompt back)."""
-    import EvoScientist.channels.interaction as interaction_mod
+    import metasci_scribe.channels.interaction as interaction_mod
 
     snapshots = iter([(None, {}), (list(APPROVE), {})])
     monkeypatch.setattr(
@@ -541,7 +541,7 @@ async def test_ctrl_c_on_the_open_widget_does_not_cancel_the_turn(
 ):
     """Ctrl+C answers the open approval; the turn's task is not cancelled, so
     the close runs in a task whose cancellation still means what it says."""
-    import EvoScientist.backends as backends_mod
+    import metasci_scribe.backends as backends_mod
 
     no_config_rule(monkeypatch)
     agent = parked_agent()
@@ -576,7 +576,7 @@ async def test_ctrl_c_while_the_declined_widget_is_removed_still_closes(
     """The decline is on record, with its own reason, before anything else is
     awaited: a Ctrl+C that lands while the widget is removed finds it, and
     the input the widget had switched off comes back."""
-    from EvoScientist.cli.widgets.approval_widget import ApprovalWidget
+    from metasci_scribe.cli.widgets.approval_widget import ApprovalWidget
 
     no_config_rule(monkeypatch)
     agent = parked_agent()
@@ -665,7 +665,7 @@ async def test_ctrl_c_while_the_approval_widget_mounts_leaves_no_widget_behind(
 ):
     """The key lands before the wait for an answer has started, so it cancels
     the turn. The widget that was being mounted must not stay on screen."""
-    from EvoScientist.cli.widgets.approval_widget import ApprovalWidget
+    from metasci_scribe.cli.widgets.approval_widget import ApprovalWidget
 
     no_config_rule(monkeypatch)
     agent = parked_agent()
@@ -813,7 +813,7 @@ async def test_ctrl_c_while_the_answer_is_finalized_still_closes(
 ):
     """The stream has ended after a decline; Ctrl+C lands in the last wait of
     the cleanup, after the rows were settled."""
-    from EvoScientist.cli.widgets.assistant_message import AssistantMessage
+    from metasci_scribe.cli.widgets.assistant_message import AssistantMessage
 
     no_config_rule(monkeypatch)
     agent = parked_agent()
@@ -854,7 +854,7 @@ async def test_ctrl_c_while_the_answer_is_finalized_after_an_approval_closes(
 ):
     """Approved, but Ctrl+C lands in the cleanup's last wait before the resume is
     sent: the stop leaves the approval open, so it is closed as a refusal."""
-    from EvoScientist.cli.widgets.assistant_message import AssistantMessage
+    from metasci_scribe.cli.widgets.assistant_message import AssistantMessage
 
     no_config_rule(monkeypatch)
     agent = parked_agent()
@@ -883,7 +883,7 @@ async def test_a_cancellation_in_the_last_step_after_a_channel_approval_closes(
 ):
     """A channel turn has its own stop scope, so only the cancellation itself
     says the turn was stopped while the approved resume was still unsent."""
-    from EvoScientist.cli.widgets.assistant_message import AssistantMessage
+    from metasci_scribe.cli.widgets.assistant_message import AssistantMessage
 
     no_config_rule(monkeypatch)
     agent = parked_agent()
@@ -961,7 +961,7 @@ async def test_a_stream_that_fails_to_shut_down_after_a_decline_is_still_closed(
 async def test_an_answer_that_fails_to_finalize_after_a_decline_is_still_closed(
     monkeypatch, workspace
 ):
-    from EvoScientist.cli.widgets.assistant_message import AssistantMessage
+    from metasci_scribe.cli.widgets.assistant_message import AssistantMessage
 
     no_config_rule(monkeypatch)
     agent = parked_agent()
@@ -1071,7 +1071,7 @@ async def test_a_second_ctrl_c_during_the_close_still_marks_the_declined_call(
 
         monkeypatch.setattr(app, "_wait_for_approval", _reject)
 
-    with caplog.at_level(logging.WARNING, logger="EvoScientist"):
+    with caplog.at_level(logging.WARNING, logger="metasci-scribe"):
         turn = await ctrl_c_turn(
             monkeypatch,
             workspace,
@@ -1115,7 +1115,7 @@ async def test_ctrl_c_during_the_close_after_the_stream_still_marks_the_declined
         next=BEFORE_TOOLS,
         values={"messages": [AIMessage(content="", tool_calls=[call])]},
     )
-    with caplog.at_level(logging.WARNING, logger="EvoScientist"):
+    with caplog.at_level(logging.WARNING, logger="metasci-scribe"):
         turn = await ctrl_c_turn(
             monkeypatch,
             workspace,

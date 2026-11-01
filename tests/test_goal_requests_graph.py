@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
-from EvoScientist.middleware.goal import CONTINUE_MESSAGE, new_goal_request
+from metasci_scribe.middleware.goal import CONTINUE_MESSAGE, new_goal_request
 from tests.fakes.goal import (
     ACCEPT,
     CANCEL,
@@ -178,7 +178,7 @@ class TestCreate:
         assert len(models.drafter.seen) == 2
 
     async def test_the_same_holds_on_the_sqlite_checkpointer(self, tmp_path):
-        from EvoScientist.sessions import PruningCheckpointer
+        from metasci_scribe.sessions import PruningCheckpointer
 
         db = str(tmp_path / "sessions.db")
         models = None

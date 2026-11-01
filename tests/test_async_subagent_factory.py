@@ -1,4 +1,4 @@
-"""Tests for ``EvoScientist.subagents._factory.build_async_subagent_graph``.
+"""Tests for ``metasci_scribe.subagents._factory.build_async_subagent_graph``.
 
 Pins the integration contract that the factory must request middleware
 in async-safe mode (``for_async_subagent=True``). Without this, a future
@@ -13,9 +13,9 @@ from unittest.mock import MagicMock, patch
 
 # Imported before any patch is active: the module binds ``get_effective_config``
 # at import, and a first import under the patch would freeze the mock in place.
-import EvoScientist.EvoScientist  # noqa: F401
-from EvoScientist.config import MemoryObservationWriter
-from EvoScientist.memory import MemorySourceType
+import metasci_scribe.agent  # noqa: F401
+from metasci_scribe.config import MemoryObservationWriter
+from metasci_scribe.memory import MemorySourceType
 
 
 def _single_middleware(subagent: dict, class_name: str):
@@ -42,13 +42,13 @@ def _assert_subagent_memory_middleware(subagent: dict, *, source_agent: str) -> 
 
 
 @patch("deepagents.create_deep_agent")
-@patch("EvoScientist.EvoScientist._load_mcp_tools_cached", return_value={})
-@patch("EvoScientist.EvoScientist._get_default_middleware", return_value=[])
-@patch("EvoScientist.EvoScientist._get_default_backend")
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
-@patch("EvoScientist.utils.load_subagents")
-@patch("EvoScientist.config.apply_config_to_env")
-@patch("EvoScientist.config.get_effective_config")
+@patch("metasci_scribe.agent._load_mcp_tools_cached", return_value={})
+@patch("metasci_scribe.agent._get_default_middleware", return_value=[])
+@patch("metasci_scribe.agent._get_default_backend")
+@patch("metasci_scribe.agent._ensure_chat_model")
+@patch("metasci_scribe.utils.load_subagents")
+@patch("metasci_scribe.config.apply_config_to_env")
+@patch("metasci_scribe.config.get_effective_config")
 def test_factory_requests_async_safe_middleware(
     mock_get_cfg,
     mock_apply_env,
@@ -89,7 +89,7 @@ def test_factory_requests_async_safe_middleware(
     # chainable so the factory's terminal ``.with_config(...)`` doesn't blow up.
     mock_create.return_value.with_config.return_value = MagicMock()
 
-    from EvoScientist.subagents._factory import build_async_subagent_graph
+    from metasci_scribe.subagents._factory import build_async_subagent_graph
 
     build_async_subagent_graph("writing-agent", workspace=workspace)
 
@@ -116,13 +116,13 @@ def test_factory_requests_async_safe_middleware(
 
 
 @patch("deepagents.create_deep_agent")
-@patch("EvoScientist.EvoScientist._load_mcp_tools_cached", return_value={})
-@patch("EvoScientist.EvoScientist._get_default_middleware", return_value=[])
-@patch("EvoScientist.EvoScientist._get_default_backend")
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
-@patch("EvoScientist.utils.load_subagents")
-@patch("EvoScientist.config.apply_config_to_env")
-@patch("EvoScientist.config.get_effective_config")
+@patch("metasci_scribe.agent._load_mcp_tools_cached", return_value={})
+@patch("metasci_scribe.agent._get_default_middleware", return_value=[])
+@patch("metasci_scribe.agent._get_default_backend")
+@patch("metasci_scribe.agent._ensure_chat_model")
+@patch("metasci_scribe.utils.load_subagents")
+@patch("metasci_scribe.config.apply_config_to_env")
+@patch("metasci_scribe.config.get_effective_config")
 def test_factory_never_arms_hitl_interrupt_on(
     mock_get_cfg,
     mock_apply_env,
@@ -153,18 +153,18 @@ def test_factory_never_arms_hitl_interrupt_on(
     ]
     mock_create.return_value.with_config.return_value = MagicMock()
 
-    from EvoScientist.subagents._factory import build_async_subagent_graph
+    from metasci_scribe.subagents._factory import build_async_subagent_graph
 
     build_async_subagent_graph("writing-agent", workspace=workspace)
 
     assert "interrupt_on" not in mock_create.call_args.kwargs
 
 
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
+@patch("metasci_scribe.agent._ensure_chat_model")
 def test_inject_subagent_adds_memory_middleware(mock_model, workspace):
     mock_model.return_value = MagicMock(profile={"max_input_tokens": 200_000})
 
-    from EvoScientist.EvoScientist import _inject_subagent_middleware
+    from metasci_scribe.agent import _inject_subagent_middleware
 
     subs = [{"name": "test-agent"}]
 
@@ -173,8 +173,8 @@ def test_inject_subagent_adds_memory_middleware(mock_model, workspace):
     _assert_subagent_memory_middleware(subs[0], source_agent="test-agent")
 
 
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
-@patch("EvoScientist.EvoScientist._ensure_config")
+@patch("metasci_scribe.agent._ensure_chat_model")
+@patch("metasci_scribe.agent._ensure_config")
 def test_inject_subagent_omits_memory_middleware_when_memory_disabled(
     mock_config, mock_model, workspace
 ):
@@ -188,7 +188,7 @@ def test_inject_subagent_omits_memory_middleware_when_memory_disabled(
     cfg.auxiliary_provider = ""
     mock_config.return_value = cfg
 
-    from EvoScientist.EvoScientist import _inject_subagent_middleware
+    from metasci_scribe.agent import _inject_subagent_middleware
 
     subs = [{"name": "test-agent"}]
 
@@ -201,8 +201,8 @@ def test_inject_subagent_omits_memory_middleware_when_memory_disabled(
     ]
 
 
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
-@patch("EvoScientist.EvoScientist._ensure_config")
+@patch("metasci_scribe.agent._ensure_chat_model")
+@patch("metasci_scribe.agent._ensure_config")
 def test_inject_subagent_worker_only_observation_writer_keeps_live_tool_off(
     mock_config, mock_model, workspace
 ):
@@ -216,7 +216,7 @@ def test_inject_subagent_worker_only_observation_writer_keeps_live_tool_off(
     cfg.auxiliary_provider = ""
     mock_config.return_value = cfg
 
-    from EvoScientist.EvoScientist import _inject_subagent_middleware
+    from metasci_scribe.agent import _inject_subagent_middleware
 
     subs = [{"name": "test-agent"}]
 
@@ -235,11 +235,11 @@ def test_inject_subagent_worker_only_observation_writer_keeps_live_tool_off(
 
 
 @patch(
-    "EvoScientist.middleware.create_tool_selector_middleware",
+    "metasci_scribe.middleware.create_tool_selector_middleware",
     return_value=[MagicMock()],
 )
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
-@patch("EvoScientist.EvoScientist._ensure_config")
+@patch("metasci_scribe.agent._ensure_chat_model")
+@patch("metasci_scribe.agent._ensure_config")
 def test_all_observation_writer_schedules_turn_worker_without_profile_memory(
     mock_config, mock_chat, mock_tool_selector, workspace
 ):
@@ -257,7 +257,7 @@ def test_all_observation_writer_schedules_turn_worker_without_profile_memory(
     mock_config.return_value = cfg
     mock_chat.return_value = MagicMock(profile={"max_input_tokens": 200_000})
 
-    from EvoScientist.EvoScientist import _get_default_middleware
+    from metasci_scribe.agent import _get_default_middleware
 
     middleware = _get_default_middleware(workspace=workspace)
     memory_middleware = next(
@@ -287,11 +287,11 @@ def test_all_observation_writer_schedules_turn_worker_without_profile_memory(
 
 
 @patch(
-    "EvoScientist.middleware.create_tool_selector_middleware",
+    "metasci_scribe.middleware.create_tool_selector_middleware",
     return_value=[MagicMock()],
 )
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
-@patch("EvoScientist.EvoScientist._ensure_config")
+@patch("metasci_scribe.agent._ensure_chat_model")
+@patch("metasci_scribe.agent._ensure_config")
 def test_async_subagent_mode_filters_ask_user(
     mock_config, mock_chat, mock_tool_selector, workspace
 ):
@@ -317,8 +317,8 @@ def test_async_subagent_mode_filters_ask_user(
     mock_config.return_value = cfg
     mock_chat.return_value = MagicMock(profile={"max_input_tokens": 200_000})
 
-    from EvoScientist.EvoScientist import _get_default_middleware
-    from EvoScientist.middleware.ask_user import AskUserMiddleware
+    from metasci_scribe.agent import _get_default_middleware
+    from metasci_scribe.middleware.ask_user import AskUserMiddleware
 
     # CLI / in-process path includes AskUserMiddleware …
     cli_mw = _get_default_middleware(workspace=workspace)
@@ -336,11 +336,11 @@ def test_async_subagent_mode_filters_ask_user(
 
 
 @patch(
-    "EvoScientist.middleware.create_tool_selector_middleware",
+    "metasci_scribe.middleware.create_tool_selector_middleware",
     return_value=[MagicMock()],
 )
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
-@patch("EvoScientist.EvoScientist._ensure_config")
+@patch("metasci_scribe.agent._ensure_chat_model")
+@patch("metasci_scribe.agent._ensure_config")
 def test_async_subagent_disables_tool_selector_stream_tracking(
     mock_config, mock_chat, mock_tool_selector, workspace
 ):
@@ -359,8 +359,8 @@ def test_async_subagent_disables_tool_selector_stream_tracking(
     mock_config.return_value = cfg
     mock_chat.return_value = MagicMock(profile={"max_input_tokens": 200_000})
 
-    from EvoScientist.EvoScientist import _get_default_middleware
-    from EvoScientist.middleware.events import NoOpSink
+    from metasci_scribe.agent import _get_default_middleware
+    from metasci_scribe.middleware.events import NoOpSink
 
     _get_default_middleware(workspace=workspace, for_async_subagent=True)
 
@@ -371,15 +371,15 @@ def test_async_subagent_disables_tool_selector_stream_tracking(
 
 
 @patch(
-    "EvoScientist.middleware.create_per_run_summarization_middleware",
+    "metasci_scribe.middleware.create_per_run_summarization_middleware",
     return_value=MagicMock(name="summarization"),
 )
 @patch(
-    "EvoScientist.middleware.create_tool_selector_middleware",
+    "metasci_scribe.middleware.create_tool_selector_middleware",
     return_value=[MagicMock()],
 )
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
-@patch("EvoScientist.EvoScientist._ensure_config")
+@patch("metasci_scribe.agent._ensure_chat_model")
+@patch("metasci_scribe.agent._ensure_config")
 def test_main_agent_mounts_the_grader_after_our_other_after_agent_hooks(
     mock_config, mock_chat, mock_tool_selector, mock_summarization, workspace, tmp_path
 ):
@@ -399,9 +399,9 @@ def test_main_agent_mounts_the_grader_after_our_other_after_agent_hooks(
     mock_config.return_value = cfg
     mock_chat.return_value = MagicMock(profile={"max_input_tokens": 200_000})
 
-    from EvoScientist.EvoScientist import _get_default_middleware
-    from EvoScientist.message_meta import this_run_messages
-    from EvoScientist.middleware.rubric import EvoRubricMiddleware
+    from metasci_scribe.agent import _get_default_middleware
+    from metasci_scribe.message_meta import this_run_messages
+    from metasci_scribe.middleware.rubric import EvoRubricMiddleware
 
     backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
     main = _get_default_middleware(workspace=workspace, backend=backend)

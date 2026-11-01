@@ -1,4 +1,4 @@
-"""Tests for EvoScientist.git_cli."""
+"""Tests for metasci_scribe.git_cli."""
 
 import shutil
 import subprocess
@@ -8,14 +8,14 @@ from unittest.mock import patch
 
 import pytest
 
-from EvoScientist.git_cli import (
+from metasci_scribe.git_cli import (
     CLONE_TIMEOUT,
     GitNotFoundError,
     clone_repo,
     run_git,
 )
 
-_RUN = "EvoScientist.git_cli.subprocess.run"
+_RUN = "metasci_scribe.git_cli.subprocess.run"
 
 
 def _proc(returncode=0, stdout="", stderr=""):
@@ -29,7 +29,7 @@ _NON_INTERACTIVE = ["-c", "core.askPass="]
 def _no_recorded_git(tmp_path, monkeypatch):
     """On Windows a missing git triggers a retry with a recorded PortableGit;
     an empty DATA_DIR keeps the developer's real record out of these tests."""
-    from EvoScientist import paths
+    from metasci_scribe import paths
 
     monkeypatch.setattr(paths, "DATA_DIR", tmp_path / "data")
 
@@ -47,22 +47,22 @@ class TestRunGit:
         assert message.startswith("git was not found on PATH.")
         assert "https://git-scm.com/downloads" in message
 
-    def test_windows_message_points_to_evosci_setup(self, monkeypatch):
+    def test_windows_message_points_to_scribe_setup(self, monkeypatch):
         monkeypatch.setattr(sys, "platform", "win32")
         assert str(GitNotFoundError()) == (
-            "git was not found on PATH. EvoScientist uses git to download skills "
+            "git was not found on PATH. Metasci Scribe uses git to download skills "
             "and the MCP server index; install Git from "
-            "https://git-scm.com/downloads, or run `EvoSci setup`, and try again."
+            "https://git-scm.com/downloads, or run `metasci-scribe setup`, and try again."
         )
 
     def test_real_cause_is_logged(self, caplog):
         too_many = OSError(24, "Too many open files")
-        with caplog.at_level("DEBUG", logger="EvoScientist.git_cli"):
+        with caplog.at_level("DEBUG", logger="metasci_scribe.git_cli"):
             with patch(_RUN, side_effect=too_many):
                 with pytest.raises(GitNotFoundError):
                     run_git(["--version"], timeout=5)
 
-        record = next(r for r in caplog.records if r.name == "EvoScientist.git_cli")
+        record = next(r for r in caplog.records if r.name == "metasci_scribe.git_cli")
         assert record.getMessage() == "could not start git"
         assert record.exc_info[1] is too_many
 
@@ -119,11 +119,11 @@ class TestRunGit:
         assert "Łukasz" in result.stderr
 
     def test_windows_retries_with_a_portablegit_set_up_since_start(self, monkeypatch):
-        """`EvoSci setup` run in another terminal records PortableGit; the
+        """`metasci-scribe setup` run in another terminal records PortableGit; the
         running process puts it on PATH and retries once."""
         from pathlib import Path
 
-        from EvoScientist.setup import git as setup_git
+        from metasci_scribe.setup import git as setup_git
 
         monkeypatch.setattr(sys, "platform", "win32")
         monkeypatch.setattr(setup_git, "activate_runtime", lambda: Path("C:/pg/cmd"))
@@ -135,7 +135,7 @@ class TestRunGit:
         assert run.call_count == 2
 
     def test_windows_without_portablegit_raises_after_one_attempt(self, monkeypatch):
-        from EvoScientist.setup import git as setup_git
+        from metasci_scribe.setup import git as setup_git
 
         monkeypatch.setattr(sys, "platform", "win32")
         monkeypatch.setattr(setup_git, "activate_runtime", lambda: None)
@@ -149,7 +149,7 @@ class TestRunGit:
     def test_windows_private_git_missing_too_raises(self, monkeypatch):
         from pathlib import Path
 
-        from EvoScientist.setup import git as setup_git
+        from metasci_scribe.setup import git as setup_git
 
         monkeypatch.setattr(sys, "platform", "win32")
         monkeypatch.setattr(setup_git, "activate_runtime", lambda: Path("C:/pg/cmd"))
@@ -162,7 +162,7 @@ class TestRunGit:
 
     def test_windows_retries_only_for_a_missing_git(self, monkeypatch):
         """A git that is there but cannot start is not replaced by PortableGit."""
-        from EvoScientist.setup import git as setup_git
+        from metasci_scribe.setup import git as setup_git
 
         def boom():
             raise AssertionError("activate_runtime must not run")
@@ -176,7 +176,7 @@ class TestRunGit:
         assert str(excinfo.value).startswith("git could not be started:")
 
     def test_other_platforms_do_not_look_for_portablegit(self, monkeypatch):
-        from EvoScientist.setup import git as setup_git
+        from metasci_scribe.setup import git as setup_git
 
         def boom():
             raise AssertionError("activate_runtime must not run")
@@ -214,7 +214,7 @@ class TestRunGit:
     def test_windows_resets_the_helper_list_only_for_portablegit(
         self, monkeypatch, private
     ):
-        from EvoScientist.setup import git as setup_git
+        from metasci_scribe.setup import git as setup_git
 
         monkeypatch.setattr(sys, "platform", "win32")
         monkeypatch.setattr(setup_git, "private_git_on_path", lambda: private)

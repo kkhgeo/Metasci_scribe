@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 
 from langgraph.types import Interrupt
 
-from EvoScientist.stream.emitter import StreamEvent, StreamEventEmitter
-from EvoScientist.stream.state import StreamState
+from metasci_scribe.stream.emitter import StreamEvent, StreamEventEmitter
+from metasci_scribe.stream.state import StreamState
 from tests.fakes.stream_v3 import (
     FakeV3Agent,
     collect_events,
@@ -106,14 +106,14 @@ class TestStreamStateInterrupt:
 
 class TestResolveHitlApproval:
     def test_empty_requests_auto_approves(self):
-        from EvoScientist.stream.display import _resolve_hitl_approval
+        from metasci_scribe.stream.display import _resolve_hitl_approval
 
         result = _resolve_hitl_approval({"action_requests": []})
         assert result.decisions == [{"type": "approve"}]
         assert result.human_prompted is False
 
     def test_session_auto_approve(self):
-        import EvoScientist.stream.display as disp
+        import metasci_scribe.stream.display as disp
 
         original = disp._session_auto_approve
         try:
@@ -131,8 +131,8 @@ class TestResolveHitlApproval:
             disp._session_auto_approve = original
 
     def test_display_auto_approve_config_true(self):
-        import EvoScientist.stream.display as disp
-        from EvoScientist.stream.display import _resolve_hitl_approval
+        import metasci_scribe.stream.display as disp
+        from metasci_scribe.stream.display import _resolve_hitl_approval
 
         original = disp._session_auto_approve
         try:
@@ -141,9 +141,7 @@ class TestResolveHitlApproval:
             mock_cfg.auto_approve = True
             mock_cfg.shell_allow_list = ""
             mock_cfg.dangerous_mode = False
-            with patch(
-                "EvoScientist.EvoScientist._ensure_config", return_value=mock_cfg
-            ):
+            with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
                 result = _resolve_hitl_approval(
                     {
                         "action_requests": [
@@ -157,8 +155,8 @@ class TestResolveHitlApproval:
             disp._session_auto_approve = original
 
     def test_non_execute_tool_auto_approves(self):
-        import EvoScientist.stream.display as disp
-        from EvoScientist.stream.display import _resolve_hitl_approval
+        import metasci_scribe.stream.display as disp
+        from metasci_scribe.stream.display import _resolve_hitl_approval
 
         original = disp._session_auto_approve
         try:
@@ -167,9 +165,7 @@ class TestResolveHitlApproval:
             mock_cfg.auto_approve = False
             mock_cfg.shell_allow_list = ""
             mock_cfg.dangerous_mode = False
-            with patch(
-                "EvoScientist.EvoScientist._ensure_config", return_value=mock_cfg
-            ):
+            with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
                 result = _resolve_hitl_approval(
                     {
                         "action_requests": [
@@ -183,8 +179,8 @@ class TestResolveHitlApproval:
             disp._session_auto_approve = original
 
     def test_execute_with_matching_allow_list(self):
-        import EvoScientist.stream.display as disp
-        from EvoScientist.stream.display import _resolve_hitl_approval
+        import metasci_scribe.stream.display as disp
+        from metasci_scribe.stream.display import _resolve_hitl_approval
 
         original = disp._session_auto_approve
         try:
@@ -193,9 +189,7 @@ class TestResolveHitlApproval:
             mock_cfg.auto_approve = False
             mock_cfg.shell_allow_list = "ls,cat,python"
             mock_cfg.dangerous_mode = False
-            with patch(
-                "EvoScientist.EvoScientist._ensure_config", return_value=mock_cfg
-            ):
+            with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
                 result = _resolve_hitl_approval(
                     {
                         "action_requests": [
@@ -209,8 +203,8 @@ class TestResolveHitlApproval:
             disp._session_auto_approve = original
 
     def test_execute_not_in_allow_list_prompts(self):
-        import EvoScientist.stream.display as disp
-        from EvoScientist.stream.display import _resolve_hitl_approval
+        import metasci_scribe.stream.display as disp
+        from metasci_scribe.stream.display import _resolve_hitl_approval
 
         original = disp._session_auto_approve
         try:
@@ -219,11 +213,9 @@ class TestResolveHitlApproval:
             mock_cfg.auto_approve = False
             mock_cfg.shell_allow_list = "ls,cat"
             mock_cfg.dangerous_mode = False
-            with patch(
-                "EvoScientist.EvoScientist._ensure_config", return_value=mock_cfg
-            ):
+            with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
                 with patch(
-                    "EvoScientist.stream.display._prompt_hitl_approval"
+                    "metasci_scribe.stream.display._prompt_hitl_approval"
                 ) as mock_prompt:
                     mock_prompt.return_value = [{"type": "approve"}]
                     result = _resolve_hitl_approval(
@@ -241,8 +233,8 @@ class TestResolveHitlApproval:
 
     def test_run_in_background_not_in_allow_list_prompts(self):
         """run_in_background must NOT auto-approve — it runs shell like execute."""
-        import EvoScientist.stream.display as disp
-        from EvoScientist.stream.display import _resolve_hitl_approval
+        import metasci_scribe.stream.display as disp
+        from metasci_scribe.stream.display import _resolve_hitl_approval
 
         original = disp._session_auto_approve
         try:
@@ -251,11 +243,9 @@ class TestResolveHitlApproval:
             mock_cfg.auto_approve = False
             mock_cfg.shell_allow_list = "ls,cat"
             mock_cfg.dangerous_mode = False
-            with patch(
-                "EvoScientist.EvoScientist._ensure_config", return_value=mock_cfg
-            ):
+            with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
                 with patch(
-                    "EvoScientist.stream.display._prompt_hitl_approval"
+                    "metasci_scribe.stream.display._prompt_hitl_approval"
                 ) as mock_prompt:
                     mock_prompt.return_value = [{"type": "approve"}]
                     result = _resolve_hitl_approval(
@@ -276,8 +266,8 @@ class TestResolveHitlApproval:
 
     def test_run_in_background_in_allow_list_auto_approves(self):
         """An allow-listed command still auto-approves for run_in_background."""
-        import EvoScientist.stream.display as disp
-        from EvoScientist.stream.display import _resolve_hitl_approval
+        import metasci_scribe.stream.display as disp
+        from metasci_scribe.stream.display import _resolve_hitl_approval
 
         original = disp._session_auto_approve
         try:
@@ -286,9 +276,7 @@ class TestResolveHitlApproval:
             mock_cfg.auto_approve = False
             mock_cfg.shell_allow_list = "python"
             mock_cfg.dangerous_mode = False
-            with patch(
-                "EvoScientist.EvoScientist._ensure_config", return_value=mock_cfg
-            ):
+            with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
                 result = _resolve_hitl_approval(
                     {
                         "action_requests": [
@@ -307,8 +295,8 @@ class TestResolveHitlApproval:
     def test_delete_only_request_prompts_not_auto_approved(self):
         """delete is armed in HITL_INTERRUPT_ON but has no `command` arg, so the
         shell_allow_list carve-out must never silently clear it (C1)."""
-        import EvoScientist.stream.display as disp
-        from EvoScientist.stream.display import _resolve_hitl_approval
+        import metasci_scribe.stream.display as disp
+        from metasci_scribe.stream.display import _resolve_hitl_approval
 
         original = disp._session_auto_approve
         try:
@@ -317,11 +305,9 @@ class TestResolveHitlApproval:
             mock_cfg.auto_approve = False
             mock_cfg.dangerous_mode = False
             mock_cfg.shell_allow_list = ""
-            with patch(
-                "EvoScientist.EvoScientist._ensure_config", return_value=mock_cfg
-            ):
+            with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
                 with patch(
-                    "EvoScientist.stream.display._prompt_hitl_approval"
+                    "metasci_scribe.stream.display._prompt_hitl_approval"
                 ) as mock_prompt:
                     mock_prompt.return_value = [{"type": "approve"}]
                     result = _resolve_hitl_approval(
@@ -341,8 +327,8 @@ class TestResolveHitlApproval:
         """A human "approve all" on a mixed batch (a prompt-needed delete plus a
         policy-rejected dangerous command) must keep the REJECT with its reason,
         not run the command the policy just refused."""
-        import EvoScientist.stream.display as disp
-        from EvoScientist.stream.display import _resolve_hitl_approval
+        import metasci_scribe.stream.display as disp
+        from metasci_scribe.stream.display import _resolve_hitl_approval
 
         original = disp._session_auto_approve
         try:
@@ -351,11 +337,9 @@ class TestResolveHitlApproval:
             mock_cfg.auto_approve = True
             mock_cfg.dangerous_mode = False
             mock_cfg.shell_allow_list = ""
-            with patch(
-                "EvoScientist.EvoScientist._ensure_config", return_value=mock_cfg
-            ):
+            with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
                 with patch(
-                    "EvoScientist.stream.display._prompt_hitl_approval"
+                    "metasci_scribe.stream.display._prompt_hitl_approval"
                 ) as mock_prompt:
                     mock_prompt.return_value = [
                         {"type": "approve"},
@@ -387,39 +371,39 @@ class TestResolveHitlApproval:
 
 class TestHitlConfig:
     def test_auto_approve_default(self):
-        from EvoScientist.config.settings import EvoScientistConfig
+        from metasci_scribe.config.settings import ScribeConfig
 
-        cfg = EvoScientistConfig()
+        cfg = ScribeConfig()
         assert cfg.auto_approve is False
 
     def test_auto_mode_default(self):
-        from EvoScientist.config.settings import EvoScientistConfig
+        from metasci_scribe.config.settings import ScribeConfig
 
-        cfg = EvoScientistConfig()
+        cfg = ScribeConfig()
         assert cfg.auto_mode is False
 
     def test_shell_allow_list_default(self):
-        from EvoScientist.config.settings import EvoScientistConfig
+        from metasci_scribe.config.settings import ScribeConfig
 
-        cfg = EvoScientistConfig()
+        cfg = ScribeConfig()
         assert cfg.shell_allow_list == ""
 
     def test_auto_approve_set(self):
-        from EvoScientist.config.settings import EvoScientistConfig
+        from metasci_scribe.config.settings import ScribeConfig
 
-        cfg = EvoScientistConfig(auto_approve=True)
+        cfg = ScribeConfig(auto_approve=True)
         assert cfg.auto_approve is True
 
     def test_auto_mode_set(self):
-        from EvoScientist.config.settings import EvoScientistConfig
+        from metasci_scribe.config.settings import ScribeConfig
 
-        cfg = EvoScientistConfig(auto_mode=True)
+        cfg = ScribeConfig(auto_mode=True)
         assert cfg.auto_mode is True
 
     def test_shell_allow_list_set(self):
-        from EvoScientist.config.settings import EvoScientistConfig
+        from metasci_scribe.config.settings import ScribeConfig
 
-        cfg = EvoScientistConfig(shell_allow_list="ls,cat,python")
+        cfg = ScribeConfig(shell_allow_list="ls,cat,python")
         assert cfg.shell_allow_list == "ls,cat,python"
 
 
@@ -488,32 +472,32 @@ class TestInterruptEventParsing:
 
 class TestConsumerHitlHelpers:
     def test_parse_approval_approve(self):
-        from EvoScientist.channels.interaction import parse_approval_reply
+        from metasci_scribe.channels.interaction import parse_approval_reply
 
         for text in ("1", "y", "yes", "approve", "ok", " 1 ", "  Y  "):
             assert parse_approval_reply(text) == "approve", f"Failed for: {text!r}"
 
     def test_parse_approval_reject(self):
-        from EvoScientist.channels.interaction import parse_approval_reply
+        from metasci_scribe.channels.interaction import parse_approval_reply
 
         for text in ("2", "n", "no", "reject"):
             assert parse_approval_reply(text) == "reject", f"Failed for: {text!r}"
 
     def test_parse_approval_auto(self):
-        from EvoScientist.channels.interaction import parse_approval_reply
+        from metasci_scribe.channels.interaction import parse_approval_reply
 
         for text in ("3", "a", "auto", "approve all"):
             assert parse_approval_reply(text) == "auto", f"Failed for: {text!r}"
 
     def test_parse_approval_unrecognized(self):
-        from EvoScientist.channels.interaction import parse_approval_reply
+        from metasci_scribe.channels.interaction import parse_approval_reply
 
         assert parse_approval_reply("hello world") is None
         assert parse_approval_reply("") is None
         assert parse_approval_reply("maybe") is None
 
     def test_format_approval_prompt(self):
-        from EvoScientist.channels.interaction import format_approval_prompt
+        from metasci_scribe.channels.interaction import format_approval_prompt
 
         prompt = format_approval_prompt(
             [
@@ -527,7 +511,7 @@ class TestConsumerHitlHelpers:
         assert "2=Reject" in prompt
 
     def test_format_approval_prompt_multiple(self):
-        from EvoScientist.channels.interaction import format_approval_prompt
+        from metasci_scribe.channels.interaction import format_approval_prompt
 
         prompt = format_approval_prompt(
             [
@@ -539,19 +523,19 @@ class TestConsumerHitlHelpers:
         assert "2. write_file: /out.txt" in prompt
 
     def test_should_auto_approve_non_execute(self):
-        from EvoScientist.channels.interaction import ApprovalPolicy
+        from metasci_scribe.channels.interaction import ApprovalPolicy
 
         assert ApprovalPolicy().auto_decision(
             "tg:c1", [{"name": "write_file", "args": {}}]
         ) == [{"type": "approve"}]
 
     def test_should_auto_approve_empty(self):
-        from EvoScientist.channels.interaction import ApprovalPolicy
+        from metasci_scribe.channels.interaction import ApprovalPolicy
 
         assert ApprovalPolicy().auto_decision("tg:c1", []) == []
 
     def test_should_auto_approve_execute_no_allowlist(self):
-        from EvoScientist.channels.interaction import ApprovalPolicy
+        from metasci_scribe.channels.interaction import ApprovalPolicy
 
         # With default config (auto_approve=False, shell_allow_list=""),
         # execute should NOT auto-approve
@@ -559,7 +543,7 @@ class TestConsumerHitlHelpers:
         mock_cfg.auto_approve = False
         mock_cfg.shell_allow_list = ""
         mock_cfg.dangerous_mode = False
-        with patch("EvoScientist.EvoScientist._ensure_config", return_value=mock_cfg):
+        with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
             result = ApprovalPolicy().auto_decision(
                 "tg:c1",
                 [
@@ -570,13 +554,13 @@ class TestConsumerHitlHelpers:
 
     def test_should_auto_approve_run_in_background_no_allowlist(self):
         """Channel path must NOT auto-approve run_in_background (same as execute)."""
-        from EvoScientist.channels.interaction import ApprovalPolicy
+        from metasci_scribe.channels.interaction import ApprovalPolicy
 
         mock_cfg = MagicMock()
         mock_cfg.auto_approve = False
         mock_cfg.shell_allow_list = ""
         mock_cfg.dangerous_mode = False
-        with patch("EvoScientist.EvoScientist._ensure_config", return_value=mock_cfg):
+        with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
             result = ApprovalPolicy().auto_decision(
                 "tg:c1",
                 [
@@ -586,12 +570,12 @@ class TestConsumerHitlHelpers:
         assert result is None
 
     def test_should_auto_approve_config_true(self):
-        from EvoScientist.channels.interaction import ApprovalPolicy
+        from metasci_scribe.channels.interaction import ApprovalPolicy
 
         mock_cfg = MagicMock()
         mock_cfg.auto_approve = True
         mock_cfg.dangerous_mode = False
-        with patch("EvoScientist.EvoScientist._ensure_config", return_value=mock_cfg):
+        with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
             result = ApprovalPolicy().auto_decision(
                 "tg:c1",
                 [
@@ -601,13 +585,13 @@ class TestConsumerHitlHelpers:
         assert result == [{"type": "approve"}]
 
     def test_should_auto_approve_allowlist_match(self):
-        from EvoScientist.channels.interaction import ApprovalPolicy
+        from metasci_scribe.channels.interaction import ApprovalPolicy
 
         mock_cfg = MagicMock()
         mock_cfg.auto_approve = False
         mock_cfg.shell_allow_list = "ls,python"
         mock_cfg.dangerous_mode = False
-        with patch("EvoScientist.EvoScientist._ensure_config", return_value=mock_cfg):
+        with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
             result = ApprovalPolicy().auto_decision(
                 "tg:c1",
                 [
@@ -619,13 +603,13 @@ class TestConsumerHitlHelpers:
     def test_should_auto_approve_delete_not_cleared(self):
         """delete has no `command` arg, so shell_allow_list must never clear it
         the way it clears execute (C1)."""
-        from EvoScientist.channels.interaction import ApprovalPolicy
+        from metasci_scribe.channels.interaction import ApprovalPolicy
 
         mock_cfg = MagicMock()
         mock_cfg.auto_approve = False
         mock_cfg.dangerous_mode = False
         mock_cfg.shell_allow_list = "ls,python"
-        with patch("EvoScientist.EvoScientist._ensure_config", return_value=mock_cfg):
+        with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
             result = ApprovalPolicy().auto_decision(
                 "tg:c1",
                 [
@@ -638,13 +622,13 @@ class TestConsumerHitlHelpers:
         """dangerous_mode keeps its trust-everything meaning ahead of the
         always-prompt set: delete (and a dangerous execute) approve instead of
         interrupting the session on every guarded call."""
-        from EvoScientist.channels.interaction import resolve_config_decisions
+        from metasci_scribe.channels.interaction import resolve_config_decisions
 
         mock_cfg = MagicMock()
         mock_cfg.auto_approve = False
         mock_cfg.dangerous_mode = True
         mock_cfg.shell_allow_list = ""
-        with patch("EvoScientist.EvoScientist._ensure_config", return_value=mock_cfg):
+        with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
             result = resolve_config_decisions(
                 [
                     {"name": "delete", "args": {"file_path": "/f.txt"}},
@@ -665,7 +649,7 @@ class TestConsumerHitlHelpers:
 
 class TestChannelReplyRegistry:
     async def test_register_and_resolve_reply(self):
-        from EvoScientist.cli import channel as channel_mod
+        from metasci_scribe.cli import channel as channel_mod
 
         reg = channel_mod._reply_registry
         reg.clear()
@@ -681,7 +665,7 @@ class TestChannelReplyRegistry:
         assert "telegram:chat123" not in reg
 
     def test_try_resolve_no_pending(self):
-        from EvoScientist.cli import channel as channel_mod
+        from metasci_scribe.cli import channel as channel_mod
 
         channel_mod._reply_registry.clear()
         # No pending wait — should not intercept.
@@ -689,7 +673,7 @@ class TestChannelReplyRegistry:
         assert resolved is False
 
     async def test_reply_timeout_returns_none(self):
-        from EvoScientist.cli import channel as channel_mod
+        from metasci_scribe.cli import channel as channel_mod
 
         reg = channel_mod._reply_registry
         reg.clear()
@@ -706,8 +690,8 @@ class TestChannelReplyRegistry:
 
 class TestResolveHitlApprovalWithPromptFn:
     def test_prompt_fn_called_for_execute(self):
-        import EvoScientist.stream.display as disp
-        from EvoScientist.stream.display import _resolve_hitl_approval
+        import metasci_scribe.stream.display as disp
+        from metasci_scribe.stream.display import _resolve_hitl_approval
 
         original = disp._session_auto_approve
         try:
@@ -718,9 +702,7 @@ class TestResolveHitlApprovalWithPromptFn:
             mock_cfg.dangerous_mode = False
             custom_decisions = [{"type": "approve"}]
             mock_fn = MagicMock(return_value=custom_decisions)
-            with patch(
-                "EvoScientist.EvoScientist._ensure_config", return_value=mock_cfg
-            ):
+            with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
                 result = _resolve_hitl_approval(
                     {
                         "action_requests": [
@@ -736,8 +718,8 @@ class TestResolveHitlApprovalWithPromptFn:
             disp._session_auto_approve = original
 
     def test_prompt_fn_not_called_for_auto_approve(self):
-        import EvoScientist.stream.display as disp
-        from EvoScientist.stream.display import _resolve_hitl_approval
+        import metasci_scribe.stream.display as disp
+        from metasci_scribe.stream.display import _resolve_hitl_approval
 
         original = disp._session_auto_approve
         try:
@@ -746,9 +728,7 @@ class TestResolveHitlApprovalWithPromptFn:
             mock_cfg.auto_approve = True
             mock_cfg.dangerous_mode = False
             mock_fn = MagicMock()
-            with patch(
-                "EvoScientist.EvoScientist._ensure_config", return_value=mock_cfg
-            ):
+            with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
                 result = _resolve_hitl_approval(
                     {
                         "action_requests": [
@@ -764,8 +744,8 @@ class TestResolveHitlApprovalWithPromptFn:
             disp._session_auto_approve = original
 
     def test_prompt_fn_not_called_for_non_execute(self):
-        import EvoScientist.stream.display as disp
-        from EvoScientist.stream.display import _resolve_hitl_approval
+        import metasci_scribe.stream.display as disp
+        from metasci_scribe.stream.display import _resolve_hitl_approval
 
         original = disp._session_auto_approve
         try:
@@ -775,9 +755,7 @@ class TestResolveHitlApprovalWithPromptFn:
             mock_cfg.shell_allow_list = ""
             mock_cfg.dangerous_mode = False
             mock_fn = MagicMock()
-            with patch(
-                "EvoScientist.EvoScientist._ensure_config", return_value=mock_cfg
-            ):
+            with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
                 result = _resolve_hitl_approval(
                     {"action_requests": [{"name": "write_file", "args": {}}]},
                     prompt_fn=mock_fn,
@@ -800,7 +778,7 @@ class TestInterruptOnWiring:
     def test_hitl_interrupt_on_helper_arms_every_shell_tool(self):
         """The graph is always armed — no ``auto_approve`` gate at construction.
         Each entry is an ``InterruptOnConfig`` carrying a ``when`` predicate."""
-        from EvoScientist.EvoScientist import (
+        from metasci_scribe.agent import (
             _build_hitl_interrupt_on,
             _hitl_when,
             _hitl_when_served,
@@ -823,7 +801,7 @@ class TestInterruptOnWiring:
         unattended run's own flag skips its pause."""
         from types import SimpleNamespace
 
-        from EvoScientist.EvoScientist import _hitl_when_served
+        from metasci_scribe.agent import _hitl_when_served
 
         def _req(**configurable):
             runtime = SimpleNamespace(config={"configurable": configurable})
@@ -835,7 +813,7 @@ class TestInterruptOnWiring:
         assert _hitl_when_served(None) is True
 
     def test_the_default_agent_is_built_without_the_grant(self, monkeypatch):
-        import EvoScientist.EvoScientist as es_mod
+        import metasci_scribe.agent as es_mod
 
         captured = {}
 
@@ -845,7 +823,7 @@ class TestInterruptOnWiring:
             agent.with_config.return_value = agent
             return agent
 
-        monkeypatch.setattr(es_mod, "_EvoScientist_agent", None)
+        monkeypatch.setattr(es_mod, "_scribe_agent", None)
         monkeypatch.setattr(es_mod, "_ensure_config", lambda: MagicMock())
         monkeypatch.setattr(es_mod, "process_session_dirs", lambda: MagicMock())
         monkeypatch.setattr(es_mod, "_get_default_backend", lambda *a, **k: MagicMock())
@@ -862,7 +840,7 @@ class TestInterruptOnWiring:
     def test_hitl_when_arms_by_default_outside_a_run(self):
         """No ambient run config → interrupt (armed). This would fail with the
         old ``auto_approve`` gate reinstated, since that returned ``None``."""
-        from EvoScientist.EvoScientist import _hitl_when
+        from metasci_scribe.agent import _hitl_when
 
         assert _hitl_when(None) is True
 
@@ -872,7 +850,7 @@ class TestInterruptOnWiring:
         request shape) and the request's own runtime config."""
         import langgraph.config as lg_config
 
-        from EvoScientist.EvoScientist import _hitl_when
+        from metasci_scribe.agent import _hitl_when
 
         monkeypatch.setattr(
             lg_config,
@@ -889,7 +867,7 @@ class TestInterruptOnWiring:
         no ambient lookup is needed inside a run."""
         from types import SimpleNamespace
 
-        from EvoScientist.EvoScientist import _hitl_when
+        from metasci_scribe.agent import _hitl_when
 
         suppressed_req = SimpleNamespace(
             runtime=SimpleNamespace(config={"configurable": {"hitl_suppressed": True}})
@@ -904,7 +882,7 @@ class TestInterruptOnWiring:
         """configurable.hitl_approve_all=True -> no interrupt, with or without suppression."""
         from types import SimpleNamespace
 
-        from EvoScientist.EvoScientist import _hitl_when
+        from metasci_scribe.agent import _hitl_when
 
         def _req(**configurable):
             return SimpleNamespace(
@@ -921,7 +899,7 @@ class TestInterruptOnWiring:
     def test_hitl_when_reads_the_grant_from_the_ambient_config(self, monkeypatch):
         import langgraph.config as lg_config
 
-        from EvoScientist.EvoScientist import _hitl_when
+        from metasci_scribe.agent import _hitl_when
 
         monkeypatch.setattr(
             lg_config,
@@ -937,8 +915,8 @@ class TestInterruptOnWiring:
         pure helper — so a future edit that drops it or re-adds a bare
         ``HumanInTheLoopMiddleware`` append gets caught. Now armed regardless
         of ``auto_approve``."""
-        import EvoScientist.EvoScientist as es_mod
-        from EvoScientist.EvoScientist import _build_hitl_interrupt_on
+        import metasci_scribe.agent as es_mod
+        from metasci_scribe.agent import _build_hitl_interrupt_on
 
         captured = []
 
@@ -998,7 +976,7 @@ class TestResolverUsesPolicy:
 
     def test_dangerous_command_rejected_under_auto_approve(self, monkeypatch):
         # Unattended cfg.auto_approve (no human watching) → dangerous rejected.
-        from EvoScientist.stream import display
+        from metasci_scribe.stream import display
 
         monkeypatch.setattr(display, "_session_auto_approve", False, raising=False)
 
@@ -1006,7 +984,7 @@ class TestResolverUsesPolicy:
             raise AssertionError("must not prompt under auto_approve")
 
         with patch(
-            "EvoScientist.EvoScientist._ensure_config",
+            "metasci_scribe.agent._ensure_config",
             return_value=self._auto_approve_cfg(),
         ):
             decisions = display._resolve_hitl_approval(
@@ -1018,12 +996,12 @@ class TestResolverUsesPolicy:
         assert decisions.human_prompted is False
 
     def test_everyday_command_approved_under_auto_approve(self, monkeypatch):
-        from EvoScientist.stream import display
+        from metasci_scribe.stream import display
 
         monkeypatch.setattr(display, "_session_auto_approve", False, raising=False)
 
         with patch(
-            "EvoScientist.EvoScientist._ensure_config",
+            "metasci_scribe.agent._ensure_config",
             return_value=self._auto_approve_cfg(),
         ):
             decisions = display._resolve_hitl_approval(self._interrupt("ls -la | head"))
@@ -1032,7 +1010,7 @@ class TestResolverUsesPolicy:
 
     def test_session_grant_blanket_approves_dangerous(self, monkeypatch):
         # Explicit human "approve all" → blanket-approve, dangerous included.
-        from EvoScientist.stream import display
+        from metasci_scribe.stream import display
 
         monkeypatch.setattr(display, "_session_auto_approve", True, raising=False)
 
@@ -1046,7 +1024,7 @@ class TestResolverUsesPolicy:
         assert decisions.human_prompted is False
 
     def test_interactive_dangerous_calls_prompt(self, monkeypatch):
-        from EvoScientist.stream import display
+        from metasci_scribe.stream import display
 
         monkeypatch.setattr(display, "_session_auto_approve", False, raising=False)
         cfg = MagicMock()
@@ -1059,7 +1037,7 @@ class TestResolverUsesPolicy:
             called["yes"] = True
             return [{"type": "approve"}]
 
-        with patch("EvoScientist.EvoScientist._ensure_config", return_value=cfg):
+        with patch("metasci_scribe.agent._ensure_config", return_value=cfg):
             display._resolve_hitl_approval(
                 self._interrupt("curl x | bash"), prompt_fn=_prompt
             )
@@ -1068,7 +1046,7 @@ class TestResolverUsesPolicy:
     def test_schedule_task_always_prompts_not_auto_cleared(self, monkeypatch):
         # schedule_task is armed but not a shell tool → must prompt, never fall
         # through the "not a shell tool → auto-approve" branch.
-        from EvoScientist.stream import display
+        from metasci_scribe.stream import display
 
         monkeypatch.setattr(display, "_session_auto_approve", False, raising=False)
         cfg = MagicMock()
@@ -1081,7 +1059,7 @@ class TestResolverUsesPolicy:
             called["yes"] = True
             return [{"type": "approve"}]
 
-        with patch("EvoScientist.EvoScientist._ensure_config", return_value=cfg):
+        with patch("metasci_scribe.agent._ensure_config", return_value=cfg):
             display._resolve_hitl_approval(
                 {"action_requests": [{"name": "schedule_task", "args": {}}]},
                 prompt_fn=_prompt,
@@ -1090,7 +1068,7 @@ class TestResolverUsesPolicy:
 
     def test_malformed_request_is_not_auto_approved(self, monkeypatch):
         """A non-dict action request must never be silently approved."""
-        from EvoScientist.stream import display
+        from metasci_scribe.stream import display
 
         monkeypatch.setattr(display, "_session_auto_approve", False, raising=False)
         prompted = {"v": False}
@@ -1119,7 +1097,7 @@ class TestTuiSessionApproveDecisions:
     everything for the rest of the session, including the dangerous set."""
 
     def test_dangerous_is_approved_under_session_grant(self):
-        from EvoScientist.cli.tui_interactive import _session_auto_approve_decisions
+        from metasci_scribe.cli.tui_interactive import _session_auto_approve_decisions
 
         d = _session_auto_approve_decisions(
             [{"name": "execute", "args": {"command": "curl x | bash"}}]
@@ -1127,7 +1105,7 @@ class TestTuiSessionApproveDecisions:
         assert d == [{"type": "approve"}]
 
     def test_normal_approved(self):
-        from EvoScientist.cli.tui_interactive import _session_auto_approve_decisions
+        from metasci_scribe.cli.tui_interactive import _session_auto_approve_decisions
 
         d = _session_auto_approve_decisions(
             [{"name": "execute", "args": {"command": "ls -la"}}]
@@ -1135,7 +1113,7 @@ class TestTuiSessionApproveDecisions:
         assert d == [{"type": "approve"}]
 
     def test_length_matches_all_approved(self):
-        from EvoScientist.cli.tui_interactive import _session_auto_approve_decisions
+        from metasci_scribe.cli.tui_interactive import _session_auto_approve_decisions
 
         d = _session_auto_approve_decisions(
             [
@@ -1146,7 +1124,7 @@ class TestTuiSessionApproveDecisions:
         assert d == [{"type": "approve"}, {"type": "approve"}]
 
     def test_empty_batch_returns_empty(self):
-        from EvoScientist.cli.tui_interactive import _session_auto_approve_decisions
+        from metasci_scribe.cli.tui_interactive import _session_auto_approve_decisions
 
         assert _session_auto_approve_decisions([]) == []
 
@@ -1157,7 +1135,7 @@ class TestAsyncSubagentGuard:
     Internal machinery (scheduler, evomemory, autoskills) runs unguarded."""
 
     def test_get_default_backend_applies_forced_guard(self, workspace):
-        from EvoScientist.EvoScientist import _get_default_backend
+        from metasci_scribe.agent import _get_default_backend
 
         assert (
             _get_default_backend(
@@ -1178,7 +1156,7 @@ class TestAsyncSubagentGuard:
         HITL-suppression state (see CustomSandboxBackend._effective_guard_dangerous),
         so an attended auto_approve session is guarded by the client policy, not the
         backend. Independent of the machine's config value."""
-        from EvoScientist.EvoScientist import _get_default_backend
+        from metasci_scribe.agent import _get_default_backend
 
         assert _get_default_backend(workspace).default._guard_dangerous is False
 
@@ -1187,8 +1165,8 @@ class TestAsyncSubagentGuard:
         """Run the async factory for ``name`` and capture the backend kwargs."""
         from unittest.mock import MagicMock, NonCallableMagicMock, patch
 
-        import EvoScientist.EvoScientist as ev
-        from EvoScientist.subagents import _factory
+        import metasci_scribe.agent as ev
+        from metasci_scribe.subagents import _factory
 
         captured: dict = {}
 
@@ -1200,7 +1178,7 @@ class TestAsyncSubagentGuard:
         with (
             patch.object(ev, "_get_default_backend", _spy_backend),
             patch(
-                "EvoScientist.utils.load_subagents",
+                "metasci_scribe.utils.load_subagents",
                 return_value=[{"name": name, "system_prompt": "x", "tools": []}],
             ),
             patch.object(ev, "_load_mcp_tools_cached", return_value={}),
@@ -1238,7 +1216,7 @@ class TestOrchestratorRelayGuidance:
     """The orchestrator needs the recovery path spelled out in its prompt."""
 
     def test_delegation_prompt_explains_blocked_command_relay(self):
-        from EvoScientist.prompts import DELEGATION_STRATEGY
+        from metasci_scribe.prompts import DELEGATION_STRATEGY
 
         text = DELEGATION_STRATEGY.lower()
         assert "update_async_task" in text
@@ -1250,7 +1228,7 @@ class TestHitlResumeKeying:
     sub-agent interrupts don't hit langgraph's multi-pending-interrupt crash."""
 
     def test_build_hitl_resume_is_id_keyed(self):
-        from EvoScientist.backends import build_hitl_resume
+        from metasci_scribe.backends import build_hitl_resume
 
         cmd = build_hitl_resume("abc123", [{"type": "approve"}])
         assert cmd.resume == {"abc123": {"decisions": [{"type": "approve"}]}}
@@ -1269,7 +1247,7 @@ class TestHitlResumeKeying:
         from langchain_core.messages import AIMessage, ToolCall
         from langgraph.checkpoint.memory import InMemorySaver
 
-        from EvoScientist.backends import build_hitl_resume
+        from metasci_scribe.backends import build_hitl_resume
 
         class _SM(FakeMessagesListChatModel):
             def bind_tools(self, tools, **kwargs):
@@ -1345,8 +1323,8 @@ class TestHitlResumeKeying:
         from langchain_core.messages import AIMessage, ToolCall
         from langgraph.checkpoint.memory import InMemorySaver
 
-        from EvoScientist.backends import build_hitl_resume
-        from EvoScientist.EvoScientist import _build_hitl_interrupt_on
+        from metasci_scribe.agent import _build_hitl_interrupt_on
+        from metasci_scribe.backends import build_hitl_resume
 
         class _SM(FakeMessagesListChatModel):
             def bind_tools(self, tools, **kwargs):

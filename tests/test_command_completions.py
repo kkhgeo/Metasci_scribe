@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from EvoScientist.commands._completion_engine import (
+from metasci_scribe.commands._completion_engine import (
     SKILL_CATEGORY,
     compute_completions,
 )
@@ -104,8 +104,8 @@ class TestSubcommandCompletions:
 
 class TestDynamicCompletions:
     def _invalidate_mcp_cache(self):
-        from EvoScientist.commands.implementation.mcp import MCPCommand
-        from EvoScientist.commands.manager import manager
+        from metasci_scribe.commands.implementation.mcp import MCPCommand
+        from metasci_scribe.commands.manager import manager
 
         cmd = manager.get_command("/mcp")
         if isinstance(cmd, MCPCommand):
@@ -114,7 +114,7 @@ class TestDynamicCompletions:
     def test_mcp_config_server_names(self):
         self._invalidate_mcp_cache()
         fake_config = {"myserver": {}, "other": {}}
-        with patch("EvoScientist.mcp.load_mcp_config", return_value=fake_config):
+        with patch("metasci_scribe.mcp.load_mcp_config", return_value=fake_config):
             r = compute_completions("/mcp config ", 12)
         names = [c.text for c in r.candidates]
         assert "myserver" in names
@@ -123,7 +123,7 @@ class TestDynamicCompletions:
     def test_mcp_config_prefix_filters(self):
         self._invalidate_mcp_cache()
         fake_config = {"myserver": {}, "other": {}}
-        with patch("EvoScientist.mcp.load_mcp_config", return_value=fake_config):
+        with patch("metasci_scribe.mcp.load_mcp_config", return_value=fake_config):
             r = compute_completions("/mcp config my", 14)
         names = [c.text for c in r.candidates]
         assert names == ["myserver"]
@@ -131,7 +131,7 @@ class TestDynamicCompletions:
     def test_mcp_remove_shows_servers(self):
         self._invalidate_mcp_cache()
         fake_config = {"srv1": {}}
-        with patch("EvoScientist.mcp.load_mcp_config", return_value=fake_config):
+        with patch("metasci_scribe.mcp.load_mcp_config", return_value=fake_config):
             r = compute_completions("/mcp remove ", 12)
         assert [c.text for c in r.candidates] == ["srv1"]
 
@@ -145,7 +145,7 @@ class TestSkillCompletions:
 
     def _complete(self, text, workspace):
         with patch(
-            "EvoScientist.tools.skills_manager.installed_skill_index",
+            "metasci_scribe.tools.skills_manager.installed_skill_index",
             return_value=self._INDEX,
         ):
             return compute_completions(text, len(text), workspace=workspace)
@@ -184,7 +184,7 @@ class TestSkillCompletions:
             "paper-writing": "Write a paper.",
         }
         with patch(
-            "EvoScientist.tools.skills_manager.installed_skill_index",
+            "metasci_scribe.tools.skills_manager.installed_skill_index",
             return_value=index,
         ):
             r = compute_completions("/", 1, workspace=workspace)
@@ -195,7 +195,7 @@ class TestSkillCompletions:
 
     def test_unreadable_skills_directory_leaves_the_commands(self, workspace):
         with patch(
-            "EvoScientist.tools.skills_manager.installed_skill_index",
+            "metasci_scribe.tools.skills_manager.installed_skill_index",
             side_effect=PermissionError("denied"),
         ):
             r = compute_completions("/mo", 3, workspace=workspace)
@@ -211,7 +211,7 @@ class TestSkillCompletions:
 
     def _complete_skill_prefix(self, text, workspace):
         with patch(
-            "EvoScientist.tools.skills_manager.installed_skill_index",
+            "metasci_scribe.tools.skills_manager.installed_skill_index",
             return_value=self._SKILL_INDEX,
         ):
             return compute_completions(text, len(text), workspace=workspace)
@@ -230,7 +230,7 @@ class TestSkillCompletions:
     def test_exact_skill_name_keeps_the_command_order(self, workspace):
         exact = self._complete_skill_prefix("/skill", workspace).candidates
         with patch(
-            "EvoScientist.tools.skills_manager.installed_skill_index",
+            "metasci_scribe.tools.skills_manager.installed_skill_index",
             return_value={"skill-two": "Another skill."},
         ):
             other = compute_completions("/skill", 6, workspace=workspace).candidates
@@ -250,11 +250,11 @@ class TestSkillCompletions:
 class TestSkillCompletionsFromDisk:
     @pytest.fixture(autouse=True)
     def _isolated_global_skills(self, tmp_path, monkeypatch):
-        from EvoScientist.tools import skills_manager
+        from metasci_scribe.tools import skills_manager
 
         global_dir = tmp_path / "global_skills"
         global_dir.mkdir()
-        monkeypatch.setattr("EvoScientist.paths.GLOBAL_SKILLS_DIR", global_dir)
+        monkeypatch.setattr("metasci_scribe.paths.GLOBAL_SKILLS_DIR", global_dir)
         skills_manager._skill_index_cache.clear()
         yield
         skills_manager._skill_index_cache.clear()

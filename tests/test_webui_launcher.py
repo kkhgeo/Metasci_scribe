@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 
-from EvoScientist.deploy import webui as webui_mod
+from metasci_scribe.deploy import webui as webui_mod
 
 NODE = "/opt/node/bin/node"
 APP = "/data/tools/webui/0.3.1"
@@ -134,8 +134,8 @@ def _run_webui_once(
     import signal
     import threading
 
-    import EvoScientist.config as config_mod
-    from EvoScientist.langgraph_dev import manager as lgm
+    import metasci_scribe.config as config_mod
+    from metasci_scribe.langgraph_dev import manager as lgm
 
     captured: dict[str, Any] = {"printed": [], "node_env": {}, "node_args": []}
 
@@ -151,9 +151,9 @@ def _run_webui_once(
     # launcher's readiness wait is covered in test_launcher.py.
     from pathlib import Path
 
-    from EvoScientist.deploy import launcher as launcher_mod
-    from EvoScientist.setup import node as node_mod
-    from EvoScientist.setup import webui as setup_webui
+    from metasci_scribe.deploy import launcher as launcher_mod
+    from metasci_scribe.setup import node as node_mod
+    from metasci_scribe.setup import webui as setup_webui
 
     monkeypatch.setattr(
         node_mod,
@@ -340,7 +340,7 @@ def test_an_unwritable_start_lock_shows_the_failed_panel(monkeypatch, tmp_path):
 
 def test_the_spinner_says_when_it_waits_for_another_start(monkeypatch):
     """While another process holds the server start lock the spinner says so,
-    as EvoSci deploy does, then goes back to starting langgraph dev."""
+    as metasci-scribe deploy does, then goes back to starting langgraph dev."""
     from tests.fakes.langgraph_dev import LockHolder
 
     holder = LockHolder()
@@ -363,7 +363,7 @@ def test_the_spinner_says_when_it_waits_for_another_start(monkeypatch):
         holder.done()
     statuses = [p for p in captured["printed"] if p.startswith("status: ")]
     waiting = (
-        "status: [dim]Waiting for another EvoSci process to start langgraph "
+        "status: [dim]Waiting for another metasci-scribe process to start langgraph "
         "dev...[/dim]"
     )
     assert waiting in statuses
@@ -487,7 +487,7 @@ def test_teardown_registered_before_output_is_rendered(monkeypatch):
 def test_missing_python_hint_is_printed_by_the_launcher(monkeypatch):
     """The agent is built inside the server, so the launching process shows
     the hint (conftest pins the agent's python as missing)."""
-    from EvoScientist.setup import research_env
+    from metasci_scribe.setup import research_env
 
     captured = _run_webui_once(monkeypatch, _make_config())
     assert any(research_env.MISSING_PYTHON_HINT in line for line in captured["printed"])
@@ -495,7 +495,7 @@ def test_missing_python_hint_is_printed_by_the_launcher(monkeypatch):
 
 def test_warnings_with_brackets_print_as_they_are(monkeypatch):
     """Warnings can carry paths; Rich markup must not eat or choke on them."""
-    from EvoScientist import agent_shell
+    from metasci_scribe import agent_shell
 
     warning = "gives its agents /home/u/[lab]/[/x]/bin/python"
     monkeypatch.setattr(agent_shell, "server_setup_hint", lambda _s: warning)

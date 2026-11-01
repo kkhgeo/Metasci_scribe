@@ -1,4 +1,4 @@
-"""Tests for EvoScientist.proactive.gate."""
+"""Tests for metasci_scribe.proactive.gate."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from EvoScientist.proactive.gate import ProactiveGateSettings, evaluate_gate
+from metasci_scribe.proactive.gate import ProactiveGateSettings, evaluate_gate
 
 NOW = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
 SETTINGS = ProactiveGateSettings(idle_minutes=120, quiet_hours="", timezone="UTC")

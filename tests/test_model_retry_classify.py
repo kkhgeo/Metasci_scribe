@@ -15,8 +15,8 @@ import requests
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
 
-from EvoScientist.middleware.error_normalization import ErrorNormalizationMiddleware
-from EvoScientist.middleware.model_retry import (
+from metasci_scribe.middleware.error_normalization import ErrorNormalizationMiddleware
+from metasci_scribe.middleware.model_retry import (
     describe_failure,
     has_error_finish,
     is_transient,
@@ -454,7 +454,7 @@ def test_an_implicit_context_is_not_followed():
             raise PermissionError("fallback rejected")  # noqa: B904 - implicit context on purpose
     except PermissionError as exc:
         chained = exc
-    from EvoScientist.llm.errors import ProviderStreamError
+    from metasci_scribe.llm.errors import ProviderStreamError
 
     outer = ProviderStreamError(
         "openai", "openai.AuthenticationError", "rejected", status_code=None
@@ -548,7 +548,7 @@ def test_retry_after_header_locations_and_forms():
 
 
 def test_describe_failure_prefers_normalized_fields():
-    from EvoScientist.llm.errors import ProviderStreamError
+    from metasci_scribe.llm.errors import ProviderStreamError
 
     exc = ProviderStreamError(
         "openai", "openai.InternalServerError", "starting up", status_code=503

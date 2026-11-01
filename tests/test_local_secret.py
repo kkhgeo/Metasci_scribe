@@ -16,8 +16,8 @@ from types import SimpleNamespace
 import pytest
 from starlette.testclient import TestClient
 
-from EvoScientist import local_secret, paths
-from EvoScientist.langgraph_dev.http import app
+from metasci_scribe import local_secret, paths
+from metasci_scribe.langgraph_dev.http import app
 
 posix_only = pytest.mark.skipif(os.name != "posix", reason="POSIX file modes")
 
@@ -71,7 +71,7 @@ def test_ensure_local_secret_works_without_hard_links(monkeypatch):
 def test_ensure_local_secret_tightens_a_file_others_can_read(caplog):
     value = local_secret.ensure_local_secret()
     _secret_file().chmod(0o644)
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.local_secret"):
+    with caplog.at_level(logging.WARNING, logger="metasci_scribe.local_secret"):
         assert local_secret.ensure_local_secret() == value
     assert stat.S_IMODE(_secret_file().stat().st_mode) == 0o600
     assert "readable by other users" in caplog.text

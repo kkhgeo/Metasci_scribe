@@ -4,8 +4,8 @@ import importlib.util
 
 import pytest
 
-from EvoScientist.channels.base import ChannelError
-from EvoScientist.channels.slack.channel import SlackChannel, SlackConfig
+from metasci_scribe.channels.base import ChannelError
+from metasci_scribe.channels.slack.channel import SlackChannel, SlackConfig
 
 
 class TestSlackConfig:
@@ -57,7 +57,7 @@ class TestSlackChannel:
         await channel.stop()
 
     async def test_send_returns_false_without_client(self):
-        from EvoScientist.channels.base import OutboundMessage
+        from metasci_scribe.channels.base import OutboundMessage
 
         config = SlackConfig(bot_token="xoxb-test", app_token="xapp-test")
         channel = SlackChannel(config)
@@ -73,7 +73,7 @@ class TestSlackChannel:
 
 class TestSlackChannelRegistration:
     def test_slack_registered(self):
-        from EvoScientist.channels.channel_manager import available_channels
+        from metasci_scribe.channels.channel_manager import available_channels
 
         channels = available_channels()
         assert "slack" in channels
@@ -224,7 +224,7 @@ class TestSlackRetryWithRawClientResponse:
         from slack_sdk.errors import SlackApiError
         from slack_sdk.web.async_client import AsyncWebClient
 
-        from EvoScientist.channels.retry import RetryConfig
+        from metasci_scribe.channels.retry import RetryConfig
 
         for var in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
             monkeypatch.delenv(var, raising=False)

@@ -9,9 +9,9 @@ from unittest.mock import MagicMock, patch
 from blockbuster import BlockBuster
 from langchain_core.messages import SystemMessage
 
-import EvoScientist.middleware.memory as memory_module
-from EvoScientist import paths
-from EvoScientist.memory.observations import (
+import metasci_scribe.middleware.memory as memory_module
+from metasci_scribe import paths
+from metasci_scribe.memory.observations import (
     MemoryScope,
     MemorySourceType,
     MemoryType,
@@ -19,7 +19,7 @@ from EvoScientist.memory.observations import (
     list_observation_documents,
     record_observation_file,
 )
-from EvoScientist.paths import Workspace
+from metasci_scribe.paths import Workspace
 
 
 def _request():
@@ -449,7 +449,7 @@ def test_two_middlewares_share_the_observation_cache(tmp_path, monkeypatch):
     use), and the first ``modify_request`` from any middleware warms the
     process-scoped cache for the rest.
     """
-    from EvoScientist.memory.observations import store
+    from metasci_scribe.memory.observations import store
 
     memories = tmp_path / "memories"
     workspace = tmp_path / "workspace"
@@ -519,7 +519,7 @@ def test_profile_memory_over_budget_truncates_only_the_oversized_file(
     middleware.modify_request(_request())
     profile = memories / "profile"
     (profile / "SOUL.md").write_text(
-        "# EvoScientist soul\n\n## Lines not to cross\n- Confirm before deleting.\n",
+        "# Metasci Scribe soul\n\n## Lines not to cross\n- Confirm before deleting.\n",
         encoding="utf-8",
     )
     user_profile = profile / "USER_PROFILE.md"
@@ -705,7 +705,7 @@ def test_profile_memory_migrates_legacy_memory_once(tmp_path, monkeypatch):
     (memories / "MEMORY.md").write_text(
         "\n".join(
             [
-                "# EvoScientist Memory",
+                "# Metasci Scribe Memory",
                 "",
                 "## User Profile",
                 "- **Name**: Alice",
@@ -818,7 +818,7 @@ def test_profile_memory_preserves_unmapped_legacy_memory(tmp_path, monkeypatch):
     legacy_path.write_text(
         "\n".join(
             [
-                "# EvoScientist Memory",
+                "# Metasci Scribe Memory",
                 "",
                 "## User Profile",
                 "- **Name**: Alice",
@@ -850,7 +850,7 @@ def test_profile_memory_skips_legacy_unknown_placeholders(tmp_path, monkeypatch)
     (memories / "MEMORY.md").write_text(
         "\n".join(
             [
-                "# EvoScientist Memory",
+                "# Metasci Scribe Memory",
                 "",
                 "## User Profile",
                 "- **Name**: (unknown)",
@@ -922,7 +922,7 @@ def test_user_profile_template_starts_with_default_frontmatter():
     assert meta == memory_module._default_user_profile_frontmatter()
     assert meta["name"] == ""
     assert meta["intro"] == "pending"
-    assert meta["evoscientist"] == {
+    assert meta["metasci-scribe"] == {
         "sessions": 0,
         "intro_attempts": 0,
         "last_thread": "",
@@ -1143,7 +1143,7 @@ def test_bootstrap_view_fills_defaults_and_ignores_bad_types():
         {
             "name": 42,
             "intro": None,
-            "evoscientist": {"sessions": "3", "intro_attempts": True},
+            "metasci-scribe": {"sessions": "3", "intro_attempts": True},
         }
     )
     assert view == {
@@ -1167,13 +1167,13 @@ def test_apply_bootstrap_view_keeps_identity_keys_and_extra_keys():
     assert merged["field"] == ""
     assert merged["intro"] == "pending"
     assert merged["publications_checked"] == "2026-09-01"
-    assert merged["evoscientist"] == {
+    assert merged["metasci-scribe"] == {
         "sessions": 2,
         "intro_attempts": 0,
         "last_thread": "t2",
         "intro_asked_thread": "",
     }
-    assert list(merged)[:5] == ["name", "field", "homepage", "intro", "evoscientist"]
+    assert list(merged)[:5] == ["name", "field", "homepage", "intro", "metasci-scribe"]
 
 
 # ---- profile bootstrap: prompts ---------------------------------------------
@@ -1261,7 +1261,7 @@ def test_bootstrap_block_absent_by_default(tmp_path, monkeypatch):
 
     assert "<profile_bootstrap>" not in system
     meta, _ = _user_profile_meta(tmp_path / "memories")
-    assert meta["evoscientist"]["sessions"] == 0
+    assert meta["metasci-scribe"]["sessions"] == 0
 
 
 def test_bootstrap_block_absent_after_first_turn(tmp_path, monkeypatch):
@@ -1309,7 +1309,7 @@ def test_bootstrap_bookkeeping_counts_sessions_and_attempts_once_per_thread(
     meta, body = _user_profile_meta(memories)
 
     assert body == body_before
-    assert meta["evoscientist"] == {
+    assert meta["metasci-scribe"] == {
         "sessions": 1,
         "intro_attempts": 1,
         "last_thread": "t1",
@@ -1322,8 +1322,8 @@ def test_bootstrap_bookkeeping_counts_sessions_and_attempts_once_per_thread(
     meta, _ = _user_profile_meta(memories)
 
     assert "still has no `name`" in system
-    assert meta["evoscientist"]["sessions"] == 2
-    assert meta["evoscientist"]["intro_attempts"] == 2
+    assert meta["metasci-scribe"]["sessions"] == 2
+    assert meta["metasci-scribe"]["intro_attempts"] == 2
 
 
 def test_bootstrap_retries_with_exponential_backoff(tmp_path, monkeypatch):
@@ -1336,8 +1336,8 @@ def test_bootstrap_retries_with_exponential_backoff(tmp_path, monkeypatch):
 
     assert "still has no `name`" in system
     assert "first exchange with this researcher" not in system
-    assert meta["evoscientist"]["intro_attempts"] == 2
-    assert meta["evoscientist"]["intro_asked_thread"] == "t2"
+    assert meta["metasci-scribe"]["intro_attempts"] == 2
+    assert meta["metasci-scribe"]["intro_asked_thread"] == "t2"
 
     monkeypatch.setattr(memory_module, "_current_thread_id", lambda: "t3")
     assert "<profile_bootstrap>" not in _system(
@@ -1368,8 +1368,8 @@ def test_bootstrap_without_thread_id_injects_without_bookkeeping(tmp_path, monke
     meta, _ = _user_profile_meta(memories)
 
     assert "<profile_bootstrap>" in system
-    assert meta["evoscientist"]["sessions"] == 0
-    assert meta["evoscientist"]["intro_attempts"] == 0
+    assert meta["metasci-scribe"]["sessions"] == 0
+    assert meta["metasci-scribe"]["intro_attempts"] == 0
 
 
 def test_bootstrap_write_failure_still_injects(tmp_path, monkeypatch):
@@ -1423,7 +1423,7 @@ async def test_bootstrap_async_path_matches_sync(tmp_path, monkeypatch):
 
     assert "<profile_bootstrap>" in system
     assert system.index("</profile_memory>") < system.index("<profile_bootstrap>")
-    assert meta["evoscientist"]["intro_attempts"] == 1
+    assert meta["metasci-scribe"]["intro_attempts"] == 1
 
     assert "<profile_bootstrap>" not in _system(
         await middleware.amodify_request(_bootstrap_request(human_messages=2))
@@ -1501,17 +1501,17 @@ def _assembly_cfg(*, auto_mode: bool):
 
 
 def _assemble(tmp_path, monkeypatch, *, auto_mode: bool, for_async_subagent=False):
-    from EvoScientist.EvoScientist import _get_default_middleware
+    from metasci_scribe.agent import _get_default_middleware
 
     workspace = tmp_path / "workspace"
     workspace.mkdir(exist_ok=True)
     monkeypatch.setattr(paths, "MEMORIES_DIR", tmp_path / "memories")
     with (
         patch(
-            "EvoScientist.middleware.create_tool_selector_middleware", return_value=[]
+            "metasci_scribe.middleware.create_tool_selector_middleware", return_value=[]
         ),
-        patch("EvoScientist.EvoScientist._ensure_chat_model") as mock_model,
-        patch("EvoScientist.EvoScientist._ensure_config") as mock_config,
+        patch("metasci_scribe.agent._ensure_chat_model") as mock_model,
+        patch("metasci_scribe.agent._ensure_config") as mock_config,
     ):
         mock_config.return_value = _assembly_cfg(auto_mode=auto_mode)
         mock_model.return_value = MagicMock(profile={"max_input_tokens": 200_000})
@@ -1541,15 +1541,15 @@ def test_async_subagent_disables_profile_bootstrap(tmp_path, monkeypatch):
 
 
 def test_sync_subagent_site_does_not_pass_profile_bootstrap(tmp_path, monkeypatch):
-    from EvoScientist.EvoScientist import _inject_subagent_middleware
+    from metasci_scribe.agent import _inject_subagent_middleware
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     monkeypatch.setattr(paths, "MEMORIES_DIR", tmp_path / "memories")
     sub = {"name": "research"}
     with (
-        patch("EvoScientist.EvoScientist._ensure_chat_model") as mock_model,
-        patch("EvoScientist.EvoScientist._ensure_config") as mock_config,
+        patch("metasci_scribe.agent._ensure_chat_model") as mock_model,
+        patch("metasci_scribe.agent._ensure_config") as mock_config,
     ):
         mock_config.return_value = _assembly_cfg(auto_mode=False)
         mock_model.return_value = MagicMock(profile={"max_input_tokens": 200_000})
@@ -1636,7 +1636,7 @@ def test_tool_less_request_with_a_truncated_profile_is_not_told_to_read_it(
 
 
 def test_index_too_large_to_inline_mentions_search_only_with_hints():
-    from EvoScientist.memory.observations.index import (
+    from metasci_scribe.memory.observations.index import (
         _truncated_observation_index_context,
     )
 
@@ -1662,7 +1662,7 @@ def test_index_too_large_to_inline_mentions_search_only_with_hints():
 
 
 def test_linker_index_keeps_the_search_advice_when_too_large(tmp_path):
-    from EvoScientist.memory.observations import index as index_module
+    from metasci_scribe.memory.observations import index as index_module
 
     documents = [object()]
     with (

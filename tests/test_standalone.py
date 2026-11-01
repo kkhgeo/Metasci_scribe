@@ -13,10 +13,10 @@ from types import SimpleNamespace
 
 import pytest
 
-import EvoScientist.channels.standalone as standalone
-from EvoScientist.channels.base import Channel
-from EvoScientist.channels.bus.message_bus import MessageBus
-from EvoScientist.paths import Workspace
+import metasci_scribe.channels.standalone as standalone
+from metasci_scribe.channels.base import Channel
+from metasci_scribe.channels.bus.message_bus import MessageBus
+from metasci_scribe.paths import Workspace
 from tests.fakes.common import QueueFakeChannel
 
 
@@ -36,8 +36,8 @@ def _patch_manager(monkeypatch, *, gateway_backend, default_workdir):
     ``ensure_calls`` captures each ``ensure_langgraph_dev`` invocation so a test
     can assert whether (and with what workspace) the dev server was ensured.
     """
-    import EvoScientist.langgraph_dev.manager as manager_mod
-    import EvoScientist.paths as paths_mod
+    import metasci_scribe.langgraph_dev.manager as manager_mod
+    import metasci_scribe.paths as paths_mod
 
     ensure_calls: list[dict] = []
     monkeypatch.setattr(
@@ -84,7 +84,7 @@ def test_ensure_dev_server_noop_on_local_backend(monkeypatch, tmp_path):
 
 
 def test_run_standalone_dev_server_falls_back_to_cwd(monkeypatch):
-    import EvoScientist.config as config_mod
+    import metasci_scribe.config as config_mod
 
     config, ensure_calls = _patch_manager(
         monkeypatch, gateway_backend="langgraph_server", default_workdir=""
@@ -99,7 +99,7 @@ def test_run_standalone_dev_server_falls_back_to_cwd(monkeypatch):
 
 
 def test_run_standalone_uses_default_workdir(monkeypatch, tmp_path):
-    import EvoScientist.config as config_mod
+    import metasci_scribe.config as config_mod
 
     config, ensure_calls = _patch_manager(
         monkeypatch, gateway_backend="langgraph_server", default_workdir=str(tmp_path)
@@ -122,7 +122,7 @@ def test_run_standalone_uses_default_workdir(monkeypatch, tmp_path):
 
 def test_run_standalone_ensures_dev_server_only_with_agent(monkeypatch):
     """``run_standalone`` resolves config and ensures the dev server iff use_agent."""
-    import EvoScientist.config as config_mod
+    import metasci_scribe.config as config_mod
 
     monkeypatch.setattr(
         config_mod,
@@ -147,8 +147,8 @@ def test_run_standalone_ensures_dev_server_only_with_agent(monkeypatch):
 
 def _standalone_ready(monkeypatch, *, signed_in, **config_fields):
     """Stub everything ``run_standalone`` starts; return (ensure_calls, status_calls)."""
-    import EvoScientist.config as config_mod
-    from EvoScientist.llm.chatgpt_oauth import ChatGPTLogin
+    import metasci_scribe.config as config_mod
+    from metasci_scribe.llm.chatgpt_oauth import ChatGPTLogin
 
     config, ensure_calls = _patch_manager(
         monkeypatch, gateway_backend="langgraph_server", default_workdir=""
@@ -162,7 +162,7 @@ def _standalone_ready(monkeypatch, *, signed_in, **config_fields):
         return ChatGPTLogin(signed_in=signed_in)
 
     monkeypatch.setattr(config_mod, "get_effective_config", lambda: config)
-    monkeypatch.setattr("EvoScientist.llm.chatgpt_oauth.status", _status)
+    monkeypatch.setattr("metasci_scribe.llm.chatgpt_oauth.status", _status)
     monkeypatch.setattr(standalone.asyncio, "run", lambda coro: coro.close())
     return ensure_calls, status_calls
 
@@ -170,7 +170,7 @@ def _standalone_ready(monkeypatch, *, signed_in, **config_fields):
 def test_run_standalone_without_chatgpt_sign_in_exits_before_anything_starts(
     monkeypatch, caplog
 ):
-    from EvoScientist.llm.chatgpt_oauth import SIGN_IN_HINT
+    from metasci_scribe.llm.chatgpt_oauth import SIGN_IN_HINT
 
     ensure_calls, _ = _standalone_ready(
         monkeypatch, signed_in=False, openai_auth_mode="oauth"
@@ -185,11 +185,11 @@ def test_run_standalone_without_chatgpt_sign_in_exits_before_anything_starts(
 
 
 def test_run_standalone_names_an_unreadable_token_before_the_hint(monkeypatch, caplog):
-    from EvoScientist.llm.chatgpt_oauth import SIGN_IN_HINT, ChatGPTLogin
+    from metasci_scribe.llm.chatgpt_oauth import SIGN_IN_HINT, ChatGPTLogin
 
     _standalone_ready(monkeypatch, signed_in=False, openai_auth_mode="oauth")
     monkeypatch.setattr(
-        "EvoScientist.llm.chatgpt_oauth.status",
+        "metasci_scribe.llm.chatgpt_oauth.status",
         lambda: ChatGPTLogin(signed_in=False, problem="token file is unreadable"),
     )
 
@@ -230,7 +230,7 @@ def test_run_standalone_does_not_look_at_the_sign_in_in_api_key_mode(
 @pytest.fixture(autouse=True)
 def _no_health_server(monkeypatch):
     """Keep the runner off 0.0.0.0:8080; a forced exit never stops the server."""
-    from EvoScientist.channels.channel_manager import ChannelManager
+    from metasci_scribe.channels.channel_manager import ChannelManager
 
     async def _noop(self):
         return None
@@ -397,7 +397,7 @@ def test_sigint_closes_the_code_interpreter_of_an_unfinished_turn(
     monkeypatch, tmp_path
 ):
     """A turn cut off by the signal never evicts its QuickJS slot."""
-    from EvoScientist.middleware.code_interpreter import (
+    from metasci_scribe.middleware.code_interpreter import (
         create_code_interpreter_middleware,
     )
 
@@ -409,7 +409,7 @@ def test_sigint_closes_the_code_interpreter_of_an_unfinished_turn(
 
     monkeypatch.setattr(standalone, "_create_standalone_agent", _agent)
     monkeypatch.setattr(
-        "EvoScientist.gateway.create_runtime_gateways_for_config",
+        "metasci_scribe.gateway.create_runtime_gateways_for_config",
         lambda config, backend=None: SimpleNamespace(graph_gateway=None),
     )
     try:
@@ -436,7 +436,7 @@ def test_forced_exit_settles_turns_before_closing_code_interpreters(
     monkeypatch, tmp_path
 ):
     """A turn still running after a forced exit must not reopen its QuickJS slot."""
-    from EvoScientist.middleware.code_interpreter import (
+    from metasci_scribe.middleware.code_interpreter import (
         create_code_interpreter_middleware,
     )
 
@@ -466,7 +466,7 @@ def test_forced_exit_settles_turns_before_closing_code_interpreters(
     monkeypatch.setattr(standalone, "_create_standalone_agent", _agent)
     monkeypatch.setattr(standalone, "InboundConsumer", _TurnConsumer)
     monkeypatch.setattr(
-        "EvoScientist.gateway.create_runtime_gateways_for_config",
+        "metasci_scribe.gateway.create_runtime_gateways_for_config",
         lambda *a, **k: SimpleNamespace(graph_gateway=None),
     )
     try:
@@ -498,7 +498,7 @@ def test_ctrl_c_while_turns_settle_still_closes_code_interpreters(
     """A third Ctrl+C during the final cleanup must not skip the interpreter close."""
     from asyncio import unix_events
 
-    from EvoScientist.middleware.code_interpreter import (
+    from metasci_scribe.middleware.code_interpreter import (
         create_code_interpreter_middleware,
     )
 
@@ -540,7 +540,7 @@ def test_ctrl_c_while_turns_settle_still_closes_code_interpreters(
     monkeypatch.setattr(standalone, "_create_standalone_agent", _agent)
     monkeypatch.setattr(standalone, "InboundConsumer", _TurnConsumer)
     monkeypatch.setattr(
-        "EvoScientist.gateway.create_runtime_gateways_for_config",
+        "metasci_scribe.gateway.create_runtime_gateways_for_config",
         lambda *a, **k: SimpleNamespace(graph_gateway=None),
     )
     try:
@@ -567,7 +567,7 @@ def test_ctrl_c_while_turns_settle_still_closes_code_interpreters(
 @pytest.mark.timeout(30)
 def test_sigint_stops_a_shell_command_the_turn_is_running(monkeypatch, tmp_path):
     """Ctrl+C kills the shell command an in-process turn is running."""
-    from EvoScientist.backends import CustomSandboxBackend
+    from metasci_scribe.backends import CustomSandboxBackend
 
     backend = CustomSandboxBackend(root_dir=str(tmp_path / "ws"))
     result = {}
@@ -592,7 +592,7 @@ def test_sigint_stops_a_shell_command_the_turn_is_running(monkeypatch, tmp_path)
     monkeypatch.setattr(standalone, "_create_standalone_agent", _agent)
     monkeypatch.setattr(standalone, "InboundConsumer", _ToolConsumer)
     monkeypatch.setattr(
-        "EvoScientist.gateway.create_runtime_gateways_for_config",
+        "metasci_scribe.gateway.create_runtime_gateways_for_config",
         lambda *a, **k: SimpleNamespace(graph_gateway=None),
     )
 
@@ -650,7 +650,7 @@ def _oauth_config(**overrides):
 
 
 def test_ensure_ccproxy_noop_without_oauth(monkeypatch):
-    import EvoScientist.ccproxy_manager as ccproxy_mod
+    import metasci_scribe.ccproxy_manager as ccproxy_mod
 
     calls: list[object] = []
     monkeypatch.setattr(
@@ -665,7 +665,7 @@ def test_ensure_ccproxy_noop_without_oauth(monkeypatch):
 def test_ensure_ccproxy_starts_and_registers_shutdown(monkeypatch):
     import atexit as atexit_mod
 
-    import EvoScientist.ccproxy_manager as ccproxy_mod
+    import metasci_scribe.ccproxy_manager as ccproxy_mod
 
     proc = object()
     calls: list[object] = []
@@ -686,7 +686,7 @@ def test_ensure_ccproxy_reused_instance_registers_no_shutdown(monkeypatch):
     """An already-running ccproxy (proc is None) needs no atexit shutdown."""
     import atexit as atexit_mod
 
-    import EvoScientist.ccproxy_manager as ccproxy_mod
+    import metasci_scribe.ccproxy_manager as ccproxy_mod
 
     monkeypatch.setattr(ccproxy_mod, "maybe_start_ccproxy", lambda config: None)
     registered: list[tuple] = []
@@ -699,7 +699,7 @@ def test_ensure_ccproxy_reused_instance_registers_no_shutdown(monkeypatch):
 
 def test_ensure_ccproxy_noop_with_openai_oauth_only(monkeypatch):
     """OpenAI's OAuth mode signs in to ChatGPT directly: no proxy needed."""
-    import EvoScientist.ccproxy_manager as ccproxy_mod
+    import metasci_scribe.ccproxy_manager as ccproxy_mod
 
     calls: list[object] = []
     monkeypatch.setattr(
@@ -712,7 +712,7 @@ def test_ensure_ccproxy_noop_with_openai_oauth_only(monkeypatch):
 
 
 def test_ensure_ccproxy_exits_when_the_proxy_cannot_start(monkeypatch, caplog):
-    import EvoScientist.ccproxy_manager as ccproxy_mod
+    import metasci_scribe.ccproxy_manager as ccproxy_mod
 
     def _boom(config):
         raise RuntimeError("ccproxy is required for OAuth mode but not found")
@@ -728,7 +728,7 @@ def test_ensure_ccproxy_exits_when_the_proxy_cannot_start(monkeypatch, caplog):
 
 def test_run_standalone_ensures_ccproxy_only_with_agent(monkeypatch):
     """``run_standalone`` starts ccproxy (OAuth) iff an agent is configured."""
-    import EvoScientist.config as config_mod
+    import metasci_scribe.config as config_mod
 
     monkeypatch.setattr(
         config_mod,
@@ -793,8 +793,8 @@ def test_run_standalone_starts_ccproxy_after_chatgpt_sign_in(monkeypatch):
 def test_run_standalone_sets_the_proxy_env_before_the_dev_server(monkeypatch):
     """The dev server copies env from ``os.environ`` at spawn, so the proxy
     env must be force-set before the dev server starts."""
-    import EvoScientist.ccproxy_manager as ccproxy_mod
-    import EvoScientist.langgraph_dev.manager as manager_mod
+    import metasci_scribe.ccproxy_manager as ccproxy_mod
+    import metasci_scribe.langgraph_dev.manager as manager_mod
 
     _standalone_ready(
         monkeypatch, signed_in=True, anthropic_auth_mode="oauth", ccproxy_port=8000

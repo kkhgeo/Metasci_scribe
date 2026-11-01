@@ -1,4 +1,4 @@
-"""Tests for EvoScientist.middleware.active_team."""
+"""Tests for metasci_scribe.middleware.active_team."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 from langchain_core.messages import SystemMessage
 
-from EvoScientist.middleware.active_team import (
+from metasci_scribe.middleware.active_team import (
     ActiveTeamMiddleware,
     _read_active_teams,
     create_active_team_middleware,
@@ -140,7 +140,7 @@ def _mock_expert(name: str) -> MagicMock:
     return info
 
 
-@patch("EvoScientist.subagents.expert_container.list_dispatchable_experts")
+@patch("metasci_scribe.subagents.expert_container.list_dispatchable_experts")
 @patch("langgraph.config.get_config")
 def test_middleware_appends_invite_for_single_expert(
     mock_get_config, mock_dispatchable, workspace
@@ -159,7 +159,7 @@ def test_middleware_appends_invite_for_single_expert(
     mock_dispatchable.assert_called_once_with(workspace=workspace)
 
 
-@patch("EvoScientist.subagents.expert_container.list_dispatchable_experts")
+@patch("metasci_scribe.subagents.expert_container.list_dispatchable_experts")
 @patch("langgraph.config.get_config")
 def test_middleware_appends_invite_for_multiple_experts(
     mock_get_config, mock_dispatchable, workspace
@@ -184,7 +184,7 @@ def test_middleware_appends_invite_for_multiple_experts(
     assert "base system" in text
 
 
-@patch("EvoScientist.subagents.expert_container.list_dispatchable_experts")
+@patch("metasci_scribe.subagents.expert_container.list_dispatchable_experts")
 @patch("langgraph.config.get_config")
 def test_middleware_omits_invite_for_undispatchable_names(
     mock_get_config, mock_dispatchable, workspace
@@ -206,7 +206,7 @@ def test_middleware_omits_invite_for_undispatchable_names(
     assert "The user has invited" not in text
 
 
-@patch("EvoScientist.subagents.expert_container.list_dispatchable_experts")
+@patch("metasci_scribe.subagents.expert_container.list_dispatchable_experts")
 @patch("langgraph.config.get_config")
 def test_middleware_drops_invited_expert_that_is_not_dispatchable(
     mock_get_config, mock_dispatchable, workspace
@@ -248,18 +248,18 @@ def test_middleware_injects_concept_outside_runnable_context(
 
 
 @patch(
-    "EvoScientist.middleware.create_tool_selector_middleware",
+    "metasci_scribe.middleware.create_tool_selector_middleware",
     return_value=[MagicMock(), MagicMock()],
 )
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
-@patch("EvoScientist.EvoScientist._ensure_config")
+@patch("metasci_scribe.agent._ensure_chat_model")
+@patch("metasci_scribe.agent._ensure_config")
 def test_default_middleware_includes_active_team_for_main_agent(
     mock_config, mock_model, mock_tool_selector, workspace
 ):
     mock_config.return_value = _mock_config()
     mock_model.return_value = MagicMock(profile={"max_input_tokens": 200_000})
 
-    from EvoScientist.EvoScientist import _get_default_middleware
+    from metasci_scribe.agent import _get_default_middleware
 
     middleware = _get_default_middleware(workspace=workspace)
 
@@ -267,18 +267,18 @@ def test_default_middleware_includes_active_team_for_main_agent(
 
 
 @patch(
-    "EvoScientist.middleware.create_tool_selector_middleware",
+    "metasci_scribe.middleware.create_tool_selector_middleware",
     return_value=[MagicMock(), MagicMock()],
 )
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
-@patch("EvoScientist.EvoScientist._ensure_config")
+@patch("metasci_scribe.agent._ensure_chat_model")
+@patch("metasci_scribe.agent._ensure_config")
 def test_default_middleware_excludes_active_team_for_async_subagent(
     mock_config, mock_model, mock_tool_selector, workspace
 ):
     mock_config.return_value = _mock_config()
     mock_model.return_value = MagicMock(profile={"max_input_tokens": 200_000})
 
-    from EvoScientist.EvoScientist import _get_default_middleware
+    from metasci_scribe.agent import _get_default_middleware
 
     middleware = _get_default_middleware(workspace=workspace, for_async_subagent=True)
 

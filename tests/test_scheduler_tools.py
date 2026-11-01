@@ -7,7 +7,7 @@ from tests.fakes.common import TEST_WORKSPACE
 
 def _tool(name: str):
     """The scheduling tool *name* built for ``TEST_WORKSPACE``."""
-    from EvoScientist.middleware.scheduler import make_scheduling_tools
+    from metasci_scribe.middleware.scheduler import make_scheduling_tools
 
     return {t.name: t for t in make_scheduling_tools(TEST_WORKSPACE)}[name]
 
@@ -16,9 +16,9 @@ def test_schedule_task_translates_and_creates():
     schedule_task = _tool("schedule_task")
 
     with (
-        patch("EvoScientist.cron.schedule.is_available", return_value=True),
+        patch("metasci_scribe.cron.schedule.is_available", return_value=True),
         patch(
-            "EvoScientist.cron.schedule.create_schedule",
+            "metasci_scribe.cron.schedule.create_schedule",
             return_value={"cron_id": "c-7"},
         ) as mk,
     ):
@@ -38,7 +38,7 @@ def test_schedule_task_translates_and_creates():
 def test_schedule_task_reports_backend_down():
     schedule_task = _tool("schedule_task")
 
-    with patch("EvoScientist.cron.schedule.is_available", return_value=False):
+    with patch("metasci_scribe.cron.schedule.is_available", return_value=False):
         out = schedule_task.invoke(
             {"name": "x", "cron": "* * * * *", "prompt": "do x", "timezone": ""}
         )
@@ -49,9 +49,9 @@ def test_cancel_scheduled_task():
     cancel_scheduled_task = _tool("cancel_scheduled_task")
 
     with (
-        patch("EvoScientist.cron.schedule.is_available", return_value=True),
-        patch("EvoScientist.cron.schedule.list_schedules", return_value=[]),
-        patch("EvoScientist.cron.schedule.delete_schedule") as mk,
+        patch("metasci_scribe.cron.schedule.is_available", return_value=True),
+        patch("metasci_scribe.cron.schedule.list_schedules", return_value=[]),
+        patch("metasci_scribe.cron.schedule.delete_schedule") as mk,
     ):
         out = cancel_scheduled_task.invoke({"cron_id": "c-7"})
     mk.assert_not_called()
@@ -62,12 +62,12 @@ def test_cancel_scheduled_task_prefix_match():
     cancel_scheduled_task = _tool("cancel_scheduled_task")
 
     with (
-        patch("EvoScientist.cron.schedule.is_available", return_value=True),
+        patch("metasci_scribe.cron.schedule.is_available", return_value=True),
         patch(
-            "EvoScientist.cron.schedule.list_schedules",
+            "metasci_scribe.cron.schedule.list_schedules",
             return_value=[{"cron_id": "c-7-abc"}],
         ),
-        patch("EvoScientist.cron.schedule.delete_schedule") as mk,
+        patch("metasci_scribe.cron.schedule.delete_schedule") as mk,
     ):
         out = cancel_scheduled_task.invoke({"cron_id": "c-7"})
     mk.assert_called_once_with({"cron_id": "c-7-abc"}, workspace=TEST_WORKSPACE)
@@ -78,9 +78,9 @@ def test_list_scheduled_tasks_formats_rows():
     list_scheduled_tasks = _tool("list_scheduled_tasks")
 
     with (
-        patch("EvoScientist.cron.schedule.is_available", return_value=True),
+        patch("metasci_scribe.cron.schedule.is_available", return_value=True),
         patch(
-            "EvoScientist.cron.schedule.list_schedules",
+            "metasci_scribe.cron.schedule.list_schedules",
             return_value=[
                 {
                     "cron_id": "c-1-xyz",
@@ -107,9 +107,9 @@ def test_cancel_ambiguous_prefix_aborts_without_deleting():
 
     rows = [{"cron_id": "abc-111"}, {"cron_id": "abc-222"}]
     with (
-        patch("EvoScientist.cron.schedule.is_available", return_value=True),
-        patch("EvoScientist.cron.schedule.list_schedules", return_value=rows),
-        patch("EvoScientist.cron.schedule.delete_schedule") as mk,
+        patch("metasci_scribe.cron.schedule.is_available", return_value=True),
+        patch("metasci_scribe.cron.schedule.list_schedules", return_value=rows),
+        patch("metasci_scribe.cron.schedule.delete_schedule") as mk,
     ):
         out = cancel_scheduled_task.invoke({"cron_id": "abc"})
     mk.assert_not_called()
@@ -121,12 +121,12 @@ def test_cancel_empty_cron_id_refuses_without_deleting():
     cancel_scheduled_task = _tool("cancel_scheduled_task")
 
     with (
-        patch("EvoScientist.cron.schedule.is_available", return_value=True),
+        patch("metasci_scribe.cron.schedule.is_available", return_value=True),
         patch(
-            "EvoScientist.cron.schedule.list_schedules",
+            "metasci_scribe.cron.schedule.list_schedules",
             return_value=[{"cron_id": "only-one"}],
         ),
-        patch("EvoScientist.cron.schedule.delete_schedule") as mk,
+        patch("metasci_scribe.cron.schedule.delete_schedule") as mk,
     ):
         out = cancel_scheduled_task.invoke({"cron_id": "   "})
     mk.assert_not_called()
@@ -142,9 +142,9 @@ def test_schedule_task_forwards_rubric():
     schedule_task = _tool("schedule_task")
 
     with (
-        patch("EvoScientist.cron.schedule.is_available", return_value=True),
+        patch("metasci_scribe.cron.schedule.is_available", return_value=True),
         patch(
-            "EvoScientist.cron.schedule.create_schedule",
+            "metasci_scribe.cron.schedule.create_schedule",
             return_value={"cron_id": "c-8"},
         ) as mk,
     ):
@@ -164,9 +164,9 @@ def test_schedule_task_without_rubric_forwards_none():
     schedule_task = _tool("schedule_task")
 
     with (
-        patch("EvoScientist.cron.schedule.is_available", return_value=True),
+        patch("metasci_scribe.cron.schedule.is_available", return_value=True),
         patch(
-            "EvoScientist.cron.schedule.create_schedule",
+            "metasci_scribe.cron.schedule.create_schedule",
             return_value={"cron_id": "c-8"},
         ) as mk,
     ):
@@ -194,8 +194,8 @@ def test_list_scheduled_tasks_marks_graded_rows():
         },
     ]
     with (
-        patch("EvoScientist.cron.schedule.is_available", return_value=True),
-        patch("EvoScientist.cron.schedule.list_schedules", return_value=rows),
+        patch("metasci_scribe.cron.schedule.is_available", return_value=True),
+        patch("metasci_scribe.cron.schedule.list_schedules", return_value=rows),
     ):
         out = list_scheduled_tasks.invoke({})
     graded, plain = out.splitlines()

@@ -6,9 +6,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from EvoScientist import background as bg
-from EvoScientist.cli import async_notifier
-from EvoScientist.middleware.background import (
+from metasci_scribe import background as bg
+from metasci_scribe.cli import async_notifier
+from metasci_scribe.middleware.background import (
     BackgroundExecutionMiddleware,
     _make_run_in_background,
     check_process,
@@ -112,7 +112,7 @@ def test_no_job_in_tool_names(tmp_path):
 
 def test_middleware_declares_bg_processes_state_channel():
     """The middleware registers the ``bg_processes`` channel + merge reducer."""
-    from EvoScientist.middleware.background import (
+    from metasci_scribe.middleware.background import (
         BackgroundState,
         _bg_processes_reducer,
     )
@@ -132,7 +132,7 @@ def test_bg_command_builds_state_update_with_runtime():
 
     from langgraph.types import Command
 
-    from EvoScientist.middleware.background import _bg_command
+    from metasci_scribe.middleware.background import _bg_command
 
     runtime = SimpleNamespace(tool_call_id="call-1")
     rec = {"process_id": "p1", "name": "demo", "status": "running"}
@@ -145,7 +145,7 @@ def test_bg_command_builds_state_update_with_runtime():
 def test_bg_command_falls_back_only_without_records():
     """No records -> plain string (an untracked process id); a missing
     tool_call_id with records to mirror is a caller bug and raises."""
-    from EvoScientist.middleware.background import _bg_command
+    from metasci_scribe.middleware.background import _bg_command
 
     assert _bg_command("hi", [None], object()) == "hi"
     with pytest.raises(RuntimeError, match="tool_call_id"):
@@ -240,7 +240,7 @@ def test_run_suppressed_run_blocks_pipe_into_interpreter(tmp_path, monkeypatch):
     """Per-call guard: a HITL-suppressed run (unattended auto_mode) refuses
     curl|bash even when the construction floor is guard_dangerous=False, because
     the spawn interrupt is disarmed and the backend is the only gate."""
-    import EvoScientist.middleware.background as bg_mod
+    import metasci_scribe.middleware.background as bg_mod
 
     launched = {"called": False}
 
@@ -261,7 +261,7 @@ def test_run_armed_run_does_not_guard_at_backend(monkeypatch, tmp_path):
     """Per-call guard: an armed run (not suppressed) with the construction floor
     at False does NOT refuse curl|bash here — the HITL interrupt + client policy
     decide. Proves the guard is not baked from auto_approve at construction."""
-    import EvoScientist.middleware.background as bg_mod
+    import metasci_scribe.middleware.background as bg_mod
 
     monkeypatch.setattr(bg_mod, "is_hitl_suppressed", lambda: False)
     launched = {"called": False}
@@ -296,7 +296,7 @@ def test_origin_thread_id_reads_runtime_config():
     """thread_id is read from runtime.config['configurable'] (graph-injected)."""
     from types import SimpleNamespace
 
-    from EvoScientist.middleware.background import _origin_thread_id
+    from metasci_scribe.middleware.background import _origin_thread_id
 
     runtime = SimpleNamespace(config={"configurable": {"thread_id": "T-7"}})
     assert _origin_thread_id(runtime) == "T-7"
@@ -305,7 +305,7 @@ def test_origin_thread_id_reads_runtime_config():
 
 def test_checked_after_exit_dedups_notification(tmp_path):
     """Agent checking a finished process suppresses its completion notification."""
-    from EvoScientist.cli.async_notifier import (
+    from metasci_scribe.cli.async_notifier import (
         AsyncTaskNotification,
         dedup_notifications,
     )
@@ -326,7 +326,7 @@ def test_checked_after_exit_dedups_notification(tmp_path):
 
 def test_not_checked_after_exit_keeps_notification(tmp_path):
     """A finished process the agent never checked still notifies."""
-    from EvoScientist.cli.async_notifier import (
+    from metasci_scribe.cli.async_notifier import (
         AsyncTaskNotification,
         dedup_notifications,
     )
@@ -348,7 +348,7 @@ def test_not_checked_after_exit_keeps_notification(tmp_path):
 
 def test_shell_notification_renders_own_background_frame():
     """Shell notifications render under '✦ Background ✦', not 'Agent Teams'."""
-    from EvoScientist.cli.async_notifier import (
+    from metasci_scribe.cli.async_notifier import (
         AsyncTaskNotification,
         format_notification_lines,
     )
@@ -371,7 +371,7 @@ def test_shell_notification_renders_own_background_frame():
 
 def test_mixed_notifications_render_two_frames():
     """A mixed batch shows both an Agent Teams frame and a Background frame."""
-    from EvoScientist.cli.async_notifier import (
+    from metasci_scribe.cli.async_notifier import (
         AsyncTaskNotification,
         format_notification_lines,
     )
@@ -385,7 +385,7 @@ def test_mixed_notifications_render_two_frames():
 
 def test_shell_notification_hints_check_process():
     """format_batch_message points shell processes to check_process, not check_async_task."""
-    from EvoScientist.cli.async_notifier import (
+    from metasci_scribe.cli.async_notifier import (
         AsyncTaskNotification,
         format_batch_message,
     )

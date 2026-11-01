@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from EvoScientist.runtime import (
+from metasci_scribe.runtime import (
     AsyncRuntime,
     AsyncRuntimeClosedError,
     AsyncRuntimeError,
@@ -52,7 +52,7 @@ def test_start_is_idempotent_and_waits_until_loop_runs(runtime):
 
     assert runtime._thread is first_thread
     assert first_thread is not None
-    assert first_thread.name == "evosci-async-runtime"
+    assert first_thread.name == "metasci-scribe-async-runtime"
     assert first_thread.daemon
     assert first_thread.is_alive()
     assert runtime.is_running
@@ -70,7 +70,7 @@ def test_context_manager_owns_start_and_close():
 
 
 def test_start_applies_windows_policy_before_creating_loop(monkeypatch):
-    import EvoScientist.runtime as runtime_module
+    import metasci_scribe.runtime as runtime_module
 
     calls: list[str] = []
     real_new_event_loop = asyncio.new_event_loop
@@ -95,7 +95,7 @@ def test_start_applies_windows_policy_before_creating_loop(monkeypatch):
 
 
 def test_close_after_startup_timeout_does_not_leave_runtime_thread(monkeypatch):
-    import EvoScientist.runtime as runtime_module
+    import metasci_scribe.runtime as runtime_module
 
     loop_creation_started = threading.Event()
     release_loop_creation = threading.Event()
@@ -123,7 +123,7 @@ def test_close_after_startup_timeout_does_not_leave_runtime_thread(monkeypatch):
 
 
 def test_runtime_is_instance_scoped_not_a_module_singleton():
-    import EvoScientist.runtime as runtime_module
+    import metasci_scribe.runtime as runtime_module
 
     assert not hasattr(runtime_module, "runtime")
     assert AsyncRuntime() is not AsyncRuntime()
@@ -142,9 +142,9 @@ def test_submit_invokes_factory_on_owned_thread(runtime):
     handle = runtime.submit(factory)
 
     assert isinstance(handle, RuntimeHandle)
-    assert handle.result(5) == "evosci-async-runtime"
+    assert handle.result(5) == "metasci-scribe-async-runtime"
     assert handle.wait_settled(5)
-    assert factory_thread == ["evosci-async-runtime"]
+    assert factory_thread == ["metasci-scribe-async-runtime"]
 
 
 def test_submissions_share_one_owned_loop(runtime):
@@ -353,7 +353,7 @@ async def test_run_async_bridges_without_blocking_callers_loop(runtime):
     runtime_loop, thread_name = await runtime.run_async(lambda: _loop_and_thread())
 
     assert runtime_loop is not caller_loop
-    assert thread_name == "evosci-async-runtime"
+    assert thread_name == "metasci-scribe-async-runtime"
 
 
 async def _loop_and_thread() -> tuple[asyncio.AbstractEventLoop, str]:
@@ -435,7 +435,7 @@ def test_spawn_logs_unhandled_failures(runtime, caplog):
     async def fail() -> None:
         raise RuntimeError("background exploded")
 
-    with caplog.at_level(logging.ERROR, logger="EvoScientist.runtime"):
+    with caplog.at_level(logging.ERROR, logger="metasci_scribe.runtime"):
         handle = runtime.spawn(fail, name="failing-background")
         with pytest.raises(RuntimeError, match="background exploded"):
             handle.result(5)
@@ -461,7 +461,7 @@ def test_spawn_cancellation_is_not_logged(runtime, caplog):
         started.set()
         await asyncio.Event().wait()
 
-    with caplog.at_level(logging.ERROR, logger="EvoScientist.runtime"):
+    with caplog.at_level(logging.ERROR, logger="metasci_scribe.runtime"):
         handle = runtime.spawn(blocked, name="cancelled-background")
         assert started.wait(5)
         handle.cancel()
@@ -604,7 +604,7 @@ def test_close_rejects_calls_from_runtime_thread(runtime):
             runtime.close()
         return threading.current_thread().name
 
-    assert runtime.run_sync(close_from_runtime) == "evosci-async-runtime"
+    assert runtime.run_sync(close_from_runtime) == "metasci-scribe-async-runtime"
     assert runtime.run_sync(lambda: asyncio.sleep(0, result="still alive")) == (
         "still alive"
     )

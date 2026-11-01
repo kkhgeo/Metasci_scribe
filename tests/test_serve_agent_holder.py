@@ -1,7 +1,7 @@
 """Tests for the serve-mode ``on_cmd_completed`` hook factory.
 
 Regression coverage for the follow-up to issue #181 — `/model` invoked
-over a channel in ``EvoSci serve`` must swap the running agent for
+over a channel in ``metasci-scribe serve`` must swap the running agent for
 subsequent messages, not silently keep the stale one the while-loop
 captured at startup.
 """
@@ -15,22 +15,22 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 import pytest
 from langgraph.graph.state import CompiledStateGraph
 
-from EvoScientist.cli.channel import (
+from metasci_scribe.cli.channel import (
     ChannelMessage,
     _register_channel_request,
 )
-from EvoScientist.cli.commands import (
+from metasci_scribe.cli.commands import (
     ServeRuntimeState,
     _make_serve_cmd_completed_hook,
     _make_serve_handle_session_resume_cb,
     _make_serve_start_new_session_cb,
     _serve_process_message,
 )
-from EvoScientist.commands.base import ChannelRuntime
-from EvoScientist.config import EvoScientistConfig
-from EvoScientist.gateway import RuntimeGateways, ThreadStore
-from EvoScientist.paths import SessionDirs, Workspace
-from EvoScientist.runtime import AsyncRuntime
+from metasci_scribe.commands.base import ChannelRuntime
+from metasci_scribe.config import ScribeConfig
+from metasci_scribe.gateway import RuntimeGateways, ThreadStore
+from metasci_scribe.paths import SessionDirs, Workspace
+from metasci_scribe.runtime import AsyncRuntime
 from tests.fakes.common import FakeGraphGateway, FakeThreadStore
 
 
@@ -38,8 +38,8 @@ def _agent(name: str = "agent") -> CompiledStateGraph:
     return MagicMock(name=name, spec=CompiledStateGraph)
 
 
-def _config() -> EvoScientistConfig:
-    return EvoScientistConfig()
+def _config() -> ScribeConfig:
+    return ScribeConfig()
 
 
 def _thread_store(thread_id: str = "unused") -> ThreadStore:
@@ -60,7 +60,7 @@ def _runtime_state(
     agent: CompiledStateGraph | None = None,
     thread_id: str = "tid",
     dirs: SessionDirs | None = None,
-    config: EvoScientistConfig | None = None,
+    config: ScribeConfig | None = None,
     thread_store: ThreadStore | None = None,
     runtime_gateways: RuntimeGateways | None = None,
     async_runtime: AsyncRuntime | None = None,
@@ -212,11 +212,11 @@ async def test_hook_updates_workspace_dir_on_resume():
 
     with (
         patch(
-            "EvoScientist.cli.commands._sync_background_agent_server_workspace",
+            "metasci_scribe.cli.commands._sync_background_agent_server_workspace",
             new=AsyncMock(),
         ) as sync_server,
         patch(
-            "EvoScientist.cli.commands._load_agent",
+            "metasci_scribe.cli.commands._load_agent",
             return_value=reloaded_agent,
         ) as load_agent,
     ):
@@ -379,10 +379,10 @@ async def test_start_new_session_cb_returns_to_root_after_run_folder_resume():
 
     with (
         patch(
-            "EvoScientist.cli.commands._sync_background_agent_server_workspace",
+            "metasci_scribe.cli.commands._sync_background_agent_server_workspace",
             new=AsyncMock(),
         ) as sync_server,
-        patch("EvoScientist.cli.commands._load_agent", return_value=root_agent),
+        patch("metasci_scribe.cli.commands._load_agent", return_value=root_agent),
     ):
         await cb()
 
@@ -420,11 +420,11 @@ async def test_serve_resume_callback_syncs_reloads_and_adopts_workspace():
 
     with (
         patch(
-            "EvoScientist.cli.commands._sync_background_agent_server_workspace",
+            "metasci_scribe.cli.commands._sync_background_agent_server_workspace",
             new=AsyncMock(side_effect=_sync_server),
         ) as sync_server,
         patch(
-            "EvoScientist.cli.commands._load_agent",
+            "metasci_scribe.cli.commands._load_agent",
             side_effect=_load_agent,
         ) as load_agent,
     ):
@@ -463,11 +463,11 @@ async def test_serve_resume_forwards_resolved_backend_to_server_sync():
 
     with (
         patch(
-            "EvoScientist.cli.commands._sync_background_agent_server_workspace",
+            "metasci_scribe.cli.commands._sync_background_agent_server_workspace",
             new=AsyncMock(),
         ) as sync_server,
         patch(
-            "EvoScientist.cli.commands._load_agent",
+            "metasci_scribe.cli.commands._load_agent",
             side_effect=lambda **_kwargs: _agent("reloaded"),
         ),
     ):
@@ -496,11 +496,11 @@ async def test_hook_emits_resume_warning_after_resume_callback_adopts_thread():
 
     with (
         patch(
-            "EvoScientist.cli.commands._sync_background_agent_server_workspace",
+            "metasci_scribe.cli.commands._sync_background_agent_server_workspace",
             new=AsyncMock(),
         ),
         patch(
-            "EvoScientist.cli.commands._load_agent",
+            "metasci_scribe.cli.commands._load_agent",
             return_value=reloaded_agent,
         ),
     ):
@@ -523,7 +523,7 @@ async def test_hook_emits_resume_warning_after_resume_callback_adopts_thread():
 
 
 async def test_serve_resume_callback_preserves_state_when_server_refused():
-    from EvoScientist.langgraph_dev.manager import WorkspaceMismatchError
+    from metasci_scribe.langgraph_dev.manager import WorkspaceMismatchError
 
     cfg = _config()
     old_agent = _agent("old-agent")
@@ -539,11 +539,11 @@ async def test_serve_resume_callback_preserves_state_when_server_refused():
 
     with (
         patch(
-            "EvoScientist.cli.commands._sync_background_agent_server_workspace",
+            "metasci_scribe.cli.commands._sync_background_agent_server_workspace",
             new=AsyncMock(side_effect=WorkspaceMismatchError("workspace conflict")),
         ),
         patch(
-            "EvoScientist.cli.commands._load_agent",
+            "metasci_scribe.cli.commands._load_agent",
             return_value=loaded_but_not_adopted,
         ) as load_agent,
         pytest.raises(WorkspaceMismatchError, match="workspace conflict"),
@@ -579,11 +579,11 @@ async def test_serve_resume_callback_load_failure_does_not_sync_or_adopt():
 
     with (
         patch(
-            "EvoScientist.cli.commands._load_agent",
+            "metasci_scribe.cli.commands._load_agent",
             side_effect=RuntimeError("load failed"),
         ) as load_agent,
         patch(
-            "EvoScientist.cli.commands._sync_background_agent_server_workspace",
+            "metasci_scribe.cli.commands._sync_background_agent_server_workspace",
             new=AsyncMock(),
         ) as sync_server,
         pytest.raises(RuntimeError, match="load failed"),
@@ -642,7 +642,7 @@ def test_serve_channel_new_and_resume_switch_threads():
 
     with (
         AsyncRuntime(thread_name="test-serve-new-runtime") as async_runtime,
-        patch("EvoScientist.cli.tui_runtime.run_streaming") as run_streaming,
+        patch("metasci_scribe.cli.tui_runtime.run_streaming") as run_streaming,
     ):
         state.async_runtime = async_runtime
         _send("/new")
@@ -681,11 +681,11 @@ def test_serve_process_message_reports_slash_dispatch_error_without_fallback():
     with (
         AsyncRuntime(thread_name="test-serve-runtime") as async_runtime,
         patch(
-            "EvoScientist.cli.commands.dispatch_channel_slash_command",
+            "metasci_scribe.cli.commands.dispatch_channel_slash_command",
             new=AsyncMock(side_effect=RuntimeError("slash broke")),
         ),
-        patch("EvoScientist.cli.commands._set_channel_response") as mock_set_resp,
-        patch("EvoScientist.cli.tui_runtime.run_streaming") as mock_run_streaming,
+        patch("metasci_scribe.cli.commands._set_channel_response") as mock_set_resp,
+        patch("metasci_scribe.cli.tui_runtime.run_streaming") as mock_run_streaming,
     ):
         state.async_runtime = async_runtime
         _register_channel_request(msg)
@@ -734,14 +734,14 @@ def test_serve_process_message_uses_runtime_workspace_from_state():
     with (
         AsyncRuntime(thread_name="test-serve-runtime") as async_runtime,
         patch(
-            "EvoScientist.cli.commands.dispatch_channel_slash_command",
+            "metasci_scribe.cli.commands.dispatch_channel_slash_command",
             new=AsyncMock(side_effect=_fake_dispatch),
         ),
         patch(
-            "EvoScientist.cli.commands.build_metadata",
+            "metasci_scribe.cli.commands.build_metadata",
             side_effect=_fake_build_metadata,
         ),
-        patch("EvoScientist.cli.tui_runtime.run_streaming", return_value="ok"),
+        patch("metasci_scribe.cli.tui_runtime.run_streaming", return_value="ok"),
     ):
         state.async_runtime = async_runtime
         _register_channel_request(msg)
@@ -761,7 +761,7 @@ def test_serve_process_message_uses_runtime_workspace_from_state():
 def test_serve_process_message_starts_a_granted_chat_with_the_grant(granted):
     """The turn loop cannot see the chat, so the handler says whether its
     "approve all" is in force; another chat's grant must not count."""
-    from EvoScientist.cli import channel as channel_mod
+    from metasci_scribe.cli import channel as channel_mod
 
     msg = ChannelMessage(
         msg_id="msg-3",
@@ -790,12 +790,12 @@ def test_serve_process_message_starts_a_granted_chat_with_the_grant(granted):
         with (
             AsyncRuntime(thread_name="test-serve-runtime") as async_runtime,
             patch(
-                "EvoScientist.cli.commands.dispatch_channel_slash_command",
+                "metasci_scribe.cli.commands.dispatch_channel_slash_command",
                 new=AsyncMock(return_value=False),
             ),
-            patch("EvoScientist.cli.commands.build_metadata", return_value={}),
+            patch("metasci_scribe.cli.commands.build_metadata", return_value={}),
             patch(
-                "EvoScientist.cli.tui_runtime.run_streaming", return_value="ok"
+                "metasci_scribe.cli.tui_runtime.run_streaming", return_value="ok"
             ) as run_streaming,
         ):
             state.async_runtime = async_runtime
@@ -813,7 +813,7 @@ def test_serve_process_message_starts_a_granted_chat_with_the_grant(granted):
 
 def test_serve_channel_send_does_not_block_owned_runtime_loop():
     """Channel I/O is scheduled on the bus loop and settled before the reply."""
-    from EvoScientist.cli import channel as channel_mod
+    from metasci_scribe.cli import channel as channel_mod
 
     events: list[str] = []
     callback_elapsed: list[float] = []
@@ -860,15 +860,15 @@ def test_serve_channel_send_does_not_block_owned_runtime_loop():
         with (
             patch.object(channel_mod, "_bus_loop", runtime._loop),
             patch(
-                "EvoScientist.cli.commands.dispatch_channel_slash_command",
+                "metasci_scribe.cli.commands.dispatch_channel_slash_command",
                 new=AsyncMock(return_value=False),
             ),
             patch(
-                "EvoScientist.cli.tui_runtime.run_streaming",
+                "metasci_scribe.cli.tui_runtime.run_streaming",
                 side_effect=_fake_run_streaming,
             ),
             patch(
-                "EvoScientist.cli.commands._set_channel_response",
+                "metasci_scribe.cli.commands._set_channel_response",
                 side_effect=_capture_response,
             ),
         ):

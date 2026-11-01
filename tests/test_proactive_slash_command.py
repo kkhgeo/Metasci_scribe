@@ -7,9 +7,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from EvoScientist.commands.base import ChannelRuntime
-from EvoScientist.commands.implementation.proactive import ProactiveCommand
-from EvoScientist.commands.manager import manager
+from metasci_scribe.commands.base import ChannelRuntime
+from metasci_scribe.commands.implementation.proactive import ProactiveCommand
+from metasci_scribe.commands.manager import manager
 
 
 class _UI:
@@ -52,7 +52,7 @@ def test_command_is_registered():
 @pytest.mark.parametrize("with_runtime", [False, True])
 async def test_outside_serve_it_explains_and_changes_nothing(with_runtime):
     ui = await _run(_ctx(None, with_runtime=with_runtime), "on")
-    assert "run under `EvoSci serve`" in ui.text
+    assert "run under `metasci-scribe serve`" in ui.text
 
 
 async def test_unavailable_controller_reports_the_reason():

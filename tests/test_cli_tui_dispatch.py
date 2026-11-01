@@ -4,15 +4,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from EvoScientist.cli.commands import _is_fresh_interactive_session
-from EvoScientist.cli.interactive import cmd_interactive
-from EvoScientist.paths import SessionDirs, Workspace
+from metasci_scribe.cli.commands import _is_fresh_interactive_session
+from metasci_scribe.cli.interactive import cmd_interactive
+from metasci_scribe.paths import SessionDirs, Workspace
 
 
 @pytest.mark.parametrize(
     ("prompt", "thread_id", "expected"),
     [
-        (None, None, True),  # bare `EvoSci` → fresh → WebUI launches
+        (None, None, True),  # bare `metasci-scribe` → fresh → WebUI launches
         ("what is 1+1", None, False),  # `-p` one-shot → terminal (Rich CLI)
         (None, "47bcffcd", False),  # `--resume <id>` → terminal (Rich CLI)
         ("hi", "47bcffcd", False),  # both → terminal
@@ -26,22 +26,22 @@ def test_is_fresh_interactive_session(prompt, thread_id, expected):
 
 
 def _invoke_main(monkeypatch, argv):
-    """Invoke the EvoSci main callback with ui_backend=webui and all heavy setup
+    """Invoke the metasci-scribe main callback with ui_backend=webui and all heavy setup
     mocked. Returns (calls, result): calls["dispatch"] is "webui" if run_webui
     ran, or ("cli", <ui_backend>) if cmd_interactive ran."""
     from typer.testing import CliRunner
 
-    import EvoScientist.cli.commands as cmds
-    import EvoScientist.cli.interactive as interactive_mod
-    import EvoScientist.config as cfg_mod
-    import EvoScientist.deploy.webui as webui_mod
-    from EvoScientist.cli._app import app
-    from EvoScientist.config.settings import EvoScientistConfig
+    import metasci_scribe.cli.commands as cmds
+    import metasci_scribe.cli.interactive as interactive_mod
+    import metasci_scribe.config as cfg_mod
+    import metasci_scribe.deploy.webui as webui_mod
+    from metasci_scribe.cli._app import app
+    from metasci_scribe.config.settings import ScribeConfig
 
     calls: dict[str, object] = {}
 
     def _fake_config(overrides):
-        cfg = EvoScientistConfig()
+        cfg = ScribeConfig()
         calls["overrides"] = dict(overrides or {})
         # Apply every override the real merge would, so tests can assert on
         # flags (like --host) that reach the config rather than the callback.
@@ -71,14 +71,14 @@ def _invoke_main(monkeypatch, argv):
 
 
 def test_main_callback_launches_webui_for_fresh_session(monkeypatch):
-    """Bare `EvoSci` with ui_backend=webui opens the browser app."""
+    """Bare `metasci-scribe` with ui_backend=webui opens the browser app."""
     calls, result = _invoke_main(monkeypatch, [])
     assert result.exit_code == 0
     assert calls.get("dispatch") == "webui"
 
 
 def test_main_callback_resume_falls_back_to_cli(monkeypatch):
-    """`EvoSci --resume <id>` with ui_backend=webui does NOT open the browser;
+    """`metasci-scribe --resume <id>` with ui_backend=webui does NOT open the browser;
     it resumes the conversation in the Rich CLI (ui_backend forced to 'cli')."""
     calls, result = _invoke_main(monkeypatch, ["--resume", "abc123"])
     assert result.exit_code == 0
@@ -129,15 +129,15 @@ def test_no_host_flag_leaves_config_defaults(monkeypatch):
 
 def _run_ensure_backend(monkeypatch, config, *, server_up=True):
     """Drive ``_ensure_async_subagent_server`` and capture console output."""
-    import EvoScientist.cli.commands as cmds
+    import metasci_scribe.cli.commands as cmds
 
     printed: list[str] = []
     monkeypatch.setattr(
-        "EvoScientist.langgraph_dev.manager.ensure_langgraph_dev",
+        "metasci_scribe.langgraph_dev.manager.ensure_langgraph_dev",
         lambda config, *, workspace_dir, run_dir=None, backend=None: None,
     )
     monkeypatch.setattr(
-        "EvoScientist.langgraph_dev.manager.is_async_subagents_available",
+        "metasci_scribe.langgraph_dev.manager.is_async_subagents_available",
         lambda: server_up,
     )
     monkeypatch.setattr(cmds, "_reconcile_autoskill_schedule", lambda *a, **k: None)
@@ -159,7 +159,7 @@ def _run_ensure_backend(monkeypatch, config, *, server_up=True):
 @pytest.mark.parametrize("exposed", ["0.0.0.0", "192.168.1.5", "::"])
 def test_cli_mode_warns_on_public_backend_bind(monkeypatch, exposed):
     """The langgraph dev backend is shared across UI modes, so a plain
-    `EvoSci` session must warn too — otherwise `--host 0.0.0.0` (or a config
+    `metasci-scribe` session must warn too — otherwise `--host 0.0.0.0` (or a config
     file with it) puts an unauthenticated shell-capable API on the network in
     every mode with no signal."""
     config = SimpleNamespace(langgraph_dev_host=exposed)
@@ -187,7 +187,7 @@ def test_no_warning_when_backend_failed_to_start(monkeypatch):
 
 @pytest.mark.parametrize("drift", [None, "its agents keep /conda/bin/python"])
 def test_cli_prints_the_server_python_warning(monkeypatch, drift):
-    from EvoScientist.langgraph_dev import manager
+    from metasci_scribe.langgraph_dev import manager
 
     monkeypatch.setattr(manager, "AGENT_SHELL_DRIFT", drift)
     config = SimpleNamespace(langgraph_dev_host="127.0.0.1")
@@ -199,7 +199,7 @@ def test_cli_prints_the_server_python_warning(monkeypatch, drift):
 def test_background_agent_server_starts_even_when_async_subagents_disabled(
     monkeypatch, workspace
 ):
-    import EvoScientist.cli.commands as cmds
+    import metasci_scribe.cli.commands as cmds
 
     calls = []
 
@@ -207,7 +207,7 @@ def test_background_agent_server_starts_even_when_async_subagents_disabled(
         calls.append((config, workspace_dir, run_dir, backend))
 
     monkeypatch.setattr(
-        "EvoScientist.langgraph_dev.manager.ensure_langgraph_dev",
+        "metasci_scribe.langgraph_dev.manager.ensure_langgraph_dev",
         fake_ensure,
     )
     monkeypatch.setattr(cmds, "_adopt_stale_scheduled_tasks", lambda **_k: None)
@@ -223,7 +223,7 @@ def test_background_agent_server_starts_even_when_async_subagents_disabled(
 async def test_resume_workspace_sync_runs_even_when_async_subagents_disabled(
     monkeypatch, workspace
 ):
-    import EvoScientist.cli.commands as cmds
+    import metasci_scribe.cli.commands as cmds
 
     calls = []
 
@@ -231,7 +231,7 @@ async def test_resume_workspace_sync_runs_even_when_async_subagents_disabled(
         calls.append((config, workspace_dir, run_dir, backend))
 
     monkeypatch.setattr(
-        "EvoScientist.langgraph_dev.manager.ensure_langgraph_dev",
+        "metasci_scribe.langgraph_dev.manager.ensure_langgraph_dev",
         fake_ensure,
     )
     monkeypatch.setattr(cmds, "_adopt_stale_scheduled_tasks", lambda **_k: None)
@@ -261,11 +261,11 @@ def test_cmd_interactive_dispatches_to_textual(monkeypatch, workspace):
         captured_kwargs.append(kwargs)
 
     monkeypatch.setattr(
-        "EvoScientist.cli.interactive.resolve_ui_backend",
+        "metasci_scribe.cli.interactive.resolve_ui_backend",
         _fake_resolve_ui_backend,
     )
     monkeypatch.setattr(
-        "EvoScientist.cli.interactive.run_textual_interactive",
+        "metasci_scribe.cli.interactive.run_textual_interactive",
         _fake_run_textual_interactive,
     )
 

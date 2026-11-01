@@ -84,7 +84,7 @@ async def test_no_marker_when_the_session_executes_on_the_server(
 ):
     from unittest.mock import MagicMock
 
-    from EvoScientist.gateway.server import LangGraphServerGateway
+    from metasci_scribe.gateway.server import LangGraphServerGateway
 
     app = await capture_app(monkeypatch, workspace)
     async with app.run_test() as pilot:
@@ -282,8 +282,8 @@ _SATISFIED = {
 async def test_a_spinner_runs_under_the_checking_line_until_the_verdict(
     monkeypatch, workspace
 ):
-    from EvoScientist.cli.widgets.loading_widget import LoadingWidget
-    from EvoScientist.cli.widgets.system_message import SystemMessage
+    from metasci_scribe.cli.widgets.loading_widget import LoadingWidget
+    from metasci_scribe.cli.widgets.system_message import SystemMessage
 
     app = await capture_app(monkeypatch, workspace)
     async with app.run_test() as pilot:
@@ -315,7 +315,7 @@ async def test_a_spinner_runs_under_the_checking_line_until_the_verdict(
 
 
 async def test_a_check_that_opens_the_turn_keeps_one_spinner(monkeypatch, workspace):
-    from EvoScientist.cli.widgets.loading_widget import LoadingWidget
+    from metasci_scribe.cli.widgets.loading_widget import LoadingWidget
 
     app = await capture_app(monkeypatch, workspace)
     async with app.run_test() as pilot:
@@ -334,7 +334,7 @@ async def test_a_check_that_opens_the_turn_keeps_one_spinner(monkeypatch, worksp
 
 
 async def test_a_grader_retry_notice_goes_above_the_spinner(monkeypatch, workspace):
-    from EvoScientist.cli.widgets.loading_widget import LoadingWidget
+    from metasci_scribe.cli.widgets.loading_widget import LoadingWidget
 
     app = await capture_app(monkeypatch, workspace)
     async with app.run_test() as pilot:
@@ -426,7 +426,7 @@ async def test_a_command_that_builds_a_new_agent_still_has_it_adopted(
     monkeypatch, workspace
 ):
     """The other side of the rule above: ``/model`` hands a new agent back."""
-    import EvoScientist.cli.tui_interactive as tui_mod
+    import metasci_scribe.cli.tui_interactive as tui_mod
 
     app = await capture_app(monkeypatch, workspace)
     async with app.run_test() as pilot:

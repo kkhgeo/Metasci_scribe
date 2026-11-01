@@ -9,10 +9,10 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import Field
 
-from EvoScientist.config import EvoScientistConfig
-from EvoScientist.EvoScientist import create_cli_agent
-from EvoScientist.paths import Workspace
-from EvoScientist.stream.events import stream_agent_events
+from metasci_scribe.agent import create_cli_agent
+from metasci_scribe.config import ScribeConfig
+from metasci_scribe.paths import Workspace
+from metasci_scribe.stream.events import stream_agent_events
 from tests.fakes.rubric import PASS
 
 pytestmark = pytest.mark.usefixtures("no_mcp")
@@ -56,7 +56,7 @@ class _Roles(BaseChatModel):
 
 
 async def _graded_turn(tmp_path, grading, **config):
-    cfg = EvoScientistConfig(
+    cfg = ScribeConfig(
         enable_async_subagents=False, memory_workers_enabled=False, **config
     )
     agent = create_cli_agent(

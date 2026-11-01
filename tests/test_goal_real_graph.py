@@ -5,10 +5,10 @@ from __future__ import annotations
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
-from EvoScientist.config import EvoScientistConfig
-from EvoScientist.EvoScientist import create_cli_agent
-from EvoScientist.middleware.goal import new_goal_request
-from EvoScientist.paths import Workspace
+from metasci_scribe.agent import create_cli_agent
+from metasci_scribe.config import ScribeConfig
+from metasci_scribe.middleware.goal import new_goal_request
+from metasci_scribe.paths import Workspace
 from tests.fakes.goal import (
     ACCEPT,
     CANCEL,
@@ -95,7 +95,7 @@ class TestMemoryWorker:
     """With memory workers on, a run that ends in the goal hook launches none."""
 
     async def _counting_agent(self, tmp_path, monkeypatch):
-        import EvoScientist.middleware.memory_lifecycle as lifecycle
+        import metasci_scribe.middleware.memory_lifecycle as lifecycle
 
         launched: list = []
 
@@ -107,7 +107,7 @@ class TestMemoryWorker:
         model = AllRoles()
         agent = create_cli_agent(
             workspace=Workspace(tmp_path),
-            config=EvoScientistConfig(enable_async_subagents=False),
+            config=ScribeConfig(enable_async_subagents=False),
             chat_model=model,
             checkpointer=InMemorySaver(),
         )
@@ -138,7 +138,7 @@ async def test_an_agent_built_for_auto_mode_adopts_the_draft(tmp_path):
     model = AllRoles()
     agent = create_cli_agent(
         workspace=Workspace(tmp_path),
-        config=EvoScientistConfig(
+        config=ScribeConfig(
             enable_async_subagents=False, memory_workers_enabled=False, auto_mode=True
         ),
         chat_model=model,

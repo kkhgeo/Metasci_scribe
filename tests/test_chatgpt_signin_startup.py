@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import typer
 
-from EvoScientist.cli import commands
-from EvoScientist.llm.chatgpt_oauth import SIGN_IN_AGAIN, SIGN_IN_HINT, ChatGPTLogin
+from metasci_scribe.cli import commands
+from metasci_scribe.llm.chatgpt_oauth import SIGN_IN_AGAIN, SIGN_IN_HINT, ChatGPTLogin
 
 
 def _config(mode="oauth"):
@@ -19,7 +19,7 @@ def _printed(mock_console) -> str:
 
 
 def test_api_key_mode_checks_nothing():
-    with patch("EvoScientist.llm.chatgpt_oauth.status") as mock_status:
+    with patch("metasci_scribe.llm.chatgpt_oauth.status") as mock_status:
         commands._require_chatgpt_sign_in(_config("api_key"), interactive=True)
 
     mock_status.assert_not_called()
@@ -28,7 +28,7 @@ def test_api_key_mode_checks_nothing():
 def test_signed_in_passes_silently():
     with (
         patch(
-            "EvoScientist.llm.chatgpt_oauth.status",
+            "metasci_scribe.llm.chatgpt_oauth.status",
             return_value=ChatGPTLogin(signed_in=True, plan="plus"),
         ),
         patch.object(commands, "console") as mock_console,
@@ -41,7 +41,7 @@ def test_signed_in_passes_silently():
 def test_headless_exits_with_the_hint():
     with (
         patch(
-            "EvoScientist.llm.chatgpt_oauth.status",
+            "metasci_scribe.llm.chatgpt_oauth.status",
             return_value=ChatGPTLogin(signed_in=False),
         ),
         patch("questionary.confirm") as mock_confirm,
@@ -60,12 +60,13 @@ def test_interactive_login_continues_startup():
     question.ask.return_value = True
     with (
         patch(
-            "EvoScientist.llm.chatgpt_oauth.status",
+            "metasci_scribe.llm.chatgpt_oauth.status",
             return_value=ChatGPTLogin(signed_in=False),
         ),
         patch("questionary.confirm", return_value=question) as mock_confirm,
         patch(
-            "EvoScientist.config.onboard.helpers._run_chatgpt_login", return_value=True
+            "metasci_scribe.config.onboard.helpers._run_chatgpt_login",
+            return_value=True,
         ) as mock_login,
     ):
         commands._require_chatgpt_sign_in(_config(), interactive=True)
@@ -82,12 +83,12 @@ def test_interactive_refusal_or_failure_says_how_to_retry(answer, login_ok):
     question.ask.return_value = answer
     with (
         patch(
-            "EvoScientist.llm.chatgpt_oauth.status",
+            "metasci_scribe.llm.chatgpt_oauth.status",
             return_value=ChatGPTLogin(signed_in=False),
         ),
         patch("questionary.confirm", return_value=question),
         patch(
-            "EvoScientist.config.onboard.helpers._run_chatgpt_login",
+            "metasci_scribe.config.onboard.helpers._run_chatgpt_login",
             return_value=login_ok,
         ) as mock_login,
         patch.object(commands, "console") as mock_console,
@@ -97,14 +98,14 @@ def test_interactive_refusal_or_failure_says_how_to_retry(answer, login_ok):
 
     assert exc_info.value.exit_code == 1
     assert SIGN_IN_AGAIN in _printed(mock_console)
-    assert "Start EvoSci in a terminal" not in _printed(mock_console)
+    assert "Start metasci-scribe in a terminal" not in _printed(mock_console)
     assert mock_login.called is (answer is True)
 
 
 def test_unreadable_token_is_named_before_the_hint():
     with (
         patch(
-            "EvoScientist.llm.chatgpt_oauth.status",
+            "metasci_scribe.llm.chatgpt_oauth.status",
             return_value=ChatGPTLogin(
                 signed_in=False, problem="token file is unreadable"
             ),
@@ -153,10 +154,10 @@ class _Checked(Exception):
 def _run_until_the_check(monkeypatch, argv):
     from typer.testing import CliRunner
 
-    import EvoScientist.config as config_module
-    from EvoScientist.cli._app import app
-    from EvoScientist.config import EvoScientistConfig
-    from EvoScientist.stream.console import console
+    import metasci_scribe.config as config_module
+    from metasci_scribe.cli._app import app
+    from metasci_scribe.config import ScribeConfig
+    from metasci_scribe.stream.console import console
 
     seen = []
 
@@ -167,7 +168,7 @@ def _run_until_the_check(monkeypatch, argv):
     monkeypatch.setattr(
         config_module,
         "get_effective_config",
-        lambda overrides=None: EvoScientistConfig(openai_auth_mode="oauth"),
+        lambda overrides=None: ScribeConfig(openai_auth_mode="oauth"),
     )
     monkeypatch.setattr(config_module, "apply_config_to_env", lambda config: None)
     monkeypatch.setattr(commands, "_require_chatgpt_sign_in", _check)
@@ -233,12 +234,12 @@ def test_auth_mode_flag_applies_oauth_only_to_providers_in_use(
 
     from typer.testing import CliRunner
 
-    import EvoScientist.config as config_module
-    from EvoScientist.cli._app import app
-    from EvoScientist.config import EvoScientistConfig
-    from EvoScientist.stream.console import console
+    import metasci_scribe.config as config_module
+    from metasci_scribe.cli._app import app
+    from metasci_scribe.config import ScribeConfig
+    from metasci_scribe.stream.console import console
 
-    base = EvoScientistConfig(**stored)
+    base = ScribeConfig(**stored)
     seen = []
 
     def _check(config, *, interactive):

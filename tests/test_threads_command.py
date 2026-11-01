@@ -6,12 +6,12 @@ from unittest.mock import MagicMock
 import pytest
 from rich.table import Table
 
-from EvoScientist.paths import SessionDirs
+from metasci_scribe.paths import SessionDirs
 from tests.fakes.common import TEST_WORKSPACE, FakeGraphGateway, FakeThreadStore
 
 
 def _ctx(**overrides):
-    from EvoScientist.commands.base import CommandContext
+    from metasci_scribe.commands.base import CommandContext
 
     ui = MagicMock()
     ui.supports_interactive = overrides.pop("supports_interactive", True)
@@ -27,7 +27,7 @@ def _ctx(**overrides):
 
 class TestThreadsCommand:
     async def test_empty_list_prints_message(self):
-        from EvoScientist.commands.implementation.session import ThreadsCommand
+        from metasci_scribe.commands.implementation.session import ThreadsCommand
 
         ctx, ui = _ctx()
         await ThreadsCommand().execute(ctx, [])
@@ -35,7 +35,7 @@ class TestThreadsCommand:
         assert "No saved sessions" in ui.append_system.call_args.args[0]
 
     async def test_renders_table_with_current_marker(self):
-        from EvoScientist.commands.implementation.session import ThreadsCommand
+        from metasci_scribe.commands.implementation.session import ThreadsCommand
 
         ctx, ui = _ctx(thread_id="current")
         threads = [
@@ -68,7 +68,7 @@ class TestThreadsCommand:
 
     async def test_footer_hint_suppressed_in_channel_mode(self):
         """Channels don't get the footer — keeps outbound text short."""
-        from EvoScientist.commands.implementation.session import ThreadsCommand
+        from metasci_scribe.commands.implementation.session import ThreadsCommand
 
         ctx, ui = _ctx(supports_interactive=False)
         threads = [
@@ -87,7 +87,7 @@ class TestThreadsCommand:
 
     async def test_channel_mode_drops_model_column(self):
         """Non-interactive (channel) UIs get a narrower table."""
-        from EvoScientist.commands.implementation.session import ThreadsCommand
+        from metasci_scribe.commands.implementation.session import ThreadsCommand
 
         ctx, ui = _ctx(supports_interactive=False)
         threads = [
@@ -129,7 +129,7 @@ class TestThreadsCommand:
         ]
 
     async def test_workspace_column_shows_the_work_folder(self, tmp_path):
-        from EvoScientist.commands.implementation.session import ThreadsCommand
+        from metasci_scribe.commands.implementation.session import ThreadsCommand
 
         ctx, ui = _ctx()
         store = FakeThreadStore(threads=self._workspace_threads(tmp_path))
@@ -144,7 +144,7 @@ class TestThreadsCommand:
         ]
 
     async def test_channel_mode_shows_only_the_folder_name(self, tmp_path):
-        from EvoScientist.commands.implementation.session import ThreadsCommand
+        from metasci_scribe.commands.implementation.session import ThreadsCommand
 
         ctx, ui = _ctx(supports_interactive=False)
         store = FakeThreadStore(threads=self._workspace_threads(tmp_path))
@@ -159,8 +159,8 @@ class TestThreadsCommand:
     ):
         """A root folder (``/`` in a container) has no name, so the label
         falls back to the root itself instead of ``.`` or an empty cell."""
-        from EvoScientist.commands.implementation.session import ThreadsCommand
-        from EvoScientist.paths import Workspace
+        from metasci_scribe.commands.implementation.session import ThreadsCommand
+        from metasci_scribe.paths import Workspace
 
         root = Workspace(tmp_path.anchor).root.as_posix()
         run = PurePath(root, "runs", "20261001_215846").as_posix()
@@ -180,7 +180,7 @@ class TestThreadsCommand:
     async def test_id_stays_whole_next_to_a_long_workspace(self, tmp_path):
         from rich.console import Console
 
-        from EvoScientist.commands.implementation.session import ThreadsCommand
+        from metasci_scribe.commands.implementation.session import ThreadsCommand
 
         project = (tmp_path / "cifar-resnet-ablations").as_posix()
         threads = [

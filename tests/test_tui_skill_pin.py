@@ -48,7 +48,7 @@ def _skill_labels(app) -> list[str]:
 
 
 def _user_lines(app) -> list[str]:
-    from EvoScientist.cli.widgets.user_message import UserMessage
+    from metasci_scribe.cli.widgets.user_message import UserMessage
 
     return [
         str(w.render())

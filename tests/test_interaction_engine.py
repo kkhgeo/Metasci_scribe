@@ -12,8 +12,8 @@ import asyncio
 
 import pytest
 
-from EvoScientist.channels import interaction as I
-from EvoScientist.channels.capabilities import ChannelCapabilities
+from metasci_scribe.channels import interaction as I
+from metasci_scribe.channels.capabilities import ChannelCapabilities
 
 # ═══════════════════════════════════════════════════════════════════════
 # Scripted fake IO
@@ -447,12 +447,12 @@ class TestConsumerUnrecognizedRefeed:
     async def test_unrecognized_reply_rejects_and_refeeds(self, monkeypatch, tmp_path):
         from unittest.mock import MagicMock
 
-        from EvoScientist.channels.bus.events import (
+        from metasci_scribe.channels.bus.events import (
             InboundMessage as BusInbound,
         )
-        from EvoScientist.channels.bus.message_bus import MessageBus
-        from EvoScientist.channels.channel_manager import ChannelManager
-        from EvoScientist.channels.consumer import InboundConsumer
+        from metasci_scribe.channels.bus.message_bus import MessageBus
+        from metasci_scribe.channels.channel_manager import ChannelManager
+        from metasci_scribe.channels.consumer import InboundConsumer
         from tests.fakes.common import FakeGraphGateway, StubChannel
 
         # Force the manual-prompt path (no config auto-approve).
@@ -576,8 +576,8 @@ class TestReplyInterceptionSkipsThreadCreation:
         the sender-session LRU."""
         from unittest.mock import AsyncMock, MagicMock
 
-        from EvoScientist.channels.bus.events import InboundMessage as BusInbound
-        from EvoScientist.channels.consumer import InboundConsumer
+        from metasci_scribe.channels.bus.events import InboundMessage as BusInbound
+        from metasci_scribe.channels.consumer import InboundConsumer
 
         gateway = MagicMock()
         gateway.create_thread = AsyncMock(return_value="t-should-not-exist")

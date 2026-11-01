@@ -1,4 +1,4 @@
-"""Tests for EvoScientist.cli.widgets.thread_selector module."""
+"""Tests for metasci_scribe.cli.widgets.thread_selector module."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from unittest import mock
 
 from rich.text import Text
 
-from EvoScientist.cli.widgets.thread_selector import (
+from metasci_scribe.cli.widgets.thread_selector import (
     ThreadPickerWidget,
     build_row_text,
 )

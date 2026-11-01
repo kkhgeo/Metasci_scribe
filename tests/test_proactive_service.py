@@ -1,4 +1,4 @@
-"""Tests for EvoScientist.proactive.service."""
+"""Tests for metasci_scribe.proactive.service."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ from datetime import UTC, datetime, timedelta
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-from EvoScientist.proactive.commit import build_proactive_tag
-from EvoScientist.proactive.gate import ProactiveGateSettings
-from EvoScientist.proactive.service import PROACTIVE_TRIGGER, decide_proactive_push
+from metasci_scribe.proactive.commit import build_proactive_tag
+from metasci_scribe.proactive.gate import ProactiveGateSettings
+from metasci_scribe.proactive.service import PROACTIVE_TRIGGER, decide_proactive_push
 
 NOW = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
 MESSAGES = [HumanMessage(content="q", id="m1"), AIMessage(content="a", id="m2")]

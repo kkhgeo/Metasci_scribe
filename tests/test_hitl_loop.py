@@ -21,13 +21,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-import EvoScientist.channels.consumer as consumer_mod
-from EvoScientist.channels.bus.events import InboundMessage as BusInbound
-from EvoScientist.channels.bus.message_bus import MessageBus
-from EvoScientist.channels.channel_manager import ChannelManager
-from EvoScientist.channels.consumer import InboundConsumer
-from EvoScientist.middleware import events as mw_events
-from EvoScientist.stream import display as display_mod
+import metasci_scribe.channels.consumer as consumer_mod
+from metasci_scribe.channels.bus.events import InboundMessage as BusInbound
+from metasci_scribe.channels.bus.message_bus import MessageBus
+from metasci_scribe.channels.channel_manager import ChannelManager
+from metasci_scribe.channels.consumer import InboundConsumer
+from metasci_scribe.middleware import events as mw_events
+from metasci_scribe.stream import display as display_mod
 from tests.fakes.common import FakeCheckpointAgent, FakeGraphGateway
 from tests.fakes.common import StubChannel as _StubChannel
 from tests.fakes.common import attended_config as _attended_config
@@ -58,7 +58,7 @@ class TestRichCliHitlRoundBudget:
         gateway = FakeGraphGateway(stream=_fake_stream)
         state = display_mod.StreamState()
 
-        with caplog.at_level(logging.WARNING, logger="EvoScientist.stream.display"):
+        with caplog.at_level(logging.WARNING, logger="metasci_scribe.stream.display"):
             result = display_mod._run_streaming(
                 agent=MagicMock(),
                 message="hello",
@@ -85,11 +85,11 @@ class TestRichCliHitlRoundBudget:
         from langchain_core.messages import AIMessage
         from langgraph.types import Command  # type: ignore[import-untyped]
 
-        from EvoScientist.backends import HITL_ROUND_LIMIT_REJECT_MESSAGE
+        from metasci_scribe.backends import HITL_ROUND_LIMIT_REJECT_MESSAGE
 
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config",
+            "metasci_scribe.agent._ensure_config",
             lambda: SimpleNamespace(
                 auto_approve=False, dangerous_mode=False, shell_allow_list=""
             ),
@@ -138,7 +138,7 @@ class TestRichCliHitlRoundBudget:
         gateway = FakeGraphGateway(stream=_fake_stream, checkpoint=agent)
         state = display_mod.StreamState()
 
-        with caplog.at_level(logging.WARNING, logger="EvoScientist.stream.display"):
+        with caplog.at_level(logging.WARNING, logger="metasci_scribe.stream.display"):
             result = display_mod._run_streaming(
                 agent=agent,
                 message="hello",
@@ -220,7 +220,7 @@ class TestRichCliHitlRoundBudget:
         resume, which would otherwise run another model step (issue #469)."""
         from langgraph.types import Command  # type: ignore[import-untyped]
 
-        import EvoScientist.channels.hitl_budget as budget_mod
+        import metasci_scribe.channels.hitl_budget as budget_mod
 
         monkeypatch.setattr(budget_mod, "MAX_HITL_TOTAL_ROUNDS", 2)
         monkeypatch.setattr(display_mod, "_session_auto_approve", True)
@@ -241,7 +241,7 @@ class TestRichCliHitlRoundBudget:
             lambda *args, **_kwargs: printed.append(str(args[0]) if args else ""),
         )
 
-        with caplog.at_level(logging.WARNING, logger="EvoScientist.stream.display"):
+        with caplog.at_level(logging.WARNING, logger="metasci_scribe.stream.display"):
             display_mod._run_streaming(
                 agent=agent,
                 message="hello",
@@ -260,12 +260,12 @@ class TestRichCliHitlRoundBudget:
 
     def test_session_grant_after_human_budget_still_auto_resolves(self, monkeypatch):
         """The human budget is checked only when a prompt would be shown."""
-        import EvoScientist.channels.hitl_budget as budget_mod
+        import metasci_scribe.channels.hitl_budget as budget_mod
 
         monkeypatch.setattr(budget_mod, "MAX_HUMAN_HITL_ROUNDS", 1)
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config",
+            "metasci_scribe.agent._ensure_config",
             lambda: SimpleNamespace(
                 auto_approve=False, dangerous_mode=False, shell_allow_list=""
             ),
@@ -306,12 +306,12 @@ class TestRichCliHitlRoundBudget:
         assert stream_calls == 4
 
     def test_close_failure_keeps_the_partial_response(self, monkeypatch, caplog):
-        import EvoScientist.channels.hitl_budget as budget_mod
+        import metasci_scribe.channels.hitl_budget as budget_mod
 
         monkeypatch.setattr(budget_mod, "MAX_HUMAN_HITL_ROUNDS", 0)
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config",
+            "metasci_scribe.agent._ensure_config",
             lambda: SimpleNamespace(
                 auto_approve=False, dangerous_mode=False, shell_allow_list=""
             ),
@@ -325,7 +325,7 @@ class TestRichCliHitlRoundBudget:
         gateway = FakeGraphGateway(stream=_fake_stream, checkpoint=agent)
         monkeypatch.setattr(display_mod.console, "print", lambda *_a, **_k: None)
 
-        with caplog.at_level(logging.WARNING, logger="EvoScientist"):
+        with caplog.at_level(logging.WARNING, logger="metasci-scribe"):
             result = display_mod._run_streaming(
                 agent=agent,
                 message="hello",
@@ -350,7 +350,7 @@ class TestRichCliHitlRoundBudget:
     def test_channel_session_grant_resumes_past_50_rounds(self, monkeypatch):
         from langgraph.types import Command  # type: ignore[import-untyped]
 
-        from EvoScientist.cli import channel as channel_mod
+        from metasci_scribe.cli import channel as channel_mod
 
         msg = channel_mod.ChannelMessage(
             msg_id="m1", content="run", sender="u", channel_type="telegram"
@@ -390,12 +390,12 @@ class TestRichCliHitlRoundBudget:
         assert result == "All sixty rounds done"
 
     def test_channel_budget_stop_reaches_the_channel_reply(self, monkeypatch):
-        from EvoScientist.channels.hitl_budget import HITL_BUDGET_STOP_NOTICE
-        from EvoScientist.channels.interaction import ApprovalOutcome
+        from metasci_scribe.channels.hitl_budget import HITL_BUDGET_STOP_NOTICE
+        from metasci_scribe.channels.interaction import ApprovalOutcome
 
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config",
+            "metasci_scribe.agent._ensure_config",
             lambda: SimpleNamespace(
                 auto_approve=False, dangerous_mode=False, shell_allow_list=""
             ),
@@ -504,7 +504,7 @@ class TestRichCliSessionGrantReachesTheGraph:
         assert self._extras(gateway) == [None, None, GRANT, GRANT]
 
     def test_an_allow_list_answer_is_not_keyed(self, monkeypatch):
-        import EvoScientist.channels.interaction as interaction_mod
+        import metasci_scribe.channels.interaction as interaction_mod
 
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         monkeypatch.setattr(
@@ -520,7 +520,7 @@ class TestRichCliSessionGrantReachesTheGraph:
     def test_a_bridge_answer_is_keyed_only_when_the_chat_is_granted(
         self, monkeypatch, granted
     ):
-        from EvoScientist.channels.interaction import ApprovalOutcome
+        from metasci_scribe.channels.interaction import ApprovalOutcome
 
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         _attended_config(monkeypatch)
@@ -554,7 +554,7 @@ class TestRichCliSessionGrantReachesTheGraph:
     def test_a_starting_grant_is_dropped_from_a_call_that_must_not_carry_it(
         self, monkeypatch
     ):
-        from EvoScientist.channels.interaction import ApprovalOutcome
+        from metasci_scribe.channels.interaction import ApprovalOutcome
 
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         _attended_config(monkeypatch)
@@ -655,7 +655,7 @@ class TestRichCliSessionGrantReachesTheGraph:
         self, monkeypatch
     ):
         """A chat grant seen during the turn holds for the rest of it."""
-        from EvoScientist.channels.interaction import ApprovalOutcome
+        from metasci_scribe.channels.interaction import ApprovalOutcome
 
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         _attended_config(monkeypatch)
@@ -677,7 +677,7 @@ class TestRichCliSessionGrantReachesTheGraph:
         """The reply that grants is a human answer (unkeyed), but the chat's
         grant is in force afterwards: the answer to a question that comes next
         carries it, so no approval pauses after the question."""
-        from EvoScientist.channels.interaction import ApprovalOutcome
+        from metasci_scribe.channels.interaction import ApprovalOutcome
 
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         _attended_config(monkeypatch)
@@ -712,7 +712,7 @@ class TestRichCliSessionGrantReachesTheGraph:
     ):
         """The same for a channel answer with no grant behind it, whether the
         user approved once or the bridge answered on its own."""
-        from EvoScientist.channels.interaction import ApprovalOutcome
+        from metasci_scribe.channels.interaction import ApprovalOutcome
 
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         _attended_config(monkeypatch)
@@ -730,7 +730,7 @@ class TestRichCliSessionGrantReachesTheGraph:
         self, monkeypatch
     ):
         """An allow-list answer is not a grant either."""
-        import EvoScientist.channels.interaction as interaction_mod
+        import metasci_scribe.channels.interaction as interaction_mod
 
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         monkeypatch.setattr(
@@ -746,7 +746,7 @@ class TestRichCliSessionGrantReachesTheGraph:
         """A channel-origin turn whose chat is granted (the caller says so), yet
         this batch is answered by the config rules before the bridge is asked:
         not the grant's answer, so the resume goes out unkeyed."""
-        import EvoScientist.channels.interaction as interaction_mod
+        import metasci_scribe.channels.interaction as interaction_mod
 
         def _bridge_must_not_be_asked(_reqs, _exhausted):
             raise AssertionError("the config rule answers first")
@@ -767,7 +767,7 @@ class TestRichCliSessionGrantReachesTheGraph:
 
     def test_a_chats_grant_does_not_key_a_local_turn(self, monkeypatch):
         """Only a channel-origin call site passes a chat's grant in."""
-        from EvoScientist.cli import channel as channel_mod
+        from metasci_scribe.cli import channel as channel_mod
 
         policy = channel_mod.ApprovalPolicy()
         policy.grant_session("telegram:c1")
@@ -874,7 +874,7 @@ class TestConsumerSessionGrantReachesTheGraph:
         assert self._keyed(gateway) == [True, True, True]
 
     async def test_the_reply_that_grants_is_sent_unkeyed(self, tmp_path, monkeypatch):
-        import EvoScientist.channels.interaction as interaction_mod
+        import metasci_scribe.channels.interaction as interaction_mod
 
         monkeypatch.setattr(
             interaction_mod, "config_policy_snapshot", lambda reqs: (None, {})
@@ -901,7 +901,7 @@ class TestConsumerSessionGrantReachesTheGraph:
     async def test_another_chats_grant_does_not_key_this_chat(
         self, tmp_path, monkeypatch
     ):
-        import EvoScientist.channels.interaction as interaction_mod
+        import metasci_scribe.channels.interaction as interaction_mod
 
         monkeypatch.setattr(
             interaction_mod,
@@ -921,7 +921,7 @@ class TestConsumerSessionGrantReachesTheGraph:
         assert self._keyed(gateway) == [False, False]
 
     async def test_a_declined_reply_sends_no_further_call(self, tmp_path, monkeypatch):
-        import EvoScientist.channels.interaction as interaction_mod
+        import metasci_scribe.channels.interaction as interaction_mod
 
         monkeypatch.setattr(
             interaction_mod, "config_policy_snapshot", lambda reqs: (None, {})
@@ -942,7 +942,7 @@ class TestConsumerSessionGrantReachesTheGraph:
         self, tmp_path, monkeypatch
     ):
         """Belt and braces: the key is sent only when every decision approves."""
-        from EvoScientist.channels.interaction import ApprovalOutcome
+        from metasci_scribe.channels.interaction import ApprovalOutcome
 
         async def _resolve(*_args, **_kwargs):
             return ApprovalOutcome(
@@ -999,7 +999,7 @@ class TestConsumerSessionGrantReachesTheGraph:
         self, tmp_path, monkeypatch
     ):
         """Approving once grants nothing, so the question's answer is unkeyed."""
-        from EvoScientist.channels.interaction import ApprovalOutcome
+        from metasci_scribe.channels.interaction import ApprovalOutcome
 
         calls = 0
 
@@ -1042,7 +1042,7 @@ class TestConsumerSessionGrantReachesTheGraph:
     async def test_an_approval_that_times_out_sends_no_further_call(
         self, tmp_path, monkeypatch
     ):
-        import EvoScientist.channels.interaction as interaction_mod
+        import metasci_scribe.channels.interaction as interaction_mod
 
         monkeypatch.setattr(
             interaction_mod, "config_policy_snapshot", lambda reqs: (None, {})
@@ -1061,7 +1061,7 @@ class TestConsumerSessionGrantReachesTheGraph:
 
     async def test_a_refed_reply_starts_an_unkeyed_turn(self, tmp_path, monkeypatch):
         """An unrecognized reply declines the approval and becomes a new turn."""
-        import EvoScientist.channels.interaction as interaction_mod
+        import metasci_scribe.channels.interaction as interaction_mod
 
         monkeypatch.setattr(
             interaction_mod, "config_policy_snapshot", lambda reqs: (None, {})
@@ -1159,12 +1159,12 @@ class TestConsumerSessionGrantReachesTheGraph:
 
 
 def test_resolver_reports_the_grant_only_on_its_fast_path(monkeypatch):
-    import EvoScientist.channels.interaction as interaction_mod
-    from EvoScientist.channels.interaction import ApprovalOutcome
+    import metasci_scribe.channels.interaction as interaction_mod
+    from metasci_scribe.channels.interaction import ApprovalOutcome
 
     pending = _interrupt_event(1)
     monkeypatch.setattr(
-        "EvoScientist.EvoScientist._ensure_config",
+        "metasci_scribe.agent._ensure_config",
         lambda: SimpleNamespace(
             auto_approve=False, dangerous_mode=False, shell_allow_list=""
         ),
@@ -1201,7 +1201,7 @@ def test_resolver_reports_the_grant_only_on_its_fast_path(monkeypatch):
 
 
 def test_hitl_budget_stop_ignores_human_cap_for_auto_rounds():
-    import EvoScientist.channels.hitl_budget as budget_mod
+    import metasci_scribe.channels.hitl_budget as budget_mod
 
     assert not budget_mod.hitl_budget_stop(
         human_rounds=50, total_rounds=51, needs_human=False
@@ -1379,7 +1379,7 @@ class TestConsumerHitlRoundBudget:
         message (issue #469)."""
         from langgraph.types import Command  # type: ignore[import-untyped]
 
-        from EvoScientist.channels.interaction import ApprovalOutcome
+        from metasci_scribe.channels.interaction import ApprovalOutcome
 
         stream_calls = 0
         prompt_calls = 0
@@ -1410,7 +1410,9 @@ class TestConsumerHitlRoundBudget:
         await bus.publish_inbound(
             BusInbound(channel="stub", sender_id="u1", chat_id="c1", content="go")
         )
-        with caplog.at_level(logging.WARNING, logger="EvoScientist.channels.consumer"):
+        with caplog.at_level(
+            logging.WARNING, logger="metasci_scribe.channels.consumer"
+        ):
             task = asyncio.create_task(consumer.run())
             outbound = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
 
@@ -1462,7 +1464,9 @@ class TestConsumerHitlRoundBudget:
         await bus.publish_inbound(
             BusInbound(channel="stub", sender_id="u1", chat_id="c1", content="go")
         )
-        with caplog.at_level(logging.WARNING, logger="EvoScientist.channels.consumer"):
+        with caplog.at_level(
+            logging.WARNING, logger="metasci_scribe.channels.consumer"
+        ):
             task = asyncio.create_task(consumer.run())
             outbound = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
 
@@ -1480,8 +1484,8 @@ class TestConsumerHitlRoundBudget:
     ):
         """Approving one-by-one and then granting the session must not stop
         the next auto-resolved pending (issue #469 review)."""
-        import EvoScientist.channels.hitl_budget as budget_mod
-        from EvoScientist.channels.interaction import ApprovalOutcome
+        import metasci_scribe.channels.hitl_budget as budget_mod
+        from metasci_scribe.channels.interaction import ApprovalOutcome
 
         monkeypatch.setattr(budget_mod, "MAX_HUMAN_HITL_ROUNDS", 1)
         stream_calls = 0
@@ -1534,7 +1538,7 @@ class TestConsumerHitlRoundBudget:
     async def test_close_failure_still_sends_partial_and_stop(
         self, monkeypatch, caplog, tmp_path
     ):
-        import EvoScientist.channels.hitl_budget as budget_mod
+        import metasci_scribe.channels.hitl_budget as budget_mod
 
         monkeypatch.setattr(budget_mod, "MAX_HUMAN_HITL_ROUNDS", 0)
 
@@ -1548,7 +1552,7 @@ class TestConsumerHitlRoundBudget:
         await bus.publish_inbound(
             BusInbound(channel="stub", sender_id="u1", chat_id="c1", content="go")
         )
-        with caplog.at_level(logging.WARNING, logger="EvoScientist"):
+        with caplog.at_level(logging.WARNING, logger="metasci-scribe"):
             task = asyncio.create_task(consumer.run())
             first = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
             second = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
@@ -1571,7 +1575,7 @@ class TestConsumerHitlRoundBudget:
         and closes the checkpoint. No further resume is streamed."""
         from langgraph.types import Command
 
-        import EvoScientist.channels.hitl_budget as budget_mod
+        import metasci_scribe.channels.hitl_budget as budget_mod
 
         monkeypatch.setattr(budget_mod, "MAX_HITL_TOTAL_ROUNDS", 2)
         stream_calls = 0
@@ -1607,8 +1611,8 @@ def test_tui_loop_does_not_build_a_resume_past_the_total_cap(monkeypatch):
     builds a resume. Auto rounds ignore the human cap; at the total cap the
     branch stops with no resume left unsent.
     """
-    import EvoScientist.channels.hitl_budget as budget_mod
-    from EvoScientist.channels.hitl_budget import hitl_budget_stop
+    import metasci_scribe.channels.hitl_budget as budget_mod
+    from metasci_scribe.channels.hitl_budget import hitl_budget_stop
 
     monkeypatch.setattr(budget_mod, "MAX_HITL_TOTAL_ROUNDS", 2)
     resumes_built = 0
@@ -1630,7 +1634,7 @@ def test_tui_loop_does_not_build_a_resume_past_the_total_cap(monkeypatch):
 def test_tui_loop_human_cap_does_not_stop_an_auto_branch():
     """A session-grant branch keeps resuming after the human cap; a widget
     branch does not."""
-    from EvoScientist.channels.hitl_budget import hitl_budget_stop
+    from metasci_scribe.channels.hitl_budget import hitl_budget_stop
 
     assert not hitl_budget_stop(human_rounds=50, total_rounds=51, needs_human=False)
     assert hitl_budget_stop(human_rounds=50, total_rounds=51, needs_human=True)
@@ -1639,8 +1643,8 @@ def test_tui_loop_human_cap_does_not_stop_an_auto_branch():
 def test_tui_loop_level_total_cap_uses_completed_round_helper(monkeypatch):
     """The TUI loop-top guard is ``hitl_completed_round_cap_reached``,
     not a rewritten copy of the stop condition (issue #469 review)."""
-    import EvoScientist.channels.hitl_budget as budget_mod
-    from EvoScientist.channels.hitl_budget import hitl_completed_round_cap_reached
+    import metasci_scribe.channels.hitl_budget as budget_mod
+    from metasci_scribe.channels.hitl_budget import hitl_completed_round_cap_reached
 
     monkeypatch.setattr(budget_mod, "MAX_HITL_TOTAL_ROUNDS", 2)
     assert not hitl_completed_round_cap_reached(0)
@@ -1656,7 +1660,7 @@ def test_tui_hitl_loop_checks_completed_round_cap_before_clearing_pending():
     after the pending clear (no Pilot harness)."""
     from pathlib import Path
 
-    import EvoScientist.cli.tui_interactive as tui
+    import metasci_scribe.cli.tui_interactive as tui
 
     src = Path(tui.__file__).read_text()
     cap = src.index("hitl_completed_round_cap_reached(_hitl_round)")
@@ -1667,7 +1671,7 @@ def test_tui_hitl_loop_checks_completed_round_cap_before_clearing_pending():
 
 
 def test_channel_response_with_budget_stop_keeps_partial_then_notice():
-    from EvoScientist.channels.hitl_budget import (
+    from metasci_scribe.channels.hitl_budget import (
         HITL_BUDGET_STOP_NOTICE,
         channel_response_with_budget_stop,
     )
@@ -1687,7 +1691,7 @@ def test_abandoned_tool_messages_closes_invalid_tool_calls():
     """HITL close must patch invalid calls too, matching crash recovery."""
     from langchain_core.messages import AIMessage, ToolMessage
 
-    from EvoScientist.backends import (
+    from metasci_scribe.backends import (
         HITL_ROUND_LIMIT_REJECT_MESSAGE,
         abandoned_tool_messages,
     )
@@ -1723,7 +1727,7 @@ def test_abandoned_tool_messages_closes_invalid_tool_calls():
 
 
 def test_hitl_pause_unresolved_does_not_replay_without_a_resume():
-    from EvoScientist.channels.hitl_budget import hitl_pause_unresolved
+    from metasci_scribe.channels.hitl_budget import hitl_pause_unresolved
 
     assert hitl_pause_unresolved(resuming=False, pending=True)
     assert not hitl_pause_unresolved(resuming=True, pending=True)
@@ -1735,7 +1739,7 @@ def test_tui_unresolved_pause_exits_without_budget_notice():
     notice stays inside the budget-exhausted branch (CodeRabbit)."""
     from pathlib import Path
 
-    import EvoScientist.cli.tui_interactive as tui
+    import metasci_scribe.cli.tui_interactive as tui
 
     src = Path(tui.__file__).read_text()
     unresolved = src.index("hitl_pause_unresolved(")
@@ -1751,7 +1755,7 @@ def test_tui_budget_stop_folds_notice_into_channel_response():
     channel HITL callbacks are set (issue #469 / CodeRabbit)."""
     from pathlib import Path
 
-    import EvoScientist.cli.tui_interactive as tui
+    import metasci_scribe.cli.tui_interactive as tui
 
     src = Path(tui.__file__).read_text()
     folded = src.index("channel_response_with_budget_stop(response)")
@@ -1781,11 +1785,11 @@ async def test_close_parked_checkpoint_keeps_finished_sibling_results():
     in history; only the unanswered call is patched (issue #469 review)."""
     from langchain_core.messages import AIMessage, ToolMessage
 
-    from EvoScientist.backends import (
+    from metasci_scribe.backends import (
         HITL_ROUND_LIMIT_REJECT_MESSAGE,
         close_parked_checkpoint,
     )
-    from EvoScientist.gateway import GraphTarget
+    from metasci_scribe.gateway import GraphTarget
 
     pending_ask = ToolMessage(
         content="user answered from the widget",
@@ -1847,8 +1851,8 @@ async def test_close_parked_checkpoint_keeps_finished_sibling_results():
 async def test_close_parked_checkpoint_trailing_end_even_without_dangling_calls():
     """With no unanswered calls the first END still gets a trailing END,
     matching recovery: the first clear can leave next == ('model',)."""
-    from EvoScientist.backends import close_parked_checkpoint
-    from EvoScientist.gateway import GraphTarget
+    from metasci_scribe.backends import close_parked_checkpoint
+    from metasci_scribe.gateway import GraphTarget
 
     agent = FakeCheckpointAgent()
     gateway = FakeGraphGateway(checkpoint=agent)
@@ -1864,8 +1868,8 @@ async def test_close_parked_checkpoint_trailing_end_even_without_dangling_calls(
 
 async def test_close_parked_checkpoint_raises_when_verify_still_stuck():
     """Unlike the old parallel close, a failed repair is visible."""
-    from EvoScientist.backends import close_parked_checkpoint
-    from EvoScientist.gateway import GraphTarget
+    from metasci_scribe.backends import close_parked_checkpoint
+    from metasci_scribe.gateway import GraphTarget
 
     with pytest.raises(RuntimeError, match="Could not close parked HITL"):
         await close_parked_checkpoint(
@@ -1878,8 +1882,8 @@ async def test_close_parked_checkpoint_raises_when_verify_still_stuck():
 
 async def test_close_parked_checkpoint_ignores_local_graph():
     """After #470, close must use the gateway even if local_graph is present."""
-    from EvoScientist.backends import close_parked_checkpoint
-    from EvoScientist.gateway import GraphTarget
+    from metasci_scribe.backends import close_parked_checkpoint
+    from metasci_scribe.gateway import GraphTarget
 
     agent = FakeCheckpointAgent()
     sentinel = SimpleNamespace(
@@ -1900,8 +1904,8 @@ async def test_close_parked_checkpoint_ignores_local_graph():
 
 async def test_close_parked_checkpoint_via_local_gateway():
     """The in-process gateway still closes through its snapshot/update seam."""
-    from EvoScientist.backends import close_parked_checkpoint
-    from EvoScientist.gateway import GraphTarget, LocalGraphGateway
+    from metasci_scribe.backends import close_parked_checkpoint
+    from metasci_scribe.gateway import GraphTarget, LocalGraphGateway
 
     agent = FakeCheckpointAgent()
     await close_parked_checkpoint(

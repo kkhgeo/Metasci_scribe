@@ -8,17 +8,17 @@
 #             WebUI release in the core's range
 #   block     adds outbound firewall rules for the installed Python and Node
 #             executables, then checks that they cannot reach https://pypi.org
-#   offline   EvoSci setup and the WebUI launch; run after block
-#   update    EvoSci update to a release (install_smoke_update.py)
+#   offline   metasci-scribe setup and the WebUI launch; run after block
+#   update    metasci-scribe update to a release (install_smoke_update.py)
 #
 # EXPECTED_VERSION (else the newest release on INDEX_URL) and
-# EVOSCI_INSTALL_CONSTRAINTS (else constraints.txt at the release tag) are
+# METASCI_SCRIBE_INSTALL_CONSTRAINTS (else constraints.txt at the release tag) are
 # optional.
 param([Parameter(Mandatory = $true)][ValidateSet('online', 'block', 'offline', 'update')][string]$Mode)
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-# EvoSci's output goes to pipes and files here; with the ANSI code page Python
+# metasci-scribe's output goes to pipes and files here; with the ANSI code page Python
 # fails on its progress symbols, as in install.ps1.
 $env:PYTHONIOENCODING = 'utf-8'
 # ... and their output (and uv's) is UTF-8: decode it as such, not in the
@@ -28,9 +28,9 @@ try { [Console]::OutputEncoding = New-Object Text.UTF8Encoding $false } catch { 
 $IndexUrl = if ($env:INDEX_URL) { $env:INDEX_URL } else { 'https://pypi.org/simple' }
 # The home folder as Python finds it (USERPROFILE first), as install.ps1 does.
 $UserHome = if ($env:USERPROFILE) { $env:USERPROFILE } else { $HOME }
-$DataDir = if ($env:EVOSCIENTIST_DATA_DIR) { $env:EVOSCIENTIST_DATA_DIR } else { Join-Path $UserHome '.evoscientist' }
-$BackendPort = if ($env:EVOSCIENTIST_LANGGRAPH_DEV_PORT) { $env:EVOSCIENTIST_LANGGRAPH_DEV_PORT } else { '6174' }
-$WebuiPort = if ($env:EVOSCIENTIST_WEBUI_PORT) { $env:EVOSCIENTIST_WEBUI_PORT } else { '4716' }
+$DataDir = if ($env:METASCI_SCRIBE_DATA_DIR) { $env:METASCI_SCRIBE_DATA_DIR } else { Join-Path $UserHome '.metasci-scribe' }
+$BackendPort = if ($env:METASCI_SCRIBE_LANGGRAPH_DEV_PORT) { $env:METASCI_SCRIBE_LANGGRAPH_DEV_PORT } else { '6174' }
+$WebuiPort = if ($env:METASCI_SCRIBE_WEBUI_PORT) { $env:METASCI_SCRIBE_WEBUI_PORT } else { '4716' }
 $BackendUrl = "http://127.0.0.1:$BackendPort/ok"
 $WebuiUrl = "http://127.0.0.1:$WebuiPort/"
 
@@ -58,8 +58,8 @@ $Uv = (Get-Content -Raw -Encoding UTF8 (Join-Path $DataDir 'tools\uv.json') | Co
 if (-not (Test-Path $Uv)) { Fail "No uv recorded in $DataDir\tools\uv.json" }
 $BinDir = (Invoke-Native $Uv @('tool', 'dir', '--bin')).Trim()
 $ToolDir = (Invoke-Native $Uv @('tool', 'dir')).Trim()
-$EvoSci = Join-Path $BinDir 'EvoSci.exe'
-$Python = Join-Path $ToolDir 'evoscientist\Scripts\python.exe'
+$Scribe = Join-Path $BinDir 'metasci-scribe.exe'
+$Python = Join-Path $ToolDir 'metasci-scribe\Scripts\python.exe'
 
 # Any answer below *Below*; the backend's /ok must be a success (300).
 function Test-Answers([string]$Url, [int]$Below = 500) {
@@ -78,9 +78,9 @@ function Test-Answers([string]$Url, [int]$Below = 500) {
 }
 
 function Show-Logs([string]$Log) {
-    Write-Host '--- EvoSci output'
+    Write-Host '--- metasci-scribe output'
     Get-Content -Encoding UTF8 -ErrorAction SilentlyContinue $Log, "$Log.err" | Write-Host
-    foreach ($file in @("$UserHome\.config\evoscientist\langgraph_dev.log", "$UserHome\.config\evoscientist\webui.log")) {
+    foreach ($file in @("$UserHome\.config\metasci-scribe\langgraph_dev.log", "$UserHome\.config\metasci-scribe\webui.log")) {
         Write-Host "--- $file"
         Get-Content -Encoding UTF8 -Tail 80 -ErrorAction SilentlyContinue $file | Write-Host
     }
@@ -92,7 +92,7 @@ function Test-Launch {
     $work = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $work | Out-Null
     $log = "$work.log"
-    $proc = Start-Process -FilePath $EvoSci -ArgumentList @('--ui', 'webui', '--workdir', "`"$work`"") -PassThru `
+    $proc = Start-Process -FilePath $Scribe -ArgumentList @('--ui', 'webui', '--workdir', "`"$work`"") -PassThru `
         -RedirectStandardOutput $log -RedirectStandardError "$log.err" -WindowStyle Hidden
     $up = $false
     for ($i = 0; $i -lt 240; $i++) {
@@ -100,10 +100,10 @@ function Test-Launch {
         if ($proc.HasExited) { break }
         Start-Sleep -Seconds 1
     }
-    # Windows has no signal that runs EvoSci's own cleanup: stop the tree,
+    # Windows has no signal that runs metasci-scribe's own cleanup: stop the tree,
     # then the recorded backend.
     & taskkill.exe /PID $proc.Id /T /F | Out-Null
-    Invoke-Native $EvoSci @('server', 'stop') | Out-Null
+    Invoke-Native $Scribe @('server', 'stop') | Out-Null
     if (-not $up) {
         Show-Logs $log
         Fail "The backend ($BackendUrl) and the WebUI ($WebuiUrl) did not both answer within $i s"
@@ -111,37 +111,37 @@ function Test-Launch {
     Start-Sleep -Seconds 3
     if ((Test-Answers $BackendUrl) -or (Test-Answers $WebuiUrl)) {
         Show-Logs $log
-        Fail 'The backend or the WebUI still answers after EvoSci was stopped'
+        Fail 'The backend or the WebUI still answers after metasci-scribe was stopped'
     }
     Write-Host 'WebUI launch ok'
 }
 
 function Get-ExpectedVersion {
     if ($env:EXPECTED_VERSION) { return $env:EXPECTED_VERSION }
-    $listing = Invoke-RestMethod -UseBasicParsing -Uri "$IndexUrl/evoscientist/" -Headers @{ Accept = 'application/vnd.pypi.simple.v1+json' }
+    $listing = Invoke-RestMethod -UseBasicParsing -Uri "$IndexUrl/metasci-scribe/" -Headers @{ Accept = 'application/vnd.pypi.simple.v1+json' }
     return @($listing.versions | Where-Object { $_ -match '^\d+(\.\d+){1,3}$' } | Sort-Object { [version]$_ }) | Select-Object -Last 1
 }
 
 function Test-Online {
     $expected = Get-ExpectedVersion
-    $actual = (Invoke-Native $EvoSci @('--version', '--json') | ConvertFrom-Json).version
-    if ($actual -ne $expected) { Fail "EvoSci --version --json reports $actual, expected $expected" }
+    $actual = (Invoke-Native $Scribe @('--version', '--json') | ConvertFrom-Json).version
+    if ($actual -ne $expected) { Fail "metasci-scribe --version --json reports $actual, expected $expected" }
     Write-Host "version ok: $actual"
 
-    $file = Invoke-Native $Python @('-c', 'import EvoScientist; print(EvoScientist.__file__)')
+    $file = Invoke-Native $Python @('-c', 'import metasci_scribe; print(metasci_scribe.__file__)')
     if (-not $file.StartsWith($ToolDir + '\', [StringComparison]::OrdinalIgnoreCase)) {
-        Fail "EvoScientist is imported from $file, outside $ToolDir"
+        Fail "Metasci Scribe is imported from $file, outside $ToolDir"
     }
     Write-Host "imported from the tool environment: $file"
 
-    $constraints = $env:EVOSCI_INSTALL_CONSTRAINTS
+    $constraints = $env:METASCI_SCRIBE_INSTALL_CONSTRAINTS
     if (-not $constraints) {
-        $constraints = Join-Path ([IO.Path]::GetTempPath()) 'evosci-constraints.txt'
+        $constraints = Join-Path ([IO.Path]::GetTempPath()) 'metasci-scribe-constraints.txt'
         Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/EvoScientist/EvoScientist/v$actual/constraints.txt" -OutFile $constraints
     }
     # Re-resolving the installed set under the constraints changes nothing only
     # when every installed version is the one constraints.txt pins.
-    $frozen = Join-Path ([IO.Path]::GetTempPath()) 'evosci-frozen.txt'
+    $frozen = Join-Path ([IO.Path]::GetTempPath()) 'metasci-scribe-frozen.txt'
     [IO.File]::WriteAllText($frozen, (Invoke-Native $Uv @('pip', 'freeze', '--python', $Python)))
     # uv reports "Would make no changes" on stderr.
     # By name from its folder: uv splits a -c path at spaces (astral-sh/uv#12639).
@@ -156,35 +156,35 @@ function Test-Online {
     }
     Write-Host 'installed versions match constraints.txt'
 
-    $out = Invoke-Native $EvoSci @('setup', '--json')
-    if ($NativeExitCode -ne 0) { Fail "The second EvoSci setup failed: $out" }
-    if ($out -match '"(Downloading |Installing |Creating the virtual)') { Fail "The second EvoSci setup downloaded or installed something: $out" }
+    $out = Invoke-Native $Scribe @('setup', '--json')
+    if ($NativeExitCode -ne 0) { Fail "The second metasci-scribe setup failed: $out" }
+    if ($out -match '"(Downloading |Installing |Creating the virtual)') { Fail "The second metasci-scribe setup downloaded or installed something: $out" }
     Write-Host 'second setup downloaded nothing'
 
     # The oldest and the newest WebUI release in the core's range, through the
     # test-only override of the range; the newest stays installed.
     $code = @'
 from packaging.version import Version
-from EvoScientist.config import load_config
-from EvoScientist.setup.node import DEFAULT_NPM_REGISTRY, NPM_REGISTRIES
-from EvoScientist.setup.webui import WEBUI_COMPAT, fetch_metadata, in_range
+from metasci_scribe.config import load_config
+from metasci_scribe.setup.node import DEFAULT_NPM_REGISTRY, NPM_REGISTRIES
+from metasci_scribe.setup.webui import WEBUI_COMPAT, fetch_metadata, in_range
 registry = NPM_REGISTRIES.get(load_config().mirror, DEFAULT_NPM_REGISTRY).rstrip("/")
 found = sorted((v for v in fetch_metadata(registry)["versions"] if in_range(v, WEBUI_COMPAT)), key=Version)
 print(found[0], found[-1])
 '@
-    $script = Join-Path ([IO.Path]::GetTempPath()) 'evosci-webui-range.py'
+    $script = Join-Path ([IO.Path]::GetTempPath()) 'metasci-scribe-webui-range.py'
     [IO.File]::WriteAllText($script, $code)
     $oldest, $newest = (Invoke-Native $Python @($script)).Trim().Split(' ')
     foreach ($version in @($oldest, $newest) | Select-Object -Unique) {
         Write-Host "WebUI $version"
-        $env:EVOSCIENTIST_WEBUI_COMPAT = "==$version"
+        $env:METASCI_SCRIBE_WEBUI_COMPAT = "==$version"
         try {
-            $out = Invoke-Native $EvoSci @('setup', '--stage', 'webui', '--json')
-            if ($NativeExitCode -ne 0) { Fail "EvoSci setup --stage webui failed for WebUI ${version}: $out" }
+            $out = Invoke-Native $Scribe @('setup', '--stage', 'webui', '--json')
+            if ($NativeExitCode -ne 0) { Fail "metasci-scribe setup --stage webui failed for WebUI ${version}: $out" }
             if ($out -notmatch [regex]::Escape("`"Using WebUI $version ")) { Fail "WebUI $version was not installed: $out" }
             Test-Launch
         } finally {
-            Remove-Item Env:\EVOSCIENTIST_WEBUI_COMPAT
+            Remove-Item Env:\METASCI_SCRIBE_WEBUI_COMPAT
         }
     }
 }
@@ -197,7 +197,7 @@ function Block-Network {
     # firewall rule on the link path does not match the running process.
     $bases = @((Invoke-Native $Python @('-c', 'import os, sys; print(sys._base_executable); print(os.path.realpath(sys._base_executable))')) -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -Unique)
     $programs = @($bases) + @($Python)
-    $programs += @(Get-ChildItem (Join-Path $ToolDir 'evoscientist\Scripts') -Filter *.exe | ForEach-Object { $_.FullName })
+    $programs += @(Get-ChildItem (Join-Path $ToolDir 'metasci-scribe\Scripts') -Filter *.exe | ForEach-Object { $_.FullName })
     $programs += @(Get-ChildItem $BinDir -Filter *.exe | ForEach-Object { $_.FullName })
     $node = Get-Content -Raw -Encoding UTF8 -ErrorAction SilentlyContinue (Join-Path $DataDir 'tools\node.json') | ConvertFrom-Json
     if ($node) { $programs += Join-Path $node.path 'node.exe' }
@@ -206,7 +206,7 @@ function Block-Network {
     $i = 0
     foreach ($program in $programs | Select-Object -Unique) {
         $i++
-        New-NetFirewallRule -DisplayName "evosci-smoke-block-$i" -Direction Outbound -Program $program -Action Block | Out-Null
+        New-NetFirewallRule -DisplayName "metasci-scribe-smoke-block-$i" -Direction Outbound -Program $program -Action Block | Out-Null
         Write-Host "blocked: $program"
     }
     # Single quotes inside: Windows PowerShell 5.1 drops double quotes from
@@ -225,43 +225,43 @@ function Block-Network {
 }
 
 function Test-Offline {
-    $out = Invoke-Native $EvoSci @('setup', '--json')
-    if ($NativeExitCode -ne 0) { Fail "EvoSci setup failed offline: $out" }
+    $out = Invoke-Native $Scribe @('setup', '--json')
+    if ($NativeExitCode -ne 0) { Fail "metasci-scribe setup failed offline: $out" }
     if ($out -notmatch '"stage": *"webui", *"status": *"done"') { Fail "The webui stage did not end with done offline: $out" }
     Write-Host 'offline setup ok'
     Test-Launch
 }
 
-# EvoSci update to a release through this code's updater and its helper; see
+# metasci-scribe update to a release through this code's updater and its helper; see
 # update() in install_smoke_check.sh. The block step's firewall rules go
 # first: the update needs the network.
 function Test-Update {
-    Get-NetFirewallRule -DisplayName 'evosci-smoke-block-*' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+    Get-NetFirewallRule -DisplayName 'metasci-scribe-smoke-block-*' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
     $key = 'version'
-    if ($env:EVOSCI_INSTALL_SOURCE) {
-        $constraints = $env:EVOSCI_INSTALL_CONSTRAINTS
+    if ($env:METASCI_SCRIBE_INSTALL_SOURCE) {
+        $constraints = $env:METASCI_SCRIBE_INSTALL_CONSTRAINTS
         # uv splits a -c path at spaces (astral-sh/uv#12639): by name, from its folder.
         Push-Location -LiteralPath (Split-Path -Parent $constraints)
         try {
-            Invoke-Native $Uv @('pip', 'install', '-q', '--python', $Python, '--reinstall-package', 'evoscientist', '-c', (Split-Path -Leaf $constraints), $env:EVOSCI_INSTALL_SOURCE) -WithStderr | Write-Host
+            Invoke-Native $Uv @('pip', 'install', '-q', '--python', $Python, '--reinstall-package', 'metasci-scribe', '-c', (Split-Path -Leaf $constraints), $env:METASCI_SCRIBE_INSTALL_SOURCE) -WithStderr | Write-Host
         } finally {
             Pop-Location
         }
-        if ($NativeExitCode -ne 0) { Fail "uv pip install of $env:EVOSCI_INSTALL_SOURCE failed" }
+        if ($NativeExitCode -ne 0) { Fail "uv pip install of $env:METASCI_SCRIBE_INSTALL_SOURCE failed" }
         $key = 'latest'
     } else {
-        Invoke-Native $EvoSci @('update', '--help') | Out-Null
+        Invoke-Native $Scribe @('update', '--help') | Out-Null
         if ($NativeExitCode -ne 0) {
-            Write-Host 'This release has no EvoSci update yet; nothing to check.'
+            Write-Host 'This release has no metasci-scribe update yet; nothing to check.'
             return
         }
     }
-    $check = (Invoke-Native $EvoSci @('update', '--check', '--json')) -split "`n" | Select-Object -Last 1 | ConvertFrom-Json
+    $check = (Invoke-Native $Scribe @('update', '--check', '--json')) -split "`n" | Select-Object -Last 1 | ConvertFrom-Json
     $target = $check.detail.$key
     # Not the environment's Python: it would block the update it waits for.
     $base = (Invoke-Native $Python @('-c', 'import sys; print(sys._base_executable)')).Trim()
-    Invoke-Native $base @((Join-Path $PSScriptRoot 'install_smoke_update.py'), $EvoSci, $target) -WithStderr | Write-Host
-    if ($NativeExitCode -ne 0) { Fail "EvoSci update to $target failed (see above)" }
+    Invoke-Native $base @((Join-Path $PSScriptRoot 'install_smoke_update.py'), $Scribe, $target) -WithStderr | Write-Host
+    if ($NativeExitCode -ne 0) { Fail "metasci-scribe update to $target failed (see above)" }
 }
 
 switch ($Mode) {

@@ -19,9 +19,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from EvoScientist.gateway.server import _build_thread_metadata
-from EvoScientist.langgraph_dev import manager
-from EvoScientist.paths import SessionDirs, Workspace, file_tool_path
+from metasci_scribe.gateway.server import _build_thread_metadata
+from metasci_scribe.langgraph_dev import manager
+from metasci_scribe.paths import SessionDirs, Workspace, file_tool_path
 from tests.fakes.common import FakeGraphGateway, FakeThreadStore
 
 TS_RUN = "20260930_120000"
@@ -39,9 +39,9 @@ def run_dirs(workspace) -> SessionDirs:
 
 def test_server_thread_metadata_carries_run_dir_only_when_set(run_dirs):
     daemon = _build_thread_metadata(
-        graph_id="EvoScientist", **SessionDirs(run_dirs.workspace).metadata()
+        graph_id="metasci-scribe", **SessionDirs(run_dirs.workspace).metadata()
     )
-    run = _build_thread_metadata(graph_id="EvoScientist", **run_dirs.metadata())
+    run = _build_thread_metadata(graph_id="metasci-scribe", **run_dirs.metadata())
     assert "run_dir" not in daemon
     assert run["workspace_dir"] == run_dirs.workspace.key
     assert run["run_dir"] == run_dirs.run_dir.as_posix()
@@ -53,7 +53,7 @@ def test_server_thread_metadata_carries_run_dir_only_when_set(run_dirs):
 
 
 def test_picker_groups_run_threads_under_their_run_folder(workspace):
-    from EvoScientist.cli.widgets.thread_selector import _build_items
+    from metasci_scribe.cli.widgets.thread_selector import _build_items
 
     run = workspace.runs_dir / TS_RUN
     threads = [
@@ -77,7 +77,7 @@ def test_picker_shortens_windows_style_home(monkeypatch):
     """Stored folders are POSIX on every platform; the home prefix must match."""
     import os
 
-    from EvoScientist.cli.widgets.thread_selector import _normalize_path
+    from metasci_scribe.cli.widgets.thread_selector import _normalize_path
 
     monkeypatch.setattr(
         os.path, "expanduser", lambda p: "C:\\Users\\x" if p == "~" else p
@@ -102,7 +102,7 @@ class _ResumeUI:
 
 
 async def _resume(ctx, metadata, thread_id="t2"):
-    from EvoScientist.commands.implementation.session import ResumeCommand
+    from metasci_scribe.commands.implementation.session import ResumeCommand
 
     ctx.graph_gateway = FakeGraphGateway(
         thread_store=FakeThreadStore(resolved_thread_id=thread_id, metadata=metadata)
@@ -111,7 +111,7 @@ async def _resume(ctx, metadata, thread_id="t2"):
 
 
 def _ctx(workspace, ui, run_dir=None):
-    from EvoScientist.commands.base import CommandContext
+    from metasci_scribe.commands.base import CommandContext
 
     return CommandContext(
         agent=None,
@@ -142,9 +142,9 @@ async def test_resume_into_another_workspace_switches_workspace_and_run_dir(
 
 
 def test_run_mode_memory_is_keyed_to_the_workspace_root(run_dirs, monkeypatch):
-    import EvoScientist.EvoScientist as evo
-    import EvoScientist.middleware as mw_mod
-    import EvoScientist.middleware.model_fallback as fallback
+    import metasci_scribe.agent as evo
+    import metasci_scribe.middleware as mw_mod
+    import metasci_scribe.middleware.model_fallback as fallback
 
     seen: list = []
 
@@ -177,7 +177,7 @@ def test_server_starts_in_the_root_with_the_run_folder_in_its_env(
 ):
     from tests.fakes.langgraph_dev import PopenAbort, patch_start_prereqs
 
-    monkeypatch.setenv("EVOSCIENTIST_RUN_DIR", "/inherited")
+    monkeypatch.setenv("METASCI_SCRIBE_RUN_DIR", "/inherited")
     captured = patch_start_prereqs(monkeypatch, tmp_path, runtime_paths)
     with pytest.raises(PopenAbort):
         manager.start_langgraph_dev(
@@ -185,8 +185,10 @@ def test_server_starts_in_the_root_with_the_run_folder_in_its_env(
             run_dir=run_dirs.run_dir,
             port=16190,
         )
-    assert captured["env"]["EVOSCIENTIST_WORKSPACE_DIR"] == str(run_dirs.workspace.root)
-    assert captured["env"]["EVOSCIENTIST_RUN_DIR"] == str(run_dirs.run_dir)
+    assert captured["env"]["METASCI_SCRIBE_WORKSPACE_DIR"] == str(
+        run_dirs.workspace.root
+    )
+    assert captured["env"]["METASCI_SCRIBE_RUN_DIR"] == str(run_dirs.run_dir)
 
 
 def test_daemon_server_env_has_no_run_folder(
@@ -194,11 +196,11 @@ def test_daemon_server_env_has_no_run_folder(
 ):
     from tests.fakes.langgraph_dev import PopenAbort, patch_start_prereqs
 
-    monkeypatch.setenv("EVOSCIENTIST_RUN_DIR", "/inherited")
+    monkeypatch.setenv("METASCI_SCRIBE_RUN_DIR", "/inherited")
     captured = patch_start_prereqs(monkeypatch, tmp_path, runtime_paths)
     with pytest.raises(PopenAbort):
         manager.start_langgraph_dev(workspace_dir=workspace.root, port=16191)
-    assert "EVOSCIENTIST_RUN_DIR" not in captured["env"]
+    assert "METASCI_SCRIBE_RUN_DIR" not in captured["env"]
 
 
 def _reuse_running_server(monkeypatch):
@@ -206,7 +208,7 @@ def _reuse_running_server(monkeypatch):
     monkeypatch.setattr(manager, "_PROCESS", None)
     monkeypatch.setattr(manager, "_PROCESS_WORKSPACE", None)
     monkeypatch.setattr(manager, "_PROCESS_RUN_DIR", None)
-    cfg = manager.EvoScientistConfig()
+    cfg = manager.ScribeConfig()
     cfg.enable_async_subagents = True
     return cfg
 
@@ -256,7 +258,7 @@ def test_owned_server_restarts_for_another_run_folder(
         manager, "start_langgraph_dev", lambda **kw: started.append(kw) or object()
     )
     monkeypatch.setattr(manager.atexit, "register", lambda *a, **k: None)
-    cfg = manager.EvoScientistConfig()
+    cfg = manager.ScribeConfig()
     cfg.enable_async_subagents = True
 
     manager.ensure_langgraph_dev(
@@ -273,10 +275,10 @@ def test_server_graphs_work_in_the_run_folder_and_crons_in_the_root(
 ):
     """Deployed sub-agents work where the session works; scheduled tasks
     belong to the workspace and work in its root."""
-    import EvoScientist.memory.agents as memory_agents
-    import EvoScientist.subagents._factory as factory
-    import EvoScientist.subagents.expert_container_async as expert_async
-    from EvoScientist.paths import process_session_dirs, process_workspace
+    import metasci_scribe.memory.agents as memory_agents
+    import metasci_scribe.subagents._factory as factory
+    import metasci_scribe.subagents.expert_container_async as expert_async
+    from metasci_scribe.paths import process_session_dirs, process_workspace
 
     built: dict[str, dict] = {}
 
@@ -297,17 +299,19 @@ def test_server_graphs_work_in_the_run_folder_and_crons_in_the_root(
         "build_autoskills_graph",
     ):
         monkeypatch.setattr(memory_agents, name, lambda *a, **k: object())
-    monkeypatch.setenv("EVOSCIENTIST_WORKSPACE_DIR", str(run_dirs.workspace.root))
-    monkeypatch.setenv("EVOSCIENTIST_RUN_DIR", str(run_dirs.run_dir))
+    monkeypatch.setenv("METASCI_SCRIBE_WORKSPACE_DIR", str(run_dirs.workspace.root))
+    monkeypatch.setenv("METASCI_SCRIBE_RUN_DIR", str(run_dirs.run_dir))
     process_workspace.cache_clear()
     process_session_dirs.cache_clear()
-    monkeypatch.delitem(sys.modules, "EvoScientist.langgraph_dev.graphs", raising=False)
+    monkeypatch.delitem(
+        sys.modules, "metasci_scribe.langgraph_dev.graphs", raising=False
+    )
 
     try:
-        importlib.import_module("EvoScientist.langgraph_dev.graphs")
+        importlib.import_module("metasci_scribe.langgraph_dev.graphs")
     finally:
         # Built for this test's folders: later imports must build their own.
-        sys.modules.pop("EvoScientist.langgraph_dev.graphs", None)
+        sys.modules.pop("metasci_scribe.langgraph_dev.graphs", None)
 
     assert built["writing-agent"]["work_dir"] == run_dirs.run_dir
     assert built["expert"]["work_dir"] == run_dirs.run_dir
@@ -356,7 +360,7 @@ def _stored(db: Path) -> dict[str, tuple[str, dict]]:
 
 def _upgrade_recorded(db: Path) -> bool:
     """True if the upgrade's bit of ``user_version`` is set."""
-    from EvoScientist.sessions import _STORED_DIRS_VERSION
+    from metasci_scribe.sessions import _STORED_DIRS_VERSION
 
     con = sqlite3.connect(db)
     version = con.execute("PRAGMA user_version").fetchone()[0]
@@ -366,8 +370,8 @@ def _upgrade_recorded(db: Path) -> bool:
 
 @pytest.fixture
 def sessions_db(tmp_path, monkeypatch):
-    import EvoScientist.paths as paths
-    import EvoScientist.sessions as sessions
+    import metasci_scribe.paths as paths
+    import metasci_scribe.sessions as sessions
 
     db = tmp_path / "sessions.db"
     monkeypatch.setattr(sessions, "get_db_path", lambda: db)
@@ -376,11 +380,11 @@ def sessions_db(tmp_path, monkeypatch):
 
 
 def test_upgrade_splits_generated_run_folders_once(workspace, sessions_db):
-    from EvoScientist.sessions import _upgrade_stored_dirs
+    from metasci_scribe.sessions import _upgrade_stored_dirs
 
     run = workspace.runs_dir / TS_RUN
     named = workspace.runs_dir / "exp"
-    base = {"agent_name": "EvoScientist", "model": "m"}
+    base = {"agent_name": "metasci-scribe", "model": "m"}
     _write_rows(
         sessions_db,
         [
@@ -408,7 +412,7 @@ def test_upgrade_splits_generated_run_folders_once(workspace, sessions_db):
 
 def test_rows_written_after_the_upgrade_are_never_split(workspace, sessions_db):
     """Continuing in an old run folder in daemon mode makes it a root."""
-    from EvoScientist.sessions import _upgrade_stored_dirs
+    from metasci_scribe.sessions import _upgrade_stored_dirs
 
     folder = workspace.runs_dir / TS_RUN
     _write_rows(sessions_db, [("t1", "c1", {"workspace_dir": workspace.key})])
@@ -421,7 +425,7 @@ def test_rows_written_after_the_upgrade_are_never_split(workspace, sessions_db):
 
 
 def test_upgrade_of_a_new_db_only_records_the_version(sessions_db):
-    from EvoScientist.sessions import _upgrade_stored_dirs
+    from metasci_scribe.sessions import _upgrade_stored_dirs
 
     asyncio.run(_upgrade_stored_dirs())
     assert _upgrade_recorded(sessions_db)
@@ -430,8 +434,8 @@ def test_upgrade_of_a_new_db_only_records_the_version(sessions_db):
 def test_failed_upgrade_changes_nothing_and_retries(
     workspace, sessions_db, monkeypatch
 ):
-    import EvoScientist.memory.autoskills.proposals as proposals
-    from EvoScientist.sessions import (
+    import metasci_scribe.memory.autoskills.proposals as proposals
+    from metasci_scribe.sessions import (
         _upgrade_stored_dirs,
         _upgrade_stored_dirs_safely,
     )
@@ -457,8 +461,8 @@ def test_failed_upgrade_changes_nothing_and_retries(
 
 def test_upgrade_keeps_bloat_sweep_gate(workspace, sessions_db, monkeypatch):
     """The legacy-bloat sweep and the folder upgrade are gated independently."""
-    import EvoScientist.sessions as sessions
-    from EvoScientist.sessions import _needs_migration, _upgrade_stored_dirs
+    import metasci_scribe.sessions as sessions
+    from metasci_scribe.sessions import _needs_migration, _upgrade_stored_dirs
 
     _write_rows(sessions_db, [("t1", "c1", {"workspace_dir": workspace.key})])
     monkeypatch.setattr(sessions, "_MIGRATION_THRESHOLD_BYTES", 0)
@@ -472,7 +476,7 @@ def test_upgrade_keeps_bloat_sweep_gate(workspace, sessions_db, monkeypatch):
 
 def test_upgrade_skips_unreadable_rows(workspace, sessions_db, tmp_path):
     """Unreadable rows leave the others upgraded and the upgrade done."""
-    from EvoScientist.sessions import _upgrade_stored_dirs
+    from metasci_scribe.sessions import _upgrade_stored_dirs
 
     run = workspace.runs_dir / TS_RUN
     unresolvable = f"{workspace.root}/evil\x00x"
@@ -506,11 +510,11 @@ def test_upgrade_skips_unreadable_rows(workspace, sessions_db, tmp_path):
 
 
 def test_thread_readers_return_stored_run_dir(workspace, sessions_db):
-    from EvoScientist.sessions import get_thread_metadata, list_threads
+    from metasci_scribe.sessions import get_thread_metadata, list_threads
 
     run = workspace.runs_dir / TS_RUN
     base = {
-        "agent_name": "EvoScientist",
+        "agent_name": "metasci-scribe",
         "model": "m",
         "updated_at": "2026-01-01T00:00:00+00:00",
     }
@@ -532,7 +536,7 @@ def test_thread_readers_return_stored_run_dir(workspace, sessions_db):
 
 
 def _write_proposal(memory_dir: Path, name: str, workspace_dir: str) -> Path:
-    from EvoScientist.memory.autoskills.proposals import _proposal_root
+    from metasci_scribe.memory.autoskills.proposals import _proposal_root
 
     manifest_dir = _proposal_root(memory_dir) / name
     manifest_dir.mkdir(parents=True)
@@ -560,8 +564,8 @@ def _write_proposal(memory_dir: Path, name: str, workspace_dir: str) -> Path:
 def test_upgrade_moves_old_run_mode_proposals_to_their_workspace(
     workspace, sessions_db, tmp_path
 ):
-    from EvoScientist.memory.autoskills.proposals import list_skill_proposals
-    from EvoScientist.sessions import _upgrade_stored_dirs
+    from metasci_scribe.memory.autoskills.proposals import list_skill_proposals
+    from metasci_scribe.sessions import _upgrade_stored_dirs
 
     memory_dir = tmp_path / "memories"
     _write_proposal(memory_dir, "demo", str(workspace.runs_dir / TS_RUN))
@@ -577,11 +581,11 @@ async def test_cli_and_server_upgrade_before_reading(
 ):
     """Opening the DB from the CLI or the server upgrades old rows first, so
     the WebUI lists an old run-mode thread with its run folder."""
-    import EvoScientist.sessions as sessions
+    import metasci_scribe.sessions as sessions
 
     run = workspace.runs_dir / TS_RUN
     cli_tid, server_tid = (str(uuid.uuid4()) for _ in range(2))
-    base = {"graph_id": "EvoScientist", "updated_at": "2026-09-01T00:00:00+00:00"}
+    base = {"graph_id": "metasci-scribe", "updated_at": "2026-09-01T00:00:00+00:00"}
     run_meta = SessionDirs(workspace, run).metadata()
 
     _write_rows(sessions_db, [(cli_tid, "c1", {**base, "workspace_dir": str(run)})])
@@ -608,7 +612,7 @@ async def test_cli_and_server_upgrade_before_reading(
 
 def _stamped(run_dirs: SessionDirs, monkeypatch, graph_id: str) -> dict:
     """Metadata the server's checkpointer writes for an unstamped row."""
-    import EvoScientist.sessions as sessions
+    import metasci_scribe.sessions as sessions
 
     captured: dict = {}
 
@@ -658,7 +662,7 @@ def media_file(workspace) -> Path:
 
 @pytest.fixture
 def _plain_config(monkeypatch):
-    import EvoScientist.EvoScientist as evo
+    import metasci_scribe.agent as evo
 
     monkeypatch.setattr(
         evo,
@@ -669,7 +673,7 @@ def _plain_config(monkeypatch):
 
 @pytest.mark.usefixtures("_plain_config")
 def test_daemon_sandbox_mounts_nothing_extra(workspace, media_file):
-    from EvoScientist.EvoScientist import _get_default_backend
+    from metasci_scribe.agent import _get_default_backend
 
     backend = _get_default_backend(workspace)
     assert backend.default._media_dir is None
@@ -678,7 +682,7 @@ def test_daemon_sandbox_mounts_nothing_extra(workspace, media_file):
 
 @pytest.mark.usefixtures("_plain_config")
 def test_run_mode_sandbox_reaches_channel_media(run_dirs, media_file):
-    from EvoScientist.EvoScientist import _get_default_backend
+    from metasci_scribe.agent import _get_default_backend
 
     run_dirs.run_dir.mkdir(parents=True)
     backend = _get_default_backend(run_dirs.workspace, work_dir=run_dirs.work_dir)
@@ -691,7 +695,7 @@ def test_run_mode_sandbox_reaches_channel_media(run_dirs, media_file):
 def test_run_mode_reaches_media_through_a_symlinked_folder(run_dirs):
     """Channels reference attachments through ``<root>/media`` even when that
     folder is a symlink."""
-    from EvoScientist.EvoScientist import _get_default_backend
+    from metasci_scribe.agent import _get_default_backend
 
     uploads = run_dirs.workspace.root / "uploads"
     uploads.mkdir(parents=True)
@@ -715,7 +719,7 @@ def test_run_mode_reaches_media_through_a_symlinked_folder(run_dirs):
 def test_run_mode_file_tools_cannot_change_channel_media(run_dirs, media_file):
     """Attachments are shared by the workspace; a run writes in its own folder,
     including its own ``/media``."""
-    from EvoScientist.EvoScientist import _get_default_backend
+    from metasci_scribe.agent import _get_default_backend
 
     run_dirs.run_dir.mkdir(parents=True)
     backend = _get_default_backend(run_dirs.workspace, work_dir=run_dirs.work_dir)
@@ -734,7 +738,7 @@ def test_run_mode_file_tools_cannot_change_channel_media(run_dirs, media_file):
 def test_run_mode_media_mount_does_not_open_the_rest_of_the_workspace(
     run_dirs, media_file
 ):
-    from EvoScientist.EvoScientist import _get_default_backend
+    from metasci_scribe.agent import _get_default_backend
 
     run_dirs.run_dir.mkdir(parents=True)
     (run_dirs.workspace.root / "secret.txt").write_text("no")
@@ -762,8 +766,8 @@ async def test_channel_attachment_reference_reaches_file_tools(
 
     from deepagents.backends.utils import validate_path
 
-    from EvoScientist.EvoScientist import _get_default_backend
-    from EvoScientist.stream.events import build_agent_stream_input
+    from metasci_scribe.agent import _get_default_backend
+    from metasci_scribe.stream.events import build_agent_stream_input
 
     work_dir = run_dirs.work_dir if mode == "run" else run_dirs.workspace.root
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -780,7 +784,7 @@ async def test_channel_attachment_reference_reaches_file_tools(
 @pytest.mark.usefixtures("_plain_config")
 def test_run_mode_file_tools_list_channel_media(run_dirs, media_file):
     """An agent finds attachments by listing or searching ``<root>/media``."""
-    from EvoScientist.EvoScientist import _get_default_backend
+    from metasci_scribe.agent import _get_default_backend
 
     run_dirs.run_dir.mkdir(parents=True)
     backend = _get_default_backend(run_dirs.workspace, work_dir=run_dirs.work_dir)
@@ -798,7 +802,7 @@ def test_run_mode_file_tools_list_channel_media(run_dirs, media_file):
 def test_run_mode_lists_media_through_symlinked_folder(run_dirs, folder):
     """Either spelling of a symlinked media folder lists the attachments
     under the path channels reference them by."""
-    from EvoScientist.EvoScientist import _get_default_backend
+    from metasci_scribe.agent import _get_default_backend
 
     uploads = run_dirs.workspace.root / "uploads"
     uploads.mkdir(parents=True)
@@ -815,7 +819,7 @@ def test_run_mode_lists_media_through_symlinked_folder(run_dirs, folder):
 
 @pytest.mark.usefixtures("_plain_config")
 def test_run_mode_media_listing_stays_inside_media_folder(run_dirs, media_file):
-    from EvoScientist.EvoScientist import _get_default_backend
+    from metasci_scribe.agent import _get_default_backend
 
     root = run_dirs.workspace.root
     (root / "secret.txt").write_text("attachment")
@@ -842,10 +846,10 @@ async def test_channel_attachments_follow_resume_into_another_workspace(
     that workspace's sandbox can read them."""
     from unittest.mock import AsyncMock, patch
 
-    import EvoScientist.cli.channel as channel_mod
-    from EvoScientist.channels.bus import MessageBus
-    from EvoScientist.channels.channel_manager import ChannelManager
-    from EvoScientist.cli.commands import (
+    import metasci_scribe.cli.channel as channel_mod
+    from metasci_scribe.channels.bus import MessageBus
+    from metasci_scribe.channels.channel_manager import ChannelManager
+    from metasci_scribe.cli.commands import (
         ServeRuntimeState,
         _make_serve_handle_session_resume_cb,
     )
@@ -868,10 +872,10 @@ async def test_channel_attachments_follow_resume_into_another_workspace(
 
     with (
         patch(
-            "EvoScientist.cli.commands._sync_background_agent_server_workspace",
+            "metasci_scribe.cli.commands._sync_background_agent_server_workspace",
             new=AsyncMock(),
         ),
-        patch("EvoScientist.cli.commands._load_agent", return_value=MagicMock()),
+        patch("metasci_scribe.cli.commands._load_agent", return_value=MagicMock()),
     ):
         await resume("t2", SessionDirs(other))
 

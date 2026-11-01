@@ -1,4 +1,4 @@
-"""Tests for ``EvoScientist._maybe_swap_async_subagents``.
+"""Tests for ``metasci_scribe._maybe_swap_async_subagents``.
 
 Covers the fallback / swap / strip-internal-flag paths that decide whether
 sub-agents are routed in-process (sync ``task`` tool) or to the langgraph
@@ -10,7 +10,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from EvoScientist.EvoScientist import _maybe_swap_async_subagents
+from metasci_scribe.agent import _maybe_swap_async_subagents
 
 
 def _sub(
@@ -47,7 +47,7 @@ def test_returns_unchanged_when_async_disabled_and_strips_flag():
         _sub("planner-agent", async_flag=False),
         _sub("writing-agent", async_flag=True),
     ]
-    with patch("EvoScientist.EvoScientist._ensure_config", return_value=cfg):
+    with patch("metasci_scribe.agent._ensure_config", return_value=cfg):
         out = _maybe_swap_async_subagents(subs)
     assert out is subs
     for s in out:
@@ -74,9 +74,9 @@ class TestFallbackPath:
             _sub("writing-agent", async_flag=True),
         ]
         with (
-            patch("EvoScientist.EvoScientist._ensure_config", return_value=cfg),
+            patch("metasci_scribe.agent._ensure_config", return_value=cfg),
             patch(
-                "EvoScientist.langgraph_dev.manager.is_async_subagents_available",
+                "metasci_scribe.langgraph_dev.manager.is_async_subagents_available",
                 return_value=False,
             ),
         ):
@@ -91,9 +91,9 @@ class TestFallbackPath:
             _sub("writing-agent", async_flag=True),
         ]
         with (
-            patch("EvoScientist.EvoScientist._ensure_config", return_value=cfg),
+            patch("metasci_scribe.agent._ensure_config", return_value=cfg),
             patch(
-                "EvoScientist.langgraph_dev.manager.is_async_subagents_available",
+                "metasci_scribe.langgraph_dev.manager.is_async_subagents_available",
                 return_value=False,
             ),
         ):
@@ -114,9 +114,9 @@ def test_no_async_flagged_subs_strips_and_returns():
         _sub("research-agent", async_flag=False),
     ]
     with (
-        patch("EvoScientist.EvoScientist._ensure_config", return_value=cfg),
+        patch("metasci_scribe.agent._ensure_config", return_value=cfg),
         patch(
-            "EvoScientist.langgraph_dev.manager.is_async_subagents_available",
+            "metasci_scribe.langgraph_dev.manager.is_async_subagents_available",
             return_value=True,
         ),
     ):
@@ -139,9 +139,9 @@ def test_swaps_async_flagged_subs():
         _sub("data-analysis-agent", async_flag=True, description="analyze"),
     ]
     with (
-        patch("EvoScientist.EvoScientist._ensure_config", return_value=cfg),
+        patch("metasci_scribe.agent._ensure_config", return_value=cfg),
         patch(
-            "EvoScientist.langgraph_dev.manager.is_async_subagents_available",
+            "metasci_scribe.langgraph_dev.manager.is_async_subagents_available",
             return_value=True,
         ),
     ):
@@ -174,7 +174,7 @@ def test_only_in_process_specs_resolve_against_the_caller_registry():
         _sub("writing-agent", async_flag=True, tool_names=["remote_only"]),
     ]
     with patch(
-        "EvoScientist.langgraph_dev.manager.is_async_subagents_available",
+        "metasci_scribe.langgraph_dev.manager.is_async_subagents_available",
         return_value=True,
     ):
         out = _maybe_swap_async_subagents(
@@ -195,9 +195,9 @@ def test_swap_uses_configured_port():
     cfg = SimpleNamespace(enable_async_subagents=True, langgraph_dev_port=9999)
     subs = [_sub("writing-agent", async_flag=True)]
     with (
-        patch("EvoScientist.EvoScientist._ensure_config", return_value=cfg),
+        patch("metasci_scribe.agent._ensure_config", return_value=cfg),
         patch(
-            "EvoScientist.langgraph_dev.manager.is_async_subagents_available",
+            "metasci_scribe.langgraph_dev.manager.is_async_subagents_available",
             return_value=True,
         ),
     ):
@@ -215,9 +215,9 @@ def test_swap_uses_configured_host():
     )
     subs = [_sub("writing-agent", async_flag=True)]
     with (
-        patch("EvoScientist.EvoScientist._ensure_config", return_value=cfg),
+        patch("metasci_scribe.agent._ensure_config", return_value=cfg),
         patch(
-            "EvoScientist.langgraph_dev.manager.is_async_subagents_available",
+            "metasci_scribe.langgraph_dev.manager.is_async_subagents_available",
             return_value=True,
         ),
     ):
@@ -236,9 +236,9 @@ def test_swap_maps_wildcard_host_to_loopback():
     )
     subs = [_sub("writing-agent", async_flag=True)]
     with (
-        patch("EvoScientist.EvoScientist._ensure_config", return_value=cfg),
+        patch("metasci_scribe.agent._ensure_config", return_value=cfg),
         patch(
-            "EvoScientist.langgraph_dev.manager.is_async_subagents_available",
+            "metasci_scribe.langgraph_dev.manager.is_async_subagents_available",
             return_value=True,
         ),
     ):

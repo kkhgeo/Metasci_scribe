@@ -9,9 +9,9 @@ from unittest.mock import MagicMock
 
 from langgraph_sdk.errors import NotFoundError
 
-from EvoScientist.cli import commands
-from EvoScientist.config import MemoryObservationWriter
-from EvoScientist.runtime import AsyncRuntime
+from metasci_scribe.cli import commands
+from metasci_scribe.config import MemoryObservationWriter
+from metasci_scribe.runtime import AsyncRuntime
 
 
 def serve_config(
@@ -65,7 +65,7 @@ def run_serve_once(
     message_queue=None,
     process_message=None,
 ):
-    import EvoScientist.config as config_mod
+    import metasci_scribe.config as config_mod
 
     order: list[tuple[str, str | None]] = []
     captured: dict[str, object] = {}
@@ -272,7 +272,7 @@ class FakeAssistants:
         self.graph = graph
 
     def get_graph(self, assistant_id):
-        assert assistant_id == "EvoScientist"
+        assert assistant_id == "metasci-scribe"
         return self.graph
 
 

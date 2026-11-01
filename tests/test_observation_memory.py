@@ -15,20 +15,20 @@ from langchain.agents.middleware.types import AgentState
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from pydantic import BaseModel
 
-from EvoScientist.config import EvoScientistConfig, MemoryObservationWriter
-from EvoScientist.gateway import background_runs
-from EvoScientist.memory import (
+from metasci_scribe.config import MemoryObservationWriter, ScribeConfig
+from metasci_scribe.gateway import background_runs
+from metasci_scribe.memory import (
     launch as memory_launch,
 )
-from EvoScientist.memory import (
+from metasci_scribe.memory import (
     scheduler as memory_scheduler,
 )
-from EvoScientist.memory import (
+from metasci_scribe.memory import (
     source_context,
     worker_activity,
 )
-from EvoScientist.memory.agents import memory_worker, observation_linker
-from EvoScientist.memory.observations import (
+from metasci_scribe.memory.agents import memory_worker, observation_linker
+from metasci_scribe.memory.observations import (
     MemoryScope,
     MemorySourceType,
     MemoryType,
@@ -44,9 +44,9 @@ from EvoScientist.memory.observations import (
     record_observation_file,
     search_observation_files,
 )
-from EvoScientist.memory.search import _tokens
-from EvoScientist.memory.types import ObservationRelation
-from EvoScientist.middleware import memory_lifecycle
+from metasci_scribe.memory.search import _tokens
+from metasci_scribe.memory.types import ObservationRelation
+from metasci_scribe.middleware import memory_lifecycle
 from tests.fakes.memory import (
     fake_runtime,
     linker_context,
@@ -89,7 +89,7 @@ def _memory_worker_run(
     run_id: str = "run-1",
     workspace_dir: str = "/tmp/ws",
     project_id: str = "P-project",
-    source_agent: str = "EvoScientist",
+    source_agent: str = "metasci-scribe",
     source_session_id: str = "thread-1",
     trajectory_digest: str = "digest-1",
 ) -> background_runs.BackgroundRun:
@@ -162,7 +162,7 @@ def _record_test_observation(
         scope=scope,
         source_type=MemorySourceType.TURN,
         source_session_id="thread-1",
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
 
 
@@ -261,7 +261,7 @@ def test_link_observation_files_writes_frontmatter_and_dedupes(tmp_path):
         scope=MemoryScope.PROJECT,
         source_type=MemorySourceType.TURN,
         source_session_id="thread-1",
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
     second = record_observation_file(
         memory_dir=memories,
@@ -273,7 +273,7 @@ def test_link_observation_files_writes_frontmatter_and_dedupes(tmp_path):
         scope=MemoryScope.PROJECT,
         source_type=MemorySourceType.TURN,
         source_session_id="thread-1",
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
     first_path = memories / first["path"].removeprefix("/memories/")
     second_path = memories / second["path"].removeprefix("/memories/")
@@ -348,7 +348,7 @@ def test_link_observation_files_serializes_concurrent_frontmatter_updates(tmp_pa
         scope=MemoryScope.PROJECT,
         source_type=MemorySourceType.TURN,
         source_session_id="thread-1",
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
     targets = [
         record_observation_file(
@@ -361,7 +361,7 @@ def test_link_observation_files_serializes_concurrent_frontmatter_updates(tmp_pa
             scope=MemoryScope.PROJECT,
             source_type=MemorySourceType.TURN,
             source_session_id="thread-1",
-            source_agent="EvoScientist",
+            source_agent="metasci-scribe",
         )
         for index in range(12)
     ]
@@ -411,7 +411,7 @@ def test_read_and_search_surface_related_observations(tmp_path):
         scope=MemoryScope.PROJECT,
         source_type=MemorySourceType.TURN,
         source_session_id="thread-1",
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
     target = record_observation_file(
         memory_dir=memories,
@@ -423,7 +423,7 @@ def test_read_and_search_surface_related_observations(tmp_path):
         scope=MemoryScope.PROJECT,
         source_type=MemorySourceType.TURN,
         source_session_id="thread-1",
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
     link_observation_files(
         memory_dir=memories,
@@ -487,7 +487,7 @@ def test_read_and_search_resolve_related_observations_from_other_projects(tmp_pa
         scope=MemoryScope.GLOBAL,
         source_type=MemorySourceType.TURN,
         source_session_id="thread-1",
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
     target = record_observation_file(
         memory_dir=memories,
@@ -499,7 +499,7 @@ def test_read_and_search_resolve_related_observations_from_other_projects(tmp_pa
         scope=MemoryScope.PROJECT,
         source_type=MemorySourceType.TURN,
         source_session_id="thread-2",
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
     link_observation_files(
         memory_dir=memories,
@@ -541,7 +541,7 @@ def test_malformed_observation_frontmatter_is_skipped(tmp_path):
         scope=MemoryScope.PROJECT,
         source_type=MemorySourceType.TURN,
         source_session_id="thread-1",
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
     global_dir = memories / "observations" / "global"
     global_dir.mkdir(parents=True, exist_ok=True)
@@ -596,7 +596,7 @@ def test_legacy_observation_source_without_session_id_still_reads(tmp_path):
         "scope: global\n"
         "source:\n"
         "  type: turn\n"
-        "  agent: EvoScientist\n"
+        "  agent: metasci_scribe\n"
         "---\n"
         "Legacy body text.\n",
         encoding="utf-8",
@@ -634,7 +634,7 @@ def test_unquoted_naive_yaml_timestamp_does_not_claim_utc(tmp_path):
         "scope: global\n"
         "source:\n"
         "  type: turn\n"
-        "  agent: EvoScientist\n"
+        "  agent: metasci_scribe\n"
         "  session_id: thread-1\n"
         "---\n"
         "Legacy body text.\n",
@@ -659,7 +659,7 @@ def test_unquoted_aware_yaml_timestamp_normalizes_to_utc(tmp_path):
         "scope: global\n"
         "source:\n"
         "  type: turn\n"
-        "  agent: EvoScientist\n"
+        "  agent: metasci_scribe\n"
         "  session_id: thread-1\n"
         "---\n"
         "Legacy body text.\n",
@@ -685,7 +685,7 @@ def test_link_observation_files_keeps_supersedes_directional(tmp_path):
         scope=MemoryScope.PROJECT,
         source_type=MemorySourceType.TURN,
         source_session_id="thread-1",
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
     target = record_observation_file(
         memory_dir=memories,
@@ -697,7 +697,7 @@ def test_link_observation_files_keeps_supersedes_directional(tmp_path):
         scope=MemoryScope.PROJECT,
         source_type=MemorySourceType.TURN,
         source_session_id="thread-1",
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
 
     result = link_observation_files(
@@ -753,7 +753,7 @@ def test_link_observations_tool_uses_runtime_project_id(tmp_path):
         scope=MemoryScope.PROJECT,
         source_type=MemorySourceType.TURN,
         source_session_id="thread-1",
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
     second = record_observation_file(
         memory_dir=memories,
@@ -765,7 +765,7 @@ def test_link_observations_tool_uses_runtime_project_id(tmp_path):
         scope=MemoryScope.PROJECT,
         source_type=MemorySourceType.TURN,
         source_session_id="thread-1",
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
     tool = create_link_observations_tool(
         memory_dir=memories,
@@ -806,7 +806,7 @@ def test_observation_linker_finish_counts_successful_relations_once(tmp_path):
         scope=MemoryScope.PROJECT,
         source_type=MemorySourceType.TURN,
         source_session_id="thread-1",
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
     second = record_observation_file(
         memory_dir=memories,
@@ -818,7 +818,7 @@ def test_observation_linker_finish_counts_successful_relations_once(tmp_path):
         scope=MemoryScope.PROJECT,
         source_type=MemorySourceType.TURN,
         source_session_id="thread-1",
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
     run = _observation_linker_run()
     hooks = memory_launch._observation_linker_launch_hooks(memories)
@@ -862,7 +862,7 @@ def test_observation_linker_finish_does_not_count_reason_only_updates(tmp_path):
         scope=MemoryScope.PROJECT,
         source_type=MemorySourceType.TURN,
         source_session_id="thread-1",
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
     second = record_observation_file(
         memory_dir=memories,
@@ -874,7 +874,7 @@ def test_observation_linker_finish_does_not_count_reason_only_updates(tmp_path):
         scope=MemoryScope.PROJECT,
         source_type=MemorySourceType.TURN,
         source_session_id="thread-1",
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
     link_observation_files(
         memory_dir=memories,
@@ -916,7 +916,7 @@ def test_read_and_search_observation_tools_use_runtime_project_id(tmp_path):
         scope=MemoryScope.PROJECT,
         source_type=MemorySourceType.TURN,
         source_session_id="thread-1",
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
 
     search_tool = create_search_observations_tool(
@@ -1486,7 +1486,7 @@ def test_search_observation_files_returns_no_low_confidence_fallback(tmp_path):
 
 
 def test_record_observation_tool_can_use_worker_config_source(tmp_path):
-    from EvoScientist.middleware.memory import create_memory_middleware
+    from metasci_scribe.middleware.memory import create_memory_middleware
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -1537,7 +1537,7 @@ def test_record_observation_tool_can_use_worker_config_source(tmp_path):
 
 
 def test_record_observation_tool_schema_hides_runtime(tmp_path):
-    from EvoScientist.middleware.memory import create_memory_middleware
+    from metasci_scribe.middleware.memory import create_memory_middleware
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -1562,7 +1562,7 @@ def test_record_observation_tool_schema_hides_runtime(tmp_path):
 
 
 def test_record_observation_tool_keeps_injected_runtime_through_validation(tmp_path):
-    from EvoScientist.middleware.memory import create_memory_middleware
+    from metasci_scribe.middleware.memory import create_memory_middleware
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -1570,7 +1570,7 @@ def test_record_observation_tool_keeps_injected_runtime_through_validation(tmp_p
         str(tmp_path / "memories"),
         workspace_dir=workspace,
         source_type=MemorySourceType.TURN,
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
     tool = tool_by_name(middleware.tools, "record_observation")
     payload = record_observation_payload(
@@ -1597,14 +1597,14 @@ def test_record_observation_tool_keeps_injected_runtime_through_validation(tmp_p
         "scope": "global",
         "source": {
             "type": "turn",
-            "agent": "EvoScientist",
+            "agent": "metasci-scribe",
             "session_id": "thread-from-runtime",
         },
     }
 
 
 def test_record_observation_tool_skips_without_runtime_thread_id(tmp_path):
-    from EvoScientist.middleware.memory import create_memory_middleware
+    from metasci_scribe.middleware.memory import create_memory_middleware
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -1635,7 +1635,7 @@ def test_record_observation_tool_skips_without_runtime_thread_id(tmp_path):
 
 
 def test_direct_record_observation_queues_linking_until_worker_finish(tmp_path):
-    from EvoScientist.middleware.memory import create_memory_middleware
+    from metasci_scribe.middleware.memory import create_memory_middleware
 
     memory_dir = tmp_path / "memories"
     workspace = tmp_path / "workspace"
@@ -1703,7 +1703,7 @@ def test_turn_compaction_hides_task_call_and_keeps_orchestrator_response():
         HumanMessage("please delegate"),
         AIMessage(
             content="",
-            name="EvoScientist",
+            name="metasci-scribe",
             tool_calls=[
                 {
                     "name": "task",
@@ -1714,13 +1714,13 @@ def test_turn_compaction_hides_task_call_and_keeps_orchestrator_response():
         ),
         ToolMessage("raw subagent result body", tool_call_id="task-1"),
         AIMessage(
-            "final orchestrator text with summarized finding", name="EvoScientist"
+            "final orchestrator text with summarized finding", name="metasci-scribe"
         ),
     ]
 
     compact = source_context._compact_turn_messages(
         messages,
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
 
     assert compact == [
@@ -1728,7 +1728,7 @@ def test_turn_compaction_hides_task_call_and_keeps_orchestrator_response():
         {
             "role": "ai",
             "content": "final orchestrator text with summarized finding",
-            "name": "EvoScientist",
+            "name": "metasci-scribe",
         },
     ]
 
@@ -1738,7 +1738,7 @@ def test_turn_compaction_keeps_direct_tool_results_with_tool_names():
         HumanMessage("run a check"),
         AIMessage(
             content="",
-            name="EvoScientist",
+            name="metasci-scribe",
             tool_calls=[
                 {
                     "name": "execute",
@@ -1754,12 +1754,12 @@ def test_turn_compaction_keeps_direct_tool_results_with_tool_names():
         ),
         ToolMessage("pytest passed", tool_call_id="exec-1", name="execute"),
         ToolMessage("raw subagent result body", tool_call_id="task-1", name="task"),
-        AIMessage("final answer", name="EvoScientist"),
+        AIMessage("final answer", name="metasci-scribe"),
     ]
 
     compact = source_context._compact_turn_messages(
         messages,
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
 
     assert compact == [
@@ -1767,7 +1767,7 @@ def test_turn_compaction_keeps_direct_tool_results_with_tool_names():
         {
             "role": "ai",
             "content": "",
-            "name": "EvoScientist",
+            "name": "metasci-scribe",
             "tool_calls": [
                 {
                     "name": "execute",
@@ -1784,50 +1784,50 @@ def test_turn_compaction_keeps_direct_tool_results_with_tool_names():
             "tool_call_id": "exec-1",
             "status": "success",
         },
-        {"role": "ai", "content": "final answer", "name": "EvoScientist"},
+        {"role": "ai", "content": "final answer", "name": "metasci-scribe"},
     ]
 
 
 def test_turn_compaction_uses_latest_user_turn_only():
     messages = [
         HumanMessage("old request"),
-        AIMessage("old answer", name="EvoScientist"),
+        AIMessage("old answer", name="metasci-scribe"),
         HumanMessage("current request"),
-        AIMessage("current answer", name="EvoScientist"),
+        AIMessage("current answer", name="metasci-scribe"),
     ]
 
     compact = source_context._compact_turn_messages(
         messages,
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
 
     assert compact == [
         {"role": "human", "content": "current request"},
-        {"role": "ai", "content": "current answer", "name": "EvoScientist"},
+        {"role": "ai", "content": "current answer", "name": "metasci-scribe"},
     ]
 
 
 def test_turn_compaction_leaves_out_the_graders_revision_request():
     messages = [
         HumanMessage("write results/table.csv"),
-        AIMessage("done", name="EvoScientist"),
+        AIMessage("done", name="metasci-scribe"),
         HumanMessage(
             "results/table.csv is missing",
             name="rubric_grader",
             additional_kwargs={"lc_source": "rubric_grader"},
         ),
-        AIMessage("fixed", name="EvoScientist"),
+        AIMessage("fixed", name="metasci-scribe"),
     ]
 
     compact = source_context._compact_turn_messages(
         messages,
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
 
     assert compact == [
         {"role": "human", "content": "write results/table.csv"},
-        {"role": "ai", "content": "done", "name": "EvoScientist"},
-        {"role": "ai", "content": "fixed", "name": "EvoScientist"},
+        {"role": "ai", "content": "done", "name": "metasci-scribe"},
+        {"role": "ai", "content": "fixed", "name": "metasci-scribe"},
     ]
 
 
@@ -1851,7 +1851,7 @@ async def test_lifecycle_schedules_turn_worker_without_awaiting(tmp_path, monkey
         workspace_dir=workspace_dir,
         project_id="P-project",
         source_type=MemorySourceType.TURN,
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
         memory_scheduler=coordinator,
     )
     runtime = fake_runtime("thread-1")
@@ -1900,11 +1900,11 @@ def test_lifecycle_skips_memory_worker_without_runtime_thread_id(tmp_path, monke
         workspace_dir=tmp_path / "workspace",
         project_id="P-project",
         source_type=MemorySourceType.TURN,
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
 
     middleware.after_agent(
-        {"messages": [HumanMessage("hi"), AIMessage("done", name="EvoScientist")]},
+        {"messages": [HumanMessage("hi"), AIMessage("done", name="metasci-scribe")]},
         fake_runtime(),
     )
 
@@ -2086,7 +2086,7 @@ def test_memory_worker_linker_waits_for_active_workers_and_batches_observations(
             thread_id="thread-2",
             run_id="run-2",
             workspace_dir=str(workspace_dir),
-            source_agent="EvoScientist",
+            source_agent="metasci-scribe",
             source_session_id="session-b",
             trajectory_digest="digest-b",
         )
@@ -2342,7 +2342,7 @@ def test_observation_linker_does_not_launch_when_observations_disabled(
     monkeypatch.setattr(
         memory_launch,
         "get_effective_config",
-        lambda: EvoScientistConfig(memory_observations_enabled=False),
+        lambda: ScribeConfig(memory_observations_enabled=False),
     )
     launch_call = MagicMock()
     monkeypatch.setattr(memory_launch, "launch_background_run", launch_call)
@@ -2365,7 +2365,7 @@ async def test_async_observation_linker_does_not_launch_when_observations_disabl
     monkeypatch.setattr(
         memory_launch,
         "get_effective_config",
-        lambda: EvoScientistConfig(memory_observations_enabled=False),
+        lambda: ScribeConfig(memory_observations_enabled=False),
     )
     launch_call = MagicMock()
     monkeypatch.setattr(memory_launch, "alaunch_background_run", launch_call)
@@ -2428,8 +2428,8 @@ def test_subagent_worker_uses_tool_calling_without_thinking_on_deepseek(
     """DeepSeek rejects json_schema response_format and, in thinking mode, forced tool_choice."""
     import httpx
 
-    from EvoScientist.llm import get_chat_model
-    from EvoScientist.memory.agents._factory import build_memory_agent_graph
+    from metasci_scribe.llm import get_chat_model
+    from metasci_scribe.memory.agents._factory import build_memory_agent_graph
     from tests.fakes.common import deepseek_tool_call_response
 
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
@@ -2449,7 +2449,7 @@ def test_subagent_worker_uses_tool_calling_without_thinking_on_deepseek(
             "deepseek-v4-pro", provider="deepseek", http_client=client
         )
         monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_auxiliary_chat_model", lambda: model
+            "metasci_scribe.agent._ensure_auxiliary_chat_model", lambda: model
         )
         graph = build_memory_agent_graph(
             name="evomemory-subagent-worker",
@@ -2473,13 +2473,13 @@ def test_subagent_worker_uses_tool_calling_without_thinking_on_deepseek(
 def test_memory_agent_graph_leaves_other_models_to_langchain(tmp_path, monkeypatch):
     from langchain_anthropic import ChatAnthropic
 
-    from EvoScientist.memory.agents._factory import build_memory_agent_graph
+    from metasci_scribe.memory.agents._factory import build_memory_agent_graph
 
     model = ChatAnthropic(model="claude-haiku-4-5", api_key="k")
     create = MagicMock()
     monkeypatch.setattr("deepagents.create_deep_agent", create)
     monkeypatch.setattr(
-        "EvoScientist.EvoScientist._ensure_auxiliary_chat_model", lambda: model
+        "metasci_scribe.agent._ensure_auxiliary_chat_model", lambda: model
     )
 
     build_memory_agent_graph(
@@ -2502,15 +2502,15 @@ def test_memory_agent_graph_leaves_other_models_to_langchain(tmp_path, monkeypat
 def test_memory_agent_graph_keeps_deepseek_thinking_without_response_format(
     tmp_path, monkeypatch
 ):
-    from EvoScientist.llm import get_chat_model
-    from EvoScientist.memory.agents._factory import build_memory_agent_graph
+    from metasci_scribe.llm import get_chat_model
+    from metasci_scribe.memory.agents._factory import build_memory_agent_graph
 
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
     model = get_chat_model("deepseek-v4-pro", provider="deepseek")
     create = MagicMock()
     monkeypatch.setattr("deepagents.create_deep_agent", create)
     monkeypatch.setattr(
-        "EvoScientist.EvoScientist._ensure_auxiliary_chat_model", lambda: model
+        "metasci_scribe.agent._ensure_auxiliary_chat_model", lambda: model
     )
 
     build_memory_agent_graph(
@@ -2701,7 +2701,7 @@ def test_memory_worker_skips_when_langgraph_dev_unavailable(tmp_path, monkeypatc
         background_runs, "default_background_run_url", lambda: "http://x"
     )
     monkeypatch.setattr(
-        "EvoScientist.langgraph_dev.manager.is_langgraph_dev_running",
+        "metasci_scribe.langgraph_dev.manager.is_langgraph_dev_running",
         lambda **_kwargs: False,
     )
 
@@ -2715,10 +2715,10 @@ def test_memory_worker_skips_when_langgraph_dev_unavailable(tmp_path, monkeypatc
         workspace_dir=tmp_path / "workspace",
         project_id="P-project",
         source_type=MemorySourceType.TURN,
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
     middleware.after_agent(
-        {"messages": [HumanMessage("hi"), AIMessage("done", name="EvoScientist")]},
+        {"messages": [HumanMessage("hi"), AIMessage("done", name="metasci-scribe")]},
         fake_runtime("thread-1"),
     )
 
@@ -2733,7 +2733,7 @@ def test_memory_worker_marks_active_status(tmp_path, monkeypatch):
         lambda _workspace_dir: "/tmp/ws",
     )
     monkeypatch.setattr(
-        "EvoScientist.langgraph_dev.manager.is_langgraph_dev_running",
+        "metasci_scribe.langgraph_dev.manager.is_langgraph_dev_running",
         lambda **_kwargs: True,
     )
 
@@ -2765,7 +2765,7 @@ def test_memory_worker_marks_active_status(tmp_path, monkeypatch):
     expected_metadata = {
         "run_kind": "evomemory_turn_worker",
         "source_session_id": "thread-1",
-        "source_agent": "EvoScientist",
+        "source_agent": "metasci-scribe",
         "project_id": "P-project",
         "trajectory_digest": source_context._trajectory_digest(trajectory),
         "workspace_dir": "/tmp/ws",
@@ -2824,7 +2824,7 @@ async def test_async_memory_worker_offloads_blocking_work(tmp_path, monkeypatch)
         )
 
     monkeypatch.setattr(
-        "EvoScientist.langgraph_dev.manager.is_langgraph_dev_running",
+        "metasci_scribe.langgraph_dev.manager.is_langgraph_dev_running",
         fake_is_running,
     )
     monkeypatch.setattr(memory_launch, "snapshot_memory_outputs", fake_snapshot)
@@ -2915,7 +2915,7 @@ def test_memory_worker_observed_outputs_includes_active_worker_delta(tmp_path):
         scope=MemoryScope.PROJECT,
         source_type=MemorySourceType.TURN,
         source_session_id="thread-1",
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
 
     status = worker_activity.memory_worker_observed_outputs()
@@ -3216,7 +3216,7 @@ def _write_observation(path, obs_id, summary="test", scope="global", related_id=
         f"scope: {scope}\n"
         "source:\n"
         "  type: turn\n"
-        "  agent: EvoScientist\n"
+        "  agent: metasci_scribe\n"
         f"{related_block}"
         "---\n"
         "Body text.\n",
@@ -3230,7 +3230,7 @@ class TestObservationCache:
     @pytest.fixture(autouse=True)
     def _clear_observation_cache(self):
         """Clear the process-scoped parse cache before and after each test."""
-        from EvoScientist.memory.observations import store
+        from metasci_scribe.memory.observations import store
 
         store._file_parse_cache.clear()
         store._cached_max_files = None
@@ -3240,7 +3240,7 @@ class TestObservationCache:
 
     def test_cache_returns_same_documents_without_reparse(self, tmp_path, monkeypatch):
         """A second call with unchanged files must hit the cache, not re-read."""
-        from EvoScientist.memory.observations import store
+        from metasci_scribe.memory.observations import store
 
         memories = tmp_path / "memories"
         _write_observation(
@@ -3270,7 +3270,7 @@ class TestObservationCache:
         """Changing a file's mtime must force a re-read."""
         import os
 
-        from EvoScientist.memory.observations import store
+        from metasci_scribe.memory.observations import store
 
         memories = tmp_path / "memories"
         obs_path = memories / "observations" / "global" / "O-1.md"
@@ -3306,7 +3306,7 @@ class TestObservationCache:
         self, tmp_path, monkeypatch
     ):
         """Adding a new file parses only the new file; cached files stay cached."""
-        from EvoScientist.memory.observations import store
+        from metasci_scribe.memory.observations import store
 
         memories = tmp_path / "memories"
         _write_observation(memories / "observations" / "global" / "O-1.md", "O-1")
@@ -3337,7 +3337,7 @@ class TestObservationCache:
 
     def test_cache_deletion_drops_file_without_reparsing(self, tmp_path, monkeypatch):
         """Deleting a file drops it from the results without re-parsing the rest."""
-        from EvoScientist.memory.observations import store
+        from metasci_scribe.memory.observations import store
 
         memories = tmp_path / "memories"
         obs_a = memories / "observations" / "global" / "O-1.md"
@@ -3377,7 +3377,7 @@ class TestObservationCache:
         Parse failures are not cached: the broken file is retried on every
         call, while the healthy file stays cached.
         """
-        from EvoScientist.memory.observations import store
+        from metasci_scribe.memory.observations import store
 
         memories = tmp_path / "memories"
         global_dir = memories / "observations" / "global"
@@ -3420,7 +3420,7 @@ class TestObservationCache:
         self, tmp_path, monkeypatch
     ):
         """Calls with different ``memory_type`` filters share one cache entry."""
-        from EvoScientist.memory.observations import store
+        from metasci_scribe.memory.observations import store
 
         memories = tmp_path / "memories"
         _write_observation(memories / "observations" / "global" / "O-1.md", "O-1")
@@ -3456,7 +3456,7 @@ class TestObservationCache:
         sharing the same ``memory_dir`` must not each re-parse the global
         store.
         """
-        from EvoScientist.memory.observations import store
+        from metasci_scribe.memory.observations import store
 
         memories = tmp_path / "memories"
         _write_observation(
@@ -3499,7 +3499,7 @@ class TestObservationCache:
 
     def test_lru_evicts_least_recently_used_file(self, tmp_path, monkeypatch):
         """The per-file cache must evict the least-recently-used file past the cap."""
-        from EvoScientist.memory.observations import store
+        from metasci_scribe.memory.observations import store
 
         memories = tmp_path / "memories"
         for project in ("P-A", "P-B", "P-C"):
@@ -3545,7 +3545,7 @@ class TestObservationCache:
         touched entry, so the cache temporarily exceeds the cap instead of
         thrashing, and a second identical call re-parses nothing.
         """
-        from EvoScientist.memory.observations import store
+        from metasci_scribe.memory.observations import store
 
         memories = tmp_path / "memories"
         _write_observation(memories / "observations" / "global" / "O-1.md", "O-1")
@@ -3584,7 +3584,7 @@ class TestObservationCache:
         parse through the per-file cache, a second call re-parses nothing even
         though link resolution runs again.
         """
-        from EvoScientist.memory.observations import store
+        from metasci_scribe.memory.observations import store
 
         memories = tmp_path / "memories"
         _write_observation(memories / "observations" / "global" / "O-g.md", "O-g")
@@ -3642,7 +3642,7 @@ class TestObservationCache:
         """
         from collections import OrderedDict
 
-        from EvoScientist.memory.observations import store
+        from metasci_scribe.memory.observations import store
 
         held_dir = tmp_path / "held"
         empty_dir = tmp_path / "empty"
@@ -3700,17 +3700,17 @@ def test_turn_compaction_starts_at_the_user_message_not_a_pinned_skill():
                 "skill": {"name": "alpha", "path": "/skills/alpha/SKILL.md"},
             },
         ),
-        AIMessage("intro drafted", name="EvoScientist"),
+        AIMessage("intro drafted", name="metasci-scribe"),
     ]
 
     compact = source_context._compact_turn_messages(
         messages,
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
 
     assert compact == [
         {"role": "human", "content": "/alpha draft the intro"},
         {"role": "human", "content": "[pinned skill: alpha]"},
-        {"role": "ai", "content": "intro drafted", "name": "EvoScientist"},
+        {"role": "ai", "content": "intro drafted", "name": "metasci-scribe"},
     ]
     assert "SECRET BODY" not in str(compact)

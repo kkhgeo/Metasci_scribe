@@ -6,7 +6,7 @@ import re
 
 from typer.testing import CliRunner
 
-from EvoScientist.cli._app import app
+from metasci_scribe.cli._app import app
 
 runner = CliRunner()
 

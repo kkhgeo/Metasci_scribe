@@ -8,9 +8,9 @@ from io import StringIO
 import pytest
 from rich.console import Console
 
-from EvoScientist.gateway.local import LocalGraphGateway
-from EvoScientist.middleware.goal import new_goal_request
-from EvoScientist.stream import display as display_mod
+from metasci_scribe.gateway.local import LocalGraphGateway
+from metasci_scribe.middleware.goal import new_goal_request
+from metasci_scribe.stream import display as display_mod
 from tests.fakes.goal import ACCEPT, CANCEL, OBJECTIVE, cli_goal_agent, feedback
 
 pytestmark = pytest.mark.usefixtures("no_mcp")

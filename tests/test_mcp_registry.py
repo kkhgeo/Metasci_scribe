@@ -1,9 +1,9 @@
-"""Tests for EvoScientist.mcp.registry."""
+"""Tests for metasci_scribe.mcp.registry."""
 
 import pytest
 
-from EvoScientist.git_cli import GitNotFoundError
-from EvoScientist.mcp.registry import _MARKETPLACE_CACHE, fetch_marketplace_index
+from metasci_scribe.git_cli import GitNotFoundError
+from metasci_scribe.mcp.registry import _MARKETPLACE_CACHE, fetch_marketplace_index
 
 
 class TestFetchMarketplaceIndex:

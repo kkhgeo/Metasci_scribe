@@ -17,14 +17,14 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import Field
 
-from EvoScientist.config import MemoryControls, MemoryObservationWriter
-from EvoScientist.memory.agents import memory_worker
-from EvoScientist.memory.observations.index import (
+from metasci_scribe.config import MemoryControls, MemoryObservationWriter
+from metasci_scribe.memory.agents import memory_worker
+from metasci_scribe.memory.observations.index import (
     DEFAULT_INLINE_ROWS_PER_SESSION,
     build_observation_index_context,
     build_observation_linker_index_context,
 )
-from EvoScientist.memory.observations.store import (
+from metasci_scribe.memory.observations.store import (
     ObservationFrontmatter,
     ObservationSourceFrontmatter,
     list_observation_documents,
@@ -32,8 +32,8 @@ from EvoScientist.memory.observations.store import (
     record_observation_file,
     write_observation_document,
 )
-from EvoScientist.memory.types import MemoryScope, MemorySourceType, MemoryType
-from EvoScientist.paths import Workspace
+from metasci_scribe.memory.types import MemoryScope, MemorySourceType, MemoryType
+from metasci_scribe.paths import Workspace
 from tests.fakes.memory import (
     record_observation_payload,
     tool_by_name,
@@ -41,7 +41,7 @@ from tests.fakes.memory import (
 )
 
 SESSION = "01a1test-0000-7000-8000-000000000001"
-LOGGER = "EvoScientist.memory.agents.memory_worker"
+LOGGER = "metasci_scribe.memory.agents.memory_worker"
 BUDGET = memory_worker.MEMORY_WORKER_MODEL_CALL_BUDGET
 SYNC_AND_ASYNC = pytest.mark.parametrize(
     "use_async", [False, True], ids=["sync", "async"]
@@ -153,7 +153,7 @@ def _build(
 ) -> tuple[Any, _ScriptedModel]:
     model = _ScriptedModel(scripts=scripts, bound=[])
     monkeypatch.setattr(
-        "EvoScientist.EvoScientist._ensure_auxiliary_chat_model", lambda: model
+        "metasci_scribe.agent._ensure_auxiliary_chat_model", lambda: model
     )
     graph = memory_worker.build_memory_worker_graph(
         source_type,
@@ -319,7 +319,7 @@ def test_last_budgeted_call_offers_only_the_summary_tool(tmp_path, monkeypatch, 
 
 def _run_with_model(tmp_path, monkeypatch, model):
     monkeypatch.setattr(
-        "EvoScientist.EvoScientist._ensure_auxiliary_chat_model", lambda: model
+        "metasci_scribe.agent._ensure_auxiliary_chat_model", lambda: model
     )
     graph = memory_worker.build_memory_worker_graph(
         MemorySourceType.SUBAGENT,
@@ -635,7 +635,7 @@ def test_store_refuses_placeholder_fields(tmp_path):
     ],
 )
 def test_is_stub_matches_model_filler(text):
-    from EvoScientist.memory.observations.store import _is_stub
+    from metasci_scribe.memory.observations.store import _is_stub
 
     assert _is_stub(text) is True
 
@@ -659,7 +659,7 @@ def test_is_stub_matches_model_filler(text):
     ],
 )
 def test_is_stub_keeps_real_text(text):
-    from EvoScientist.memory.observations.store import _is_stub
+    from metasci_scribe.memory.observations.store import _is_stub
 
     assert _is_stub(text) is False
 
@@ -702,7 +702,7 @@ def test_worker_stub_attempt_is_refused_and_counted(tmp_path, monkeypatch):
 def test_record_waits_for_another_process_holding_the_store(tmp_path, monkeypatch):
     """The main agent and the workers write from different processes, so the
     summary check and the write are one step across processes too."""
-    from EvoScientist.memory.observations import store
+    from metasci_scribe.memory.observations import store
 
     folder = tmp_path / "memories" / "observations"
     folder.mkdir(parents=True)
@@ -769,7 +769,7 @@ def test_staged_writes_match_a_plain_text_write_byte_for_byte(tmp_path):
 
 
 def test_record_gives_up_when_a_thread_holds_the_store_too_long(tmp_path, monkeypatch):
-    from EvoScientist.memory.observations import store
+    from metasci_scribe.memory.observations import store
 
     monkeypatch.setattr(store, "_RECORD_LOCK_TIMEOUT", 0.1)
     assert store._record_lock.acquire(timeout=1)
@@ -786,7 +786,7 @@ def test_failed_rewrite_of_a_read_only_file_leaves_no_staging_file(
 ):
     """Windows refuses to delete a read-only file; the staging copy takes the
     target's read-only mode, so cleanup clears it before deleting."""
-    from EvoScientist.memory.observations import store
+    from metasci_scribe.memory.observations import store
 
     _store_write(tmp_path, summary="lesson", body="one")
     [path] = _observation_files(tmp_path)
@@ -814,7 +814,7 @@ def test_failed_rewrite_of_a_read_only_file_leaves_no_staging_file(
 
 
 def test_failed_cleanup_chmod_still_removes_the_staging_file(tmp_path, monkeypatch):
-    from EvoScientist.memory.observations import store
+    from metasci_scribe.memory.observations import store
 
     _store_write(tmp_path, summary="lesson", body="one")
     [path] = _observation_files(tmp_path)
@@ -841,7 +841,7 @@ def test_failed_cleanup_chmod_still_removes_the_staging_file(tmp_path, monkeypat
 def test_observation_files_are_replaced_in_one_step(tmp_path, monkeypatch):
     """A rewrite (the linker) or a new record never leaves a partial file
     where the summary scan, the index or a search could read it."""
-    from EvoScientist.memory.observations import store
+    from metasci_scribe.memory.observations import store
 
     _store_write(tmp_path, summary="lesson", body="one")
     [path] = _observation_files(tmp_path)
@@ -876,7 +876,7 @@ def test_observation_files_are_replaced_in_one_step(tmp_path, monkeypatch):
 def test_observation_rewrite_drops_the_cached_parse(tmp_path, monkeypatch):
     """Even where stat cannot tell the files apart, the writing process must
     not serve the old parse."""
-    from EvoScientist.memory.observations import store
+    from metasci_scribe.memory.observations import store
 
     _store_write(tmp_path, summary="lesson", body="one")
     [path] = _observation_files(tmp_path)
@@ -902,7 +902,7 @@ def test_observation_rewrite_drops_the_cached_parse(tmp_path, monkeypatch):
 def test_observation_rewrite_outruns_a_parse_in_flight(tmp_path, monkeypatch):
     """A reader that parsed the old file before a rewrite must not put that
     parse into the cache afterwards."""
-    from EvoScientist.memory.observations import store
+    from metasci_scribe.memory.observations import store
 
     _store_write(tmp_path, summary="lesson", body="one")
     [path] = _observation_files(tmp_path)
@@ -939,7 +939,7 @@ def test_observation_rewrite_outruns_a_parse_in_flight(tmp_path, monkeypatch):
 
 def test_observation_rewrite_retries_a_busy_target(tmp_path, monkeypatch):
     """On Windows a reader's open handle fails the rename for a moment."""
-    from EvoScientist.memory.observations import store
+    from metasci_scribe.memory.observations import store
 
     _store_write(tmp_path, summary="lesson", body="one")
     [path] = _observation_files(tmp_path)
@@ -976,7 +976,7 @@ def test_observation_rewrite_retries_a_busy_target(tmp_path, monkeypatch):
 def test_main_agent_record_tool_itself_has_no_per_run_limit(tmp_path):
     """The cap lives in the worker middleware; the tool shared with the main
     agent writes as often as it is called."""
-    from EvoScientist.middleware.memory import create_memory_middleware
+    from metasci_scribe.middleware.memory import create_memory_middleware
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -984,7 +984,7 @@ def test_main_agent_record_tool_itself_has_no_per_run_limit(tmp_path):
         str(tmp_path / "memories"),
         workspace_dir=workspace,
         source_type=MemorySourceType.TURN,
-        source_agent="EvoScientist",
+        source_agent="metasci-scribe",
     )
     tool = tool_by_name(middleware.tools, "record_observation")
     runtime = tool_runtime(
@@ -1010,7 +1010,7 @@ def test_main_agent_record_tool_itself_has_no_per_run_limit(tmp_path):
 
 
 def test_main_agent_middleware_carries_no_guardrail(tmp_path):
-    from EvoScientist.EvoScientist import _get_default_middleware
+    from metasci_scribe.agent import _get_default_middleware
 
     middleware = _get_default_middleware(workspace=Workspace(tmp_path / "workspace"))
 
@@ -1448,12 +1448,12 @@ def test_worker_index_fills_by_time_alone(tmp_path, monkeypatch, source_type):
 def test_working_agents_share_the_index_by_session(tmp_path, monkeypatch):
     """The real wiring: the main agent, the async sub-agent graphs and the
     sync sub-agents all share an overflowing index by session."""
-    from EvoScientist import paths
-    from EvoScientist.EvoScientist import (
+    from metasci_scribe import paths
+    from metasci_scribe.agent import (
         _get_default_middleware,
         _inject_subagent_middleware,
     )
-    from EvoScientist.middleware.memory import EvoMemoryMiddleware
+    from metasci_scribe.middleware.memory import EvoMemoryMiddleware
 
     _write_overflowing_global_memory(tmp_path)
     shared = _index_rows(_index(tmp_path))
@@ -1549,9 +1549,9 @@ def test_strategy_replica_never_claims_a_tool_strategy_langchain_lacks(monkeypat
     from langchain_core.tools import tool
     from langchain_nvidia_ai_endpoints._common import _NVIDIABaseClient
 
-    from EvoScientist.llm import get_chat_model
-    from EvoScientist.llm.registry import _MODEL_ENTRIES
-    from EvoScientist.middleware.utils import structured_output_for
+    from metasci_scribe.llm import get_chat_model
+    from metasci_scribe.llm.registry import _MODEL_ENTRIES
+    from metasci_scribe.middleware.utils import structured_output_for
 
     for key in _PROVIDER_KEY_ENV:
         monkeypatch.setenv(key, "sk-test")

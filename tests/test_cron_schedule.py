@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 
 def _patch_client(monkeypatch):
-    from EvoScientist.cron import schedule as crons
+    from metasci_scribe.cron import schedule as crons
 
     fake = MagicMock()
     fake.crons.create.return_value = {"cron_id": "c-1", "schedule": "*/10 * * * *"}
@@ -88,9 +88,9 @@ def test_scheduler_yaml_loads_as_async():
 
     import yaml
 
-    import EvoScientist
+    import metasci_scribe
 
-    subagents_dir = Path(EvoScientist.__file__).parent / "subagents"
+    subagents_dir = Path(metasci_scribe.__file__).parent / "subagents"
     yaml_path = subagents_dir / "scheduler.yaml"
     assert yaml_path.exists(), f"Missing {yaml_path}"
     data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
@@ -107,14 +107,14 @@ def test_langgraph_json_registers_scheduler():
     import json
     from pathlib import Path
 
-    import EvoScientist
+    import metasci_scribe
 
-    root = Path(EvoScientist.__file__).parent
+    root = Path(metasci_scribe.__file__).parent
     manifest = json.loads(
         (root / "langgraph_dev" / "langgraph.json").read_text(encoding="utf-8")
     )
     assert manifest["graphs"]["scheduler"] == (
-        "EvoScientist.langgraph_dev.graphs:scheduler"
+        "metasci_scribe.langgraph_dev.graphs:scheduler"
     )
 
 
@@ -125,10 +125,10 @@ def test_scheduler_graph_id_matches_registration():
 
     import yaml
 
-    import EvoScientist
-    from EvoScientist.cron import schedule as crons
+    import metasci_scribe
+    from metasci_scribe.cron import schedule as crons
 
-    root = Path(EvoScientist.__file__).parent
+    root = Path(metasci_scribe.__file__).parent
     manifest = json.loads(
         (root / "langgraph_dev" / "langgraph.json").read_text(encoding="utf-8")
     )
@@ -147,9 +147,9 @@ def test_production_loaders_accept_utf8_content(tmp_path, monkeypatch):
     """Production config readers must handle localized UTF-8 content."""
     import os
 
-    from EvoScientist import paths
-    from EvoScientist.langgraph_dev import manager
-    from EvoScientist.mcp import client, registry
+    from metasci_scribe import paths
+    from metasci_scribe.langgraph_dev import manager
+    from metasci_scribe.mcp import client, registry
 
     mcp_config = tmp_path / "mcp.yaml"
     mcp_config.write_text(
@@ -184,19 +184,19 @@ args: ["-m", "écho"]
     assert entry.name == "écho"
     assert entry.tags == ["démo", "marché"]
 
-    venv = tmp_path / "uv" / "tools" / "evoscientist"
+    venv = tmp_path / "uv" / "tools" / "metasci-scribe"
     venv.mkdir(parents=True)
     (venv / "uv-receipt.toml").write_text(
         """
 [tool]
 requirements = [
-  { name = "evoscientist" },
+  { name = "metasci-scribe" },
   { name = "mcp-écho", specifier = ">=1.0" },
 ]
 """.lstrip(),
         encoding="utf-8",
     )
-    from EvoScientist import uv_tool
+    from metasci_scribe import uv_tool
 
     assert uv_tool.read_receipt(venv).with_args() == ["--with", "mcp-écho>=1.0"]
 
@@ -280,7 +280,7 @@ def test_run_now_with_rubric_sends_it_in_input_and_metadata(monkeypatch, workspa
 
 
 def test_create_cron_without_a_thread_passes_no_new_arguments(workspace):
-    from EvoScientist.cron.schedule import create_cron
+    from metasci_scribe.cron.schedule import create_cron
 
     fake = MagicMock()
     create_cron(
@@ -305,7 +305,7 @@ def test_create_cron_without_a_thread_passes_no_new_arguments(workspace):
 
 
 def test_create_cron_on_a_thread_keeps_the_workspace_tag_and_run_config(workspace):
-    from EvoScientist.cron.schedule import create_cron, run_config
+    from metasci_scribe.cron.schedule import create_cron, run_config
 
     fake = MagicMock()
     create_cron(

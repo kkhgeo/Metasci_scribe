@@ -10,10 +10,10 @@ from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
-from EvoScientist.config import EvoScientistConfig
-from EvoScientist.EvoScientist import create_cli_agent
-from EvoScientist.paths import Workspace
-from EvoScientist.stream.events import stream_agent_events
+from metasci_scribe.agent import create_cli_agent
+from metasci_scribe.config import ScribeConfig
+from metasci_scribe.paths import Workspace
+from metasci_scribe.stream.events import stream_agent_events
 
 pytestmark = pytest.mark.usefixtures("no_mcp")
 
@@ -34,7 +34,7 @@ def _execute(call_id: str, command: str) -> AIMessage:
 
 
 def _agent(tmp_path, messages):
-    cfg = EvoScientistConfig(enable_async_subagents=False, memory_workers_enabled=False)
+    cfg = ScribeConfig(enable_async_subagents=False, memory_workers_enabled=False)
     return create_cli_agent(
         workspace=Workspace(tmp_path),
         config=cfg,
@@ -260,7 +260,7 @@ async def test_a_declining_answer_sent_with_the_grant_still_declines(
     parked = await agent.ainvoke({"messages": [("user", "go")]}, config=_config())
     (interrupt,) = parked["__interrupt__"]
 
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.stream.events"):
+    with caplog.at_level(logging.WARNING, logger="metasci_scribe.stream.events"):
         events = [
             event
             async for event in stream_agent_events(
@@ -304,7 +304,7 @@ async def test_an_approving_answer_keeps_the_grant(tmp_path, caplog, monkeypatch
         return stream(*args, **kwargs)
 
     monkeypatch.setattr(agent, "astream_events", _spy)
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.stream.events"):
+    with caplog.at_level(logging.WARNING, logger="metasci_scribe.stream.events"):
         async for _ in stream_agent_events(
             agent,
             _resume(interrupt, APPROVE),
@@ -325,7 +325,7 @@ async def test_a_served_graph_still_asks_when_a_client_sends_the_grant(
 ):
     """The served main graph is built without the grant: a client that sends
     the key anyway gets the approval pause, and nothing runs."""
-    import EvoScientist.EvoScientist as es_mod
+    import metasci_scribe.agent as es_mod
 
     build = es_mod._build_hitl_interrupt_on
     monkeypatch.setattr(

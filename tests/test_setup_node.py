@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from EvoScientist.setup import _install, node
-from EvoScientist.setup.protocol import StageError
+from metasci_scribe.setup import _install, node
+from metasci_scribe.setup.protocol import StageError
 
 V = node.NODE_VERSION
 # The archive type the host would download, so extraction runs for real.
@@ -89,11 +89,11 @@ class ProbeTable(dict):
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     """Isolated DATA_DIR with a space and non-ASCII characters, no node on PATH."""
-    from EvoScientist import paths
+    from metasci_scribe import paths
 
     # Resolved like tools_dir() (on Windows this expands 8.3 short names), so
     # paths compare equal.
-    data = tmp_path.resolve() / "Jan Kowalski ąę" / ".evoscientist"
+    data = tmp_path.resolve() / "Jan Kowalski ąę" / ".metasci-scribe"
     monkeypatch.setattr(paths, "DATA_DIR", data)
     monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
     monkeypatch.setattr(node, "platform_id", lambda: PLAT)
@@ -163,11 +163,11 @@ def test_log_progress_logs_every_step_and_thins_the_download(caplog):
 
 
 def test_unwritable_tools_dir_raises_stage_error(env, monkeypatch):
-    from EvoScientist import paths
+    from metasci_scribe import paths
 
     blocker = env["tmp"] / "not-a-dir"
     blocker.write_text("")
-    monkeypatch.setattr(paths, "DATA_DIR", blocker / ".evoscientist")
+    monkeypatch.setattr(paths, "DATA_DIR", blocker / ".metasci-scribe")
     with pytest.raises(StageError) as ei:
         node.ensure_node("default")
     assert ei.value.code == "install_failed"
@@ -235,7 +235,7 @@ def test_record_with_non_string_path_is_ignored(env):
     [http.client.IncompleteRead(b""), http.client.BadStatusLine("garbled")],
 )
 def test_http_client_errors_become_download_failed(tmp_path, monkeypatch, exc):
-    from EvoScientist.setup import download as dl
+    from metasci_scribe.setup import download as dl
 
     def boom(*_a, **_k):
         raise exc
@@ -250,7 +250,7 @@ def test_http_client_errors_become_download_failed(tmp_path, monkeypatch, exc):
 
 
 def test_download_that_ends_early_is_download_failed(tmp_path, monkeypatch):
-    from EvoScientist.setup import download as dl
+    from metasci_scribe.setup import download as dl
 
     def urlopen(url, timeout):
         response = io.BytesIO(b"half")
@@ -266,7 +266,7 @@ def test_download_that_ends_early_is_download_failed(tmp_path, monkeypatch):
 def test_checksum_file_uses_the_short_timeout_and_the_archive_the_long_one(
     tmp_path, monkeypatch
 ):
-    from EvoScientist.setup import download as dl
+    from metasci_scribe.setup import download as dl
 
     timeouts: dict[str, float] = {}
 
@@ -287,7 +287,7 @@ def test_checksum_file_uses_the_short_timeout_and_the_archive_the_long_one(
 
 
 def test_disk_error_while_downloading_is_install_failed(tmp_path, monkeypatch):
-    from EvoScientist.setup import download as dl
+    from metasci_scribe.setup import download as dl
 
     def urlopen(url, timeout):
         response = io.BytesIO(b"data")
@@ -301,7 +301,7 @@ def test_disk_error_while_downloading_is_install_failed(tmp_path, monkeypatch):
 
 
 def test_stage_reports_download_progress_lines(env, monkeypatch):
-    from EvoScientist.setup import download as dl
+    from metasci_scribe.setup import download as dl
 
     data = env["net"].data
 
@@ -586,7 +586,7 @@ def test_probe_reads_the_version_node_prints(monkeypatch, returncode, stdout, ex
 
 
 def test_install_without_a_mirror_argument_uses_the_saved_mirror(env, monkeypatch):
-    from EvoScientist.config import set_config_value
+    from metasci_scribe.config import set_config_value
 
     set_config_value("mirror", "cn")
     node.ensure_node()

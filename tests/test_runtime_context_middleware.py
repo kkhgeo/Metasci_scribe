@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from langchain_core.messages import SystemMessage
 
-from EvoScientist.middleware.runtime_context import (
+from metasci_scribe.middleware.runtime_context import (
     RuntimeContextMiddleware,
     create_runtime_context_middleware,
 )
@@ -62,18 +62,18 @@ def test_runtime_context_injects_current_date_and_timezone():
 
 
 @patch(
-    "EvoScientist.middleware.create_tool_selector_middleware",
+    "metasci_scribe.middleware.create_tool_selector_middleware",
     return_value=[MagicMock(), MagicMock()],
 )
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
-@patch("EvoScientist.EvoScientist._ensure_config")
+@patch("metasci_scribe.agent._ensure_chat_model")
+@patch("metasci_scribe.agent._ensure_config")
 def test_default_middleware_includes_runtime_context(
     mock_config, mock_model, mock_tool_selector, workspace
 ):
     mock_config.return_value = _mock_config()
     mock_model.return_value = MagicMock(profile={"max_input_tokens": 200_000})
 
-    from EvoScientist.EvoScientist import _get_default_middleware
+    from metasci_scribe.agent import _get_default_middleware
 
     middleware = _get_default_middleware(workspace=workspace)
 
@@ -81,29 +81,29 @@ def test_default_middleware_includes_runtime_context(
 
 
 @patch(
-    "EvoScientist.middleware.create_tool_selector_middleware",
+    "metasci_scribe.middleware.create_tool_selector_middleware",
     return_value=[MagicMock(), MagicMock()],
 )
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
-@patch("EvoScientist.EvoScientist._ensure_config")
+@patch("metasci_scribe.agent._ensure_chat_model")
+@patch("metasci_scribe.agent._ensure_config")
 def test_async_subagent_middleware_includes_runtime_context(
     mock_config, mock_model, mock_tool_selector, workspace
 ):
     mock_config.return_value = _mock_config()
     mock_model.return_value = MagicMock(profile={"max_input_tokens": 200_000})
 
-    from EvoScientist.EvoScientist import _get_default_middleware
+    from metasci_scribe.agent import _get_default_middleware
 
     middleware = _get_default_middleware(workspace=workspace, for_async_subagent=True)
 
     assert any(isinstance(m, RuntimeContextMiddleware) for m in middleware)
 
 
-@patch("EvoScientist.EvoScientist._ensure_chat_model")
+@patch("metasci_scribe.agent._ensure_chat_model")
 def test_configured_subagent_middleware_includes_runtime_context(mock_model, workspace):
     mock_model.return_value = MagicMock(profile={"max_input_tokens": 200_000})
 
-    from EvoScientist.EvoScientist import _inject_subagent_middleware
+    from metasci_scribe.agent import _inject_subagent_middleware
 
     subs = [{"name": "test-agent"}]
     _inject_subagent_middleware(subs, workspace=workspace)

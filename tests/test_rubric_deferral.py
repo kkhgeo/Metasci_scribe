@@ -18,9 +18,9 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph_sdk.errors import NotFoundError
 
-from EvoScientist.message_meta import this_run_messages
-from EvoScientist.middleware.background import BackgroundState
-from EvoScientist.middleware.rubric import create_rubric_middleware
+from metasci_scribe.message_meta import this_run_messages
+from metasci_scribe.middleware.background import BackgroundState
+from metasci_scribe.middleware.rubric import create_rubric_middleware
 from tests.fakes.rubric import FAIL, PASS, MainModel, ScriptedGrader
 
 GRADER_NODE = "EvoRubricMiddleware.after_agent"
@@ -191,7 +191,7 @@ async def test_unreadable_status_grades_and_warns(tmp_path, caplog):
     live = _Live(task_answers=[RuntimeError("boom")])
     agent, _ = _agent(tmp_path, [PASS], ["a", "b"], live)
     _launch(agent, _task())
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.middleware.rubric"):
+    with caplog.at_level(logging.WARNING, logger="metasci_scribe.middleware.rubric"):
         events, _ = await _run(agent, "task", changes=[_op(1, sticky="- s")])
     assert _results(events) == ["satisfied"]
     assert any("could not read" in r.getMessage() for r in caplog.records)
@@ -206,7 +206,7 @@ async def test_not_found_grades_without_a_warning(tmp_path, caplog):
     live = _Live(task_answers=[gone])
     agent, _ = _agent(tmp_path, [PASS], ["a", "b"], live)
     _launch(agent, _task())
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.middleware.rubric"):
+    with caplog.at_level(logging.WARNING, logger="metasci_scribe.middleware.rubric"):
         events, _ = await _run(agent, "task", changes=[_op(1, sticky="- s")])
     assert _results(events) == ["satisfied"]
     assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
@@ -312,7 +312,7 @@ async def test_followup_with_a_missing_start_returns_grader_error(tmp_path, capl
         verdict["explanation"]
     ]
     assert [(r.name, r.levelname) for r in caplog.records] == [
-        ("EvoScientist.middleware.rubric", "WARNING")
+        ("metasci_scribe.middleware.rubric", "WARNING")
     ]
     assert "no longer in the thread" in caplog.records[0].getMessage()
     assert caplog.records[0].exc_info is None
@@ -328,7 +328,7 @@ async def test_a_callback_that_raises_does_not_stop_the_ungraded_ending(
         raise RuntimeError("callback broke")
 
     monkeypatch.setattr(
-        "EvoScientist.middleware.rubric._log_rubric_evaluation", _broken
+        "metasci_scribe.middleware.rubric._log_rubric_evaluation", _broken
     )
     live = _Live()
     agent, _grader = _agent(tmp_path, [PASS], ["noted", "x"], live)
@@ -467,8 +467,8 @@ async def test_task_and_process_report_both_counts(tmp_path):
 
 
 def test_live_task_status_uses_a_fresh_client_and_closes_it(monkeypatch):
-    from EvoScientist.langgraph_dev import sdk
-    from EvoScientist.middleware import rubric as rubric_mod
+    from metasci_scribe.langgraph_dev import sdk
+    from metasci_scribe.middleware import rubric as rubric_mod
 
     log = []
 
@@ -500,7 +500,7 @@ def test_live_task_status_uses_a_fresh_client_and_closes_it(monkeypatch):
 
 
 def test_scoped_client_has_no_transport_retries_and_closes_on_exit():
-    from EvoScientist.langgraph_dev.sdk import langgraph_async_client_scoped
+    from metasci_scribe.langgraph_dev.sdk import langgraph_async_client_scoped
 
     async def _probe():
         async with langgraph_async_client_scoped("http://127.0.0.1:1") as client:
@@ -540,7 +540,7 @@ async def test_connect_error_grades_without_a_warning(tmp_path, caplog):
     live = _Live(task_answers=[refused])
     agent, _ = _agent(tmp_path, [PASS], ["a", "b"], live)
     _launch(agent, _task())
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.middleware.rubric"):
+    with caplog.at_level(logging.WARNING, logger="metasci_scribe.middleware.rubric"):
         events, _ = await _run(agent, "task", changes=[_op(1, sticky="- s")])
     assert _results(events) == ["satisfied"]
     assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
@@ -562,7 +562,7 @@ async def test_refusal_on_one_address_among_other_failures_is_quiet(tmp_path, ca
     live = _Live(task_answers=[mixed])
     agent, _ = _agent(tmp_path, [PASS], ["a", "b"], live)
     _launch(agent, _task())
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.middleware.rubric"):
+    with caplog.at_level(logging.WARNING, logger="metasci_scribe.middleware.rubric"):
         events, _ = await _run(agent, "task", changes=[_op(1, sticky="- s")])
     assert _results(events) == ["satisfied"]
     assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
@@ -573,7 +573,7 @@ async def test_connect_error_other_than_refusal_grades_with_a_warning(tmp_path, 
     live = _Live(task_answers=[unresolved])
     agent, _ = _agent(tmp_path, [PASS], ["a", "b"], live)
     _launch(agent, _task())
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.middleware.rubric"):
+    with caplog.at_level(logging.WARNING, logger="metasci_scribe.middleware.rubric"):
         events, _ = await _run(agent, "task", changes=[_op(1, sticky="- s")])
     assert _results(events) == ["satisfied"]
     assert any("could not read" in r.getMessage() for r in caplog.records)
@@ -583,7 +583,7 @@ async def test_read_timeout_grades_with_a_warning(tmp_path, caplog):
     live = _Live(task_answers=[httpx.ReadTimeout("slow")])
     agent, _ = _agent(tmp_path, [PASS], ["a", "b"], live)
     _launch(agent, _task())
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.middleware.rubric"):
+    with caplog.at_level(logging.WARNING, logger="metasci_scribe.middleware.rubric"):
         events, _ = await _run(agent, "task", changes=[_op(1, sticky="- s")])
     assert _results(events) == ["satisfied"]
     assert any("could not read" in r.getMessage() for r in caplog.records)
@@ -620,8 +620,8 @@ async def test_status_reads_are_skipped_when_the_server_is_unavailable(tmp_path)
 
 
 def test_dev_server_reachable_needs_the_flag_and_the_probe(monkeypatch, caplog):
-    from EvoScientist.langgraph_dev import manager
-    from EvoScientist.middleware import rubric as rubric_mod
+    from metasci_scribe.langgraph_dev import manager
+    from metasci_scribe.middleware import rubric as rubric_mod
 
     probes = []
     answers = [(True, None)]
@@ -633,7 +633,7 @@ def test_dev_server_reachable_needs_the_flag_and_the_probe(monkeypatch, caplog):
 
     monkeypatch.setattr(rubric_mod, "_probe_dev_server", _probe)
     monkeypatch.setattr(
-        "EvoScientist.langgraph_dev.sdk.configured_langgraph_dev_url",
+        "metasci_scribe.langgraph_dev.sdk.configured_langgraph_dev_url",
         lambda: "http://127.0.0.1:1",
     )
     assert asyncio.run(rubric_mod.dev_server_reachable()) is False
@@ -642,17 +642,17 @@ def test_dev_server_reachable_needs_the_flag_and_the_probe(monkeypatch, caplog):
     assert asyncio.run(rubric_mod.dev_server_reachable()) is True
     assert probes == ["http://127.0.0.1:1"]
     answers[0] = (False, None)  # refused: quiet
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.middleware.rubric"):
+    with caplog.at_level(logging.WARNING, logger="metasci_scribe.middleware.rubric"):
         assert asyncio.run(rubric_mod.dev_server_reachable()) is False
     assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
     answers[0] = (False, "health check timed out")  # slow: say so
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.middleware.rubric"):
+    with caplog.at_level(logging.WARNING, logger="metasci_scribe.middleware.rubric"):
         assert asyncio.run(rubric_mod.dev_server_reachable()) is False
     assert any("timed out" in r.getMessage() for r in caplog.records)
 
 
 async def test_probe_dev_server_tells_refusal_from_other_failures():
-    from EvoScientist.middleware.rubric import _probe_dev_server
+    from metasci_scribe.middleware.rubric import _probe_dev_server
 
     # Nothing listens on port 1: a refused connection, no reason to report.
     # Windows does not refuse a closed loopback port within the probe's second
@@ -704,8 +704,8 @@ async def test_probe_dev_server_tells_refusal_from_other_failures():
 
 
 async def test_live_task_status_refusal_is_recognised(monkeypatch):
-    from EvoScientist.langgraph_dev import sdk
-    from EvoScientist.middleware import rubric as rubric_mod
+    from metasci_scribe.langgraph_dev import sdk
+    from metasci_scribe.middleware import rubric as rubric_mod
 
     monkeypatch.setattr(
         sdk, "configured_langgraph_dev_url", lambda: "http://127.0.0.1:1"
@@ -718,7 +718,7 @@ async def test_live_task_status_refusal_is_recognised(monkeypatch):
 async def test_availability_runs_only_with_candidate_tasks_and_inside_the_budget(
     tmp_path, monkeypatch, caplog
 ):
-    from EvoScientist.middleware import rubric as rubric_mod
+    from metasci_scribe.middleware import rubric as rubric_mod
 
     calls = []
     answered = []
@@ -762,7 +762,7 @@ async def test_availability_runs_only_with_candidate_tasks_and_inside_the_budget
     # A stored running task: the check runs, but inside the budget.
     _launch(agent, _task())
     started = asyncio.get_running_loop().time()
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.middleware.rubric"):
+    with caplog.at_level(logging.WARNING, logger="metasci_scribe.middleware.rubric"):
         events, _ = await _run(agent, "again")
     elapsed = asyncio.get_running_loop().time() - started
     assert _results(events) == ["satisfied"]
@@ -780,7 +780,7 @@ async def test_connect_timeout_grades_with_a_warning(tmp_path, caplog):
     live = _Live(task_answers=[httpx.ConnectTimeout("slow connect")])
     agent, _ = _agent(tmp_path, [PASS], ["a", "b"], live)
     _launch(agent, _task())
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.middleware.rubric"):
+    with caplog.at_level(logging.WARNING, logger="metasci_scribe.middleware.rubric"):
         events, _ = await _run(agent, "task", changes=[_op(1, sticky="- s")])
     assert _results(events) == ["satisfied"]
     assert any("could not read" in r.getMessage() for r in caplog.records)
@@ -950,7 +950,7 @@ async def test_an_unmarked_run_still_drops_a_grading_that_was_not_deferred(tmp_p
 async def test_a_rubric_change_made_during_a_deferred_grading_waits_for_the_next_message(
     tmp_path,
 ):
-    from EvoScientist.rubric_session import RubricSession, rubric_configurable_extra
+    from metasci_scribe.rubric_session import RubricSession, rubric_configurable_extra
 
     def changes(mode):
         return rubric_configurable_extra(session, "t", mode)["rubric_run"]["changes"]

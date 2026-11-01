@@ -12,11 +12,11 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
-from EvoScientist.channels.bus.events import InboundMessage as BusInbound
-from EvoScientist.channels.bus.message_bus import MessageBus
-from EvoScientist.channels.channel_manager import ChannelManager
-from EvoScientist.channels.consumer import InboundConsumer, _join_subagent_text
-from EvoScientist.stream.emitter import StreamEvent, StreamEventEmitter
+from metasci_scribe.channels.bus.events import InboundMessage as BusInbound
+from metasci_scribe.channels.bus.message_bus import MessageBus
+from metasci_scribe.channels.channel_manager import ChannelManager
+from metasci_scribe.channels.consumer import InboundConsumer, _join_subagent_text
+from metasci_scribe.stream.emitter import StreamEvent, StreamEventEmitter
 from tests.fakes.common import FakeGraphGateway
 from tests.fakes.common import StubChannel as _StubChannel
 from tests.fakes.stream_v3 import (

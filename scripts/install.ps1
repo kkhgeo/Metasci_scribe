@@ -1,4 +1,4 @@
-# Install EvoScientist on Windows with nothing else installed.
+# Install Metasci Scribe on Windows with nothing else installed.
 #
 #   irm https://raw.githubusercontent.com/EvoScientist/EvoScientist/main/scripts/install.ps1 | iex
 #   & ([scriptblock]::Create((irm https://cdn.jsdelivr.net/gh/EvoScientist/EvoScientist@main/scripts/install.ps1))) -Cn
@@ -7,18 +7,18 @@
 #   -Cn             use mainland China mirrors (uv, Python, PyPI, Node, WebUI)
 #   -Version <ver>  install this release instead of the newest one
 #   -NoModifyPath   do not put uv's tool bin directory on the user PATH
-#   -NoSetup        stop after installing the package, before `EvoSci setup`
+#   -NoSetup        stop after installing the package, before `metasci-scribe setup`
 #
 # Steps: download a pinned uv and check its SHA-256, keep it under
-# <data dir>\tools, install EvoScientist as a uv tool with the release's
+# <data dir>\tools, install Metasci Scribe as a uv tool with the release's
 # constraints.txt on uv's own Python (3.12, or on a re-run the one the existing
-# install asked for), put the tool bin directory on the user PATH, then run `EvoSci setup`. The data dir is $env:EVOSCIENTIST_DATA_DIR
-# when set and not empty, else ~\.evoscientist. A uv installed by the user is
+# install asked for), put the tool bin directory on the user PATH, then run `metasci-scribe setup`. The data dir is $env:METASCI_SCRIBE_DATA_DIR
+# when set and not empty, else ~\.metasci-scribe. A uv installed by the user is
 # never touched.
 #
-# Test-only variables (the installer smoke workflow): EVOSCI_INSTALL_SOURCE
+# Test-only variables (the installer smoke workflow): METASCI_SCRIBE_INSTALL_SOURCE
 # installs this wheel instead of the release from the index, and
-# EVOSCI_INSTALL_CONSTRAINTS uses this local constraints file instead of the
+# METASCI_SCRIBE_INSTALL_CONSTRAINTS uses this local constraints file instead of the
 # one at the release tag.
 #
 # Under irm | iex this code runs in the caller's session: everything lives in
@@ -35,7 +35,7 @@ param(
     [switch]$NoSetup
 )
 
-function Install-EvoScientist {
+function Install-Metasci-Scribe {
     param([bool]$Cn, [string]$Version, [bool]$NoModifyPath, [bool]$NoSetup)
 
     $ErrorActionPreference = 'Stop'
@@ -55,12 +55,12 @@ function Install-EvoScientist {
     $CnPythonMirror = 'https://registry.npmmirror.com/-/binary/python-build-standalone/'
     $RawBase = 'https://raw.githubusercontent.com/EvoScientist/EvoScientist'
     $CnRawBase = 'https://cdn.jsdelivr.net/gh/EvoScientist/EvoScientist'
-    $EntryPoints = @('EvoSci.exe', 'EvoScientist.exe', 'evosci.exe', 'evoscientist.exe')
+    $EntryPoints = @('metasci-scribe.exe', 'metasci-scribe.exe', 'metasci-scribe.exe', 'metasci-scribe.exe')
 
     # Reads an existing uv-receipt.toml (argv[1]) with the old tool
     # environment's own Python and prints what a reinstall needs to keep, one
     # tab-separated line each: "python<TAB><request>" for the receipt's Python
-    # (else this interpreter's X.Y), "extras<TAB>a,b" for EvoScientist's
+    # (else this interpreter's X.Y), "extras<TAB>a,b" for Metasci Scribe's
     # extras, "with<TAB><requirement>" and "with-editable<TAB><path>" for the
     # other requirements (added with --with, e.g. by the MCP installer),
     # "warn<TAB><text>" for anything it cannot keep. Same code as install.sh;
@@ -118,7 +118,7 @@ print("python\t" + (python if isinstance(python, str) else "%d.%d" % sys.version
 own_extras = []
 for entry in entries:
     try:
-        if norm(entry["name"]) == "evoscientist":
+        if norm(entry["name"]) == "metasci-scribe":
             # Several entries when an extra was added with --with: all extras.
             own_extras += [x for x in entry.get("extras") or [] if x not in own_extras]
             continue
@@ -186,7 +186,7 @@ if own_extras:
     }
 
     # Runs a native command on this console (its output is not read by
-    # PowerShell, so EvoSci's progress output keeps the console's encoding)
+    # PowerShell, so metasci-scribe's progress output keeps the console's encoding)
     # and returns its exit code.
     function Invoke-OnConsole([string]$Exe, [string[]]$Arguments, [string]$WorkingDirectory) {
         $quoted = foreach ($arg in $Arguments) {
@@ -220,7 +220,7 @@ if own_extras:
 
     function Assert-Platform {
         if (-not [Environment]::Is64BitOperatingSystem) {
-            throw 'This is 32-bit Windows. EvoScientist supports 64-bit Windows on x64.'
+            throw 'This is 32-bit Windows. Metasci Scribe supports 64-bit Windows on x64.'
         }
         # The machine's architecture, not this process's: an x64 PowerShell runs
         # under emulation on Windows on Arm and reports x64 for itself.
@@ -235,7 +235,7 @@ if own_extras:
             $native = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment' -Name PROCESSOR_ARCHITECTURE).PROCESSOR_ARCHITECTURE
         } catch { }
         if ($arch -eq 'Arm64' -or $native -eq 'ARM64') {
-            throw 'Windows on arm64 is not supported. EvoScientist supports Windows on x64.'
+            throw 'Windows on arm64 is not supported. Metasci Scribe supports Windows on x64.'
         }
     }
 
@@ -253,15 +253,15 @@ if own_extras:
         } catch { }
     }
 
-    # The data dir rule of EvoScientist's paths module: EVOSCIENTIST_DATA_DIR
-    # when set and not empty (with ~ expanded), else ~\.evoscientist; made
+    # The data dir rule of Metasci Scribe's paths module: METASCI_SCRIBE_DATA_DIR
+    # when set and not empty (with ~ expanded), else ~\.metasci-scribe; made
     # absolute. The home folder as Python finds it: USERPROFILE first, while
     # Windows PowerShell 5.1 sets $HOME from HOMEDRIVE + HOMEPATH, which point
     # at a network home folder on some domain accounts.
     function Get-DataDir {
         $userHome = if ($env:USERPROFILE) { $env:USERPROFILE } else { $HOME }
-        $dir = $env:EVOSCIENTIST_DATA_DIR
-        if (-not $dir) { $dir = Join-Path $userHome '.evoscientist' }
+        $dir = $env:METASCI_SCRIBE_DATA_DIR
+        if (-not $dir) { $dir = Join-Path $userHome '.metasci-scribe' }
         if ($dir -eq '~') {
             $dir = $userHome
         } elseif ($dir.StartsWith('~\') -or $dir.StartsWith('~/')) {
@@ -282,22 +282,22 @@ if own_extras:
             }
             return $v
         }
-        if ($env:EVOSCI_INSTALL_SOURCE) {
-            $name = Split-Path -Leaf $env:EVOSCI_INSTALL_SOURCE
-            if ($name -match '^evoscientist-([^-]+)-.*\.whl$') { return $Matches[1] }
-            throw "Cannot read the version from EVOSCI_INSTALL_SOURCE: $env:EVOSCI_INSTALL_SOURCE"
+        if ($env:METASCI_SCRIBE_INSTALL_SOURCE) {
+            $name = Split-Path -Leaf $env:METASCI_SCRIBE_INSTALL_SOURCE
+            if ($name -match '^metasci-scribe-([^-]+)-.*\.whl$') { return $Matches[1] }
+            throw "Cannot read the version from METASCI_SCRIBE_INSTALL_SOURCE: $env:METASCI_SCRIBE_INSTALL_SOURCE"
         }
         $index = if ($Cn) { $CnSimple } else { $PypiSimple }
         try {
-            $listing = Invoke-RestMethod -UseBasicParsing -Uri "$index/evoscientist/" -Headers @{ Accept = 'application/vnd.pypi.simple.v1+json' }
+            $listing = Invoke-RestMethod -UseBasicParsing -Uri "$index/metasci-scribe/" -Headers @{ Accept = 'application/vnd.pypi.simple.v1+json' }
         } catch {
-            throw "Cannot read the EvoScientist versions from $index/evoscientist/ ($($_.Exception.Message))"
+            throw "Cannot read the Metasci Scribe versions from $index/metasci-scribe/ ($($_.Exception.Message))"
         }
         # The mirror sorts the list as strings, so filter to final releases and
         # sort numerically; never take the last entry as it comes.
         $latest = @($listing.versions | Where-Object { $_ -match '^\d+(\.\d+){1,3}$' } |
                 Sort-Object { [version]$_ }) | Select-Object -Last 1
-        if (-not $latest) { throw "No EvoScientist release found on $index" }
+        if (-not $latest) { throw "No Metasci Scribe release found on $index" }
         return $latest
     }
 
@@ -331,7 +331,7 @@ if own_extras:
         if (Test-Path -LiteralPath $final) { Remove-Item -LiteralPath $final -Recurse -Force }
         Move-Item -LiteralPath $staged -Destination $final
         $uv = Join-Path $final 'uv.exe'
-        # UTF-8 without a BOM: EvoScientist reads it with json.loads.
+        # UTF-8 without a BOM: Metasci Scribe reads it with json.loads.
         $json = [ordered]@{ version = $UvVersion; path = $uv } | ConvertTo-Json -Compress
         $record = Join-Path $tools 'uv.json'
         [IO.File]::WriteAllText("$record.tmp", $json, (New-Object Text.UTF8Encoding $false))
@@ -341,21 +341,21 @@ if own_extras:
 
     function Get-Constraints([string]$InstallVersion, [string]$TempDir) {
         $file = Join-Path $TempDir 'constraints.txt'
-        if ($env:EVOSCI_INSTALL_CONSTRAINTS) {
-            Copy-Item -LiteralPath $env:EVOSCI_INSTALL_CONSTRAINTS -Destination $file
+        if ($env:METASCI_SCRIBE_INSTALL_CONSTRAINTS) {
+            Copy-Item -LiteralPath $env:METASCI_SCRIBE_INSTALL_CONSTRAINTS -Destination $file
             return $file
         }
         $base = if ($Cn) { "$CnRawBase@v$InstallVersion" } else { "$RawBase/v$InstallVersion" }
-        Write-Info "Downloading the constraints of EvoScientist $InstallVersion..."
+        Write-Info "Downloading the constraints of Metasci Scribe $InstallVersion..."
         try {
             Get-Download "$base/constraints.txt" $file
         } catch {
-            throw "Cannot download $base/constraints.txt, so EvoScientist $InstallVersion cannot be installed with its tested dependencies."
+            throw "Cannot download $base/constraints.txt, so Metasci Scribe $InstallVersion cannot be installed with its tested dependencies."
         }
         return $file
     }
 
-    # Processes started from the tool environment (EvoSci.exe, the server, MCP
+    # Processes started from the tool environment (metasci-scribe.exe, the server, MCP
     # servers, the env's python.exe) or from its entry points in the bin dir.
     # uv cannot replace an environment that a running process uses, and a
     # failed replace leaves it broken.
@@ -386,14 +386,14 @@ if own_extras:
         if ($env:ProgramData) { $files += Join-Path $env:ProgramData 'uv\uv.toml' }
         foreach ($file in $files) {
             if ($file -and (Test-Path -LiteralPath $file) -and (Select-String -LiteralPath $file -Pattern '^\s*exclude-newer\s*=' -Quiet)) {
-                Write-Warn "$file sets exclude-newer: uv ignores releases uploaded after its cutoff, so a newer EvoScientist cannot install. Remove that line, or wait until the release is older than the cutoff."
+                Write-Warn "$file sets exclude-newer: uv ignores releases uploaded after its cutoff, so a newer Metasci Scribe cannot install. Remove that line, or wait until the release is older than the cutoff."
             }
         }
     }
 
     Assert-Platform
 
-    $tempDir = Join-Path ([IO.Path]::GetTempPath()) ("evosci-install-" + [Guid]::NewGuid().ToString('N'))
+    $tempDir = Join-Path ([IO.Path]::GetTempPath()) ("metasci-scribe-install-" + [Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
     # Environment, TLS and proxy changes are undone at the end, so the caller's
     # session keeps its own values under irm | iex.
@@ -407,7 +407,7 @@ if own_extras:
         Enable-Tls12
         $installVersion = Get-InstallVersion
         if ((Get-ReleaseVersion $installVersion) -le (Get-ReleaseVersion $LastUnsupported)) {
-            throw "EvoScientist $installVersion cannot be installed with this script: $LastUnsupported is the last release without constraints.txt, and every older release lacks it too. Choose a newer version."
+            throw "Metasci Scribe $installVersion cannot be installed with this script: $LastUnsupported is the last release without constraints.txt, and every older release lacks it too. Choose a newer version."
         }
 
         $dataDir = Get-DataDir
@@ -415,7 +415,7 @@ if own_extras:
         # a network that inspects TLS works; longer timeout for slow mirrors.
         if (-not $env:UV_SYSTEM_CERTS) { $env:UV_SYSTEM_CERTS = '1' }
         if (-not $env:UV_HTTP_TIMEOUT) { $env:UV_HTTP_TIMEOUT = '300' }
-        # EvoSci setup writes its progress with symbols such as a check mark: to a pipe (CI,
+        # metasci-scribe setup writes its progress with symbols such as a check mark: to a pipe (CI,
         # the desktop app) Python would encode them in the ANSI code page and
         # fail. Its console output is unaffected.
         if (-not $env:PYTHONIOENCODING) { $env:PYTHONIOENCODING = 'utf-8' }
@@ -433,7 +433,7 @@ if own_extras:
         }
         $toolDir = ($toolDir.Lines -join '').Trim()
         $binDir = ($binDir.Lines -join '').Trim()
-        $envDir = Join-Path $toolDir 'evoscientist'
+        $envDir = Join-Path $toolDir 'metasci-scribe'
 
         $extras = ''
         $withArgs = @()
@@ -444,15 +444,15 @@ if own_extras:
             foreach ($name in $EntryPoints) {
                 $existing = Join-Path $binDir $name
                 if (Test-Path -LiteralPath $existing) {
-                    throw "$existing exists but was not installed by uv; pipx or pip --user may have put it there. Remove that install (for example pipx uninstall EvoScientist or pip uninstall EvoScientist), then run this script again."
+                    throw "$existing exists but was not installed by uv; pipx or pip --user may have put it there. Remove that install (for example pipx uninstall Metasci Scribe or pip uninstall Metasci Scribe), then run this script again."
                 }
             }
         }
         if ($force) {
             $blocking = Get-BlockingProcesses $envDir $binDir
             if ($blocking.Count -gt 0) {
-                throw ("EvoScientist is running, and the install cannot replace it while it runs:`n  " + ($blocking -join "`n  ") +
-                    "`nClose these windows (a background server: EvoSci server stop), then run this script again. Nothing was changed.")
+                throw ("Metasci Scribe is running, and the install cannot replace it while it runs:`n  " + ($blocking -join "`n  ") +
+                    "`nClose these windows (a background server: metasci-scribe server stop), then run this script again. Nothing was changed.")
             }
             $receipt = Join-Path $envDir 'uv-receipt.toml'
             $python = Join-Path $envDir 'Scripts\python.exe'
@@ -480,10 +480,10 @@ if own_extras:
             }
         }
 
-        $spec = "EvoScientist$extras==$installVersion"
-        if ($env:EVOSCI_INSTALL_SOURCE) {
-            $wheel = (Resolve-Path -LiteralPath $env:EVOSCI_INSTALL_SOURCE).ProviderPath
-            $spec = "EvoScientist$extras @ " + ([Uri]$wheel).AbsoluteUri
+        $spec = "Metasci Scribe$extras==$installVersion"
+        if ($env:METASCI_SCRIBE_INSTALL_SOURCE) {
+            $wheel = (Resolve-Path -LiteralPath $env:METASCI_SCRIBE_INSTALL_SOURCE).ProviderPath
+            $spec = "Metasci Scribe$extras @ " + ([Uri]$wheel).AbsoluteUri
         }
         # uv splits a -c path at spaces (astral-sh/uv#12639), such as a %TEMP%
         # under a user name with a space: uv runs from the file's folder and
@@ -492,17 +492,17 @@ if own_extras:
         if ($force) { $uvArgs += '--force' }
         $uvArgs += $withArgs
         $uvArgs += $spec
-        Write-Info "Installing EvoScientist $installVersion..."
+        Write-Info "Installing Metasci Scribe $installVersion..."
         if ((Invoke-OnConsole $uv $uvArgs (Split-Path -Parent $constraints)) -ne 0) {
             Write-ExcludeNewerHint
-            throw "uv could not install EvoScientist $installVersion (see uv's output above). If EvoScientist was started meanwhile, close it and run this script again."
+            throw "uv could not install Metasci Scribe $installVersion (see uv's output above). If Metasci Scribe was started meanwhile, close it and run this script again."
         }
 
         $pathChanged = $false
         $onPath = @($env:Path.Split(';') | Where-Object { $_ -and (Test-SamePath $_ $binDir) }).Count -gt 0
         if (-not $onPath) {
             if ($NoModifyPath) {
-                Write-Info "Not changing PATH (-NoModifyPath). Add $binDir to PATH to run EvoSci."
+                Write-Info "Not changing PATH (-NoModifyPath). Add $binDir to PATH to run metasci-scribe."
             } else {
                 # On Windows uv exits 0 also when the user PATH already has the
                 # directory ("already in PATH"); any other exit is an error.
@@ -517,33 +517,33 @@ if own_extras:
         }
 
         if ($NoSetup) {
-            Write-Info 'Skipping EvoSci setup (-NoSetup).'
+            Write-Info 'Skipping metasci-scribe setup (-NoSetup).'
         } else {
             $setupArgs = @('setup')
             if ($Cn) { $setupArgs += '--cn' }
             # By absolute path: this window does not see the PATH change yet.
-            $evosci = Join-Path $binDir 'EvoSci.exe'
-            if ((Invoke-OnConsole $evosci $setupArgs) -ne 0) {
-                throw "EvoScientist $installVersion is installed, but EvoSci setup failed (see above). Run it again with: & '$evosci' setup"
+            $metasci-scribe = Join-Path $binDir 'metasci-scribe.exe'
+            if ((Invoke-OnConsole $metasci-scribe $setupArgs) -ne 0) {
+                throw "Metasci Scribe $installVersion is installed, but metasci-scribe setup failed (see above). Run it again with: & '$metasci-scribe' setup"
             }
         }
 
-        # Another EvoSci earlier on PATH (pip, conda) would run instead. Compare
+        # Another metasci-scribe earlier on PATH (pip, conda) would run instead. Compare
         # the directories that hold the commands.
-        $found = Get-Command EvoSci -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        $found = Get-Command metasci-scribe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($found -and -not (Test-SamePath (Split-Path -Parent $found.Source) $binDir)) {
-            Write-Warn "Another EvoSci comes first on PATH: $($found.Source). It will run instead of this install; remove it (for example pip uninstall EvoScientist) or put $binDir earlier on PATH."
+            Write-Warn "Another metasci-scribe comes first on PATH: $($found.Source). It will run instead of this install; remove it (for example pip uninstall Metasci Scribe) or put $binDir earlier on PATH."
         }
 
         Write-Info ''
-        Write-Info "EvoScientist $installVersion is installed."
+        Write-Info "Metasci Scribe $installVersion is installed."
         if ($pathChanged) {
             Write-Info "Your user PATH now includes $binDir (uv tool update-shell); open a new terminal first."
         }
         Write-Info 'Next steps:'
-        Write-Info '  EvoSci onboard          set up your model provider and API keys'
-        Write-Info '  EvoSci                  start the terminal UI'
-        Write-Info '  EvoSci --ui webui       start the WebUI'
+        Write-Info '  metasci-scribe onboard          set up your model provider and API keys'
+        Write-Info '  metasci-scribe                  start the terminal UI'
+        Write-Info '  metasci-scribe --ui webui       start the WebUI'
     } finally {
         foreach ($name in $envNames) { [Environment]::SetEnvironmentVariable($name, $savedEnv[$name], 'Process') }
         [Net.ServicePointManager]::SecurityProtocol = $savedProtocol
@@ -553,7 +553,7 @@ if own_extras:
 }
 
 try {
-    Install-EvoScientist -Cn $Cn.IsPresent -Version $Version -NoModifyPath $NoModifyPath.IsPresent -NoSetup $NoSetup.IsPresent
+    Install-Metasci-Scribe -Cn $Cn.IsPresent -Version $Version -NoModifyPath $NoModifyPath.IsPresent -NoSetup $NoSetup.IsPresent
     # The outcome for a caller of irm | iex (CI, the desktop app), which gets
     # no exit code; the last native command may have set another value.
     $global:LASTEXITCODE = 0
@@ -564,5 +564,5 @@ try {
     # scriptblock form, exit would close the caller's window.
     if ($MyInvocation.MyCommand.Path) { exit 1 }
 } finally {
-    Remove-Item -Path Function:\Install-EvoScientist -ErrorAction SilentlyContinue
+    Remove-Item -Path Function:\Install-Metasci-Scribe -ErrorAction SilentlyContinue
 }

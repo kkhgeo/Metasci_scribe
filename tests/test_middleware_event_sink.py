@@ -13,7 +13,7 @@ from __future__ import annotations
 import threading
 import time
 
-from EvoScientist.middleware.events import MiddlewareEventSink, NoOpSink
+from metasci_scribe.middleware.events import MiddlewareEventSink, NoOpSink
 
 
 class _SlowSink:

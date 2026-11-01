@@ -1,4 +1,4 @@
-"""Tests for ``EvoScientist.utils.load_subagents``.
+"""Tests for ``metasci_scribe.utils.load_subagents``.
 
 Focused on schema-validation paths that are easy to silently misuse from
 yaml — primarily the ``async:`` flag type check that prevents quoted-string
@@ -11,7 +11,7 @@ import textwrap
 
 import pytest
 
-from EvoScientist.utils import load_subagents, resolve_subagent_tools
+from metasci_scribe.utils import load_subagents, resolve_subagent_tools
 
 
 def _write_yaml(tmp_path, name: str, body: str):
@@ -210,7 +210,7 @@ def test_missing_tool_on_sync_subagent_warns_at_resolution(tmp_path, caplog):
           tools: [nonexistent_tool]
         """,
     )
-    with caplog.at_level("DEBUG", logger="EvoScientist.utils"):
+    with caplog.at_level("DEBUG", logger="metasci_scribe.utils"):
         subs = load_subagents(config_path)
     assert subs[0]["_async"] is False
     assert subs[0]["tools"] == []
@@ -235,7 +235,7 @@ def test_missing_tool_on_async_subagent_is_deferred_without_logging(tmp_path, ca
           async: true
         """,
     )
-    with caplog.at_level("DEBUG", logger="EvoScientist.utils"):
+    with caplog.at_level("DEBUG", logger="metasci_scribe.utils"):
         subs = load_subagents(config_path)
     assert subs[0]["_async"] is True
     assert subs[0]["tools"] == []
@@ -259,7 +259,7 @@ def test_missing_async_tool_warns_at_terminal_resolution(tmp_path, caplog):
           async: true
         """,
     )
-    with caplog.at_level("DEBUG", logger="EvoScientist.utils"):
+    with caplog.at_level("DEBUG", logger="metasci_scribe.utils"):
         subs = load_subagents(config_path)
         resolve_subagent_tools(subs[0], {})
     assert subs[0]["_async"] is True

@@ -12,7 +12,7 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
-from EvoScientist.middleware.rubric import (
+from metasci_scribe.middleware.rubric import (
     GRADER_FILE_CHECK_PROMPT,
     create_rubric_middleware,
 )
@@ -136,7 +136,7 @@ def _openrouter(model_id: str):
 
 
 def test_unsupported_grader_warns_on_first_rubric_run_only(tmp_path, caplog):
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.middleware.rubric"):
+    with caplog.at_level(logging.WARNING, logger="metasci_scribe.middleware.rubric"):
         rubric = create_rubric_middleware(
             model=_openrouter("anthropic/claude-fable-5.1"),
             backend=FilesystemBackend(root_dir=tmp_path, virtual_mode=True),
@@ -162,7 +162,7 @@ def test_unsupported_grader_warns_on_first_rubric_run_only(tmp_path, caplog):
     ],
 )
 def test_supported_grader_never_warns(tmp_path, caplog, model_id):
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.middleware.rubric"):
+    with caplog.at_level(logging.WARNING, logger="metasci_scribe.middleware.rubric"):
         rubric = create_rubric_middleware(
             model=_openrouter(model_id),
             backend=FilesystemBackend(root_dir=tmp_path, virtual_mode=True),
@@ -199,7 +199,7 @@ def test_main_agent_ignores_a_rubric_on_a_run_without_the_marker(tmp_path):
 
 async def test_unmarked_turn_drops_a_rubric_left_by_a_run_that_never_finished(tmp_path):
     """Ctrl+C or a crash leaves the rubric in the thread; any later turn drops it."""
-    from EvoScientist.stream.events import build_agent_stream_input
+    from metasci_scribe.stream.events import build_agent_stream_input
 
     agent, grader, _other, _rubric = _agent(
         tmp_path, [PASS], ["a", "b"], require_run_marker=True
@@ -218,7 +218,7 @@ async def test_unmarked_turn_drops_a_rubric_left_by_a_run_that_never_finished(tm
 
 
 async def test_rubric_key_is_ignored_by_a_graph_without_the_grader():
-    from EvoScientist.stream.events import build_agent_stream_input
+    from metasci_scribe.stream.events import build_agent_stream_input
 
     plain = create_agent(
         model=MainModel(messages=iter([AIMessage("one")])),
@@ -274,7 +274,7 @@ def test_rerun_after_a_cut_short_run_gets_all_its_passes(tmp_path):
 
 def test_grader_failure_keeps_its_traceback_in_the_log(tmp_path, caplog):
     """The server's log is the only diagnostic of a scheduled run's grader."""
-    from EvoScientist.cli.commands import _grader_failure_on_one_line
+    from metasci_scribe.cli.commands import _grader_failure_on_one_line
 
     agent, _grader, _other, _rubric = _agent(tmp_path, [RuntimeError("boom")], ["a"])
     with caplog.at_level(logging.ERROR, logger="deepagents.middleware.rubric"):
@@ -291,7 +291,7 @@ def test_grader_failure_keeps_its_traceback_in_the_log(tmp_path, caplog):
 
 def test_failed_second_attempt_keeps_its_traceback_too(tmp_path, caplog):
     """An incomplete verdict is retried once; that retry failing is expected as well."""
-    from EvoScientist.cli.commands import _grader_failure_on_one_line
+    from metasci_scribe.cli.commands import _grader_failure_on_one_line
 
     incomplete = {"result": "satisfied", "explanation": "x", "criteria": []}
     agent, _grader, _other, _rubric = _agent(
@@ -313,7 +313,7 @@ def test_a_dropped_rubric_is_noted_in_the_debug_log(tmp_path, caplog):
     agent, grader, _other, _rubric = _agent(
         tmp_path, [PASS], ["a", "b"], require_run_marker=True
     )
-    with caplog.at_level(logging.DEBUG, logger="EvoScientist.middleware.rubric"):
+    with caplog.at_level(logging.DEBUG, logger="metasci_scribe.middleware.rubric"):
         _run(agent, {"messages": [HumanMessage("do it")], "rubric": "- c1"})
         _run(agent, {"messages": [HumanMessage("again")]}, thread_id="other")
     dropped = [r for r in caplog.records if "dropped" in r.getMessage()]

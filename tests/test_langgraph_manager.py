@@ -15,8 +15,8 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from EvoScientist.config.settings import EvoScientistConfig
-from EvoScientist.langgraph_dev import manager
+from metasci_scribe.config.settings import ScribeConfig
+from metasci_scribe.langgraph_dev import manager
 
 
 @pytest.fixture(autouse=True)
@@ -284,17 +284,17 @@ class TestLanggraphCliResolution:
 
 
 class TestIsLanggraphDevRunning:
-    @patch("EvoScientist.langgraph_dev.manager.httpx.get")
+    @patch("metasci_scribe.langgraph_dev.manager.httpx.get")
     def test_returns_false_on_connect_error(self, mock_get):
         mock_get.side_effect = httpx.ConnectError("refused")
         assert manager.is_langgraph_dev_running(port=6174) is False
 
-    @patch("EvoScientist.langgraph_dev.manager.httpx.get")
+    @patch("metasci_scribe.langgraph_dev.manager.httpx.get")
     def test_returns_false_on_timeout(self, mock_get):
         mock_get.side_effect = httpx.TimeoutException("slow")
         assert manager.is_langgraph_dev_running(port=6174) is False
 
-    @patch("EvoScientist.langgraph_dev.manager.httpx.get")
+    @patch("metasci_scribe.langgraph_dev.manager.httpx.get")
     def test_returns_true_on_200(self, mock_get):
         mock_get.return_value = MagicMock(status_code=200)
         assert manager.is_langgraph_dev_running(port=6174) is True
@@ -304,7 +304,7 @@ class TestIsLanggraphDevRunning:
         called_url = mock_get.call_args[0][0]
         assert called_url == "http://127.0.0.1:6174/ok"
 
-    @patch("EvoScientist.langgraph_dev.manager.httpx.get")
+    @patch("metasci_scribe.langgraph_dev.manager.httpx.get")
     def test_probe_bypasses_proxy(self, mock_get):
         # The loopback probe must set trust_env=False: on Windows httpx otherwise
         # routes 127.0.0.1 through the system (registry) proxy and never reaches
@@ -313,12 +313,12 @@ class TestIsLanggraphDevRunning:
         manager.is_langgraph_dev_running(port=6174)
         assert mock_get.call_args.kwargs.get("trust_env") is False
 
-    @patch("EvoScientist.langgraph_dev.manager.httpx.get")
+    @patch("metasci_scribe.langgraph_dev.manager.httpx.get")
     def test_returns_false_on_non_200(self, mock_get):
         mock_get.return_value = MagicMock(status_code=503)
         assert manager.is_langgraph_dev_running(port=6174) is False
 
-    @patch("EvoScientist.langgraph_dev.manager.httpx.get")
+    @patch("metasci_scribe.langgraph_dev.manager.httpx.get")
     def test_wildcard_bind_probed_over_loopback(self, mock_get):
         """A server bound to 0.0.0.0 also listens on loopback, and you cannot
         meaningfully connect to 0.0.0.0 itself — probe 127.0.0.1."""
@@ -326,14 +326,14 @@ class TestIsLanggraphDevRunning:
         assert manager.is_langgraph_dev_running(port=6174, host="0.0.0.0") is True
         assert mock_get.call_args[0][0] == "http://127.0.0.1:6174/ok"
 
-    @patch("EvoScientist.langgraph_dev.manager.httpx.get")
+    @patch("metasci_scribe.langgraph_dev.manager.httpx.get")
     def test_specific_host_probed_verbatim(self, mock_get):
         """Loopback would not reach a server pinned to one interface."""
         mock_get.return_value = MagicMock(status_code=200)
         assert manager.is_langgraph_dev_running(port=6174, host="192.168.1.5") is True
         assert mock_get.call_args[0][0] == "http://192.168.1.5:6174/ok"
 
-    @patch("EvoScientist.langgraph_dev.manager.httpx.get")
+    @patch("metasci_scribe.langgraph_dev.manager.httpx.get")
     def test_explicit_base_url_still_wins(self, mock_get):
         mock_get.return_value = MagicMock(status_code=200)
         assert (
@@ -351,12 +351,12 @@ class TestIsLanggraphDevRunning:
 
 
 class TestListPidsOnPort:
-    @patch("EvoScientist.langgraph_dev.manager.psutil.net_connections")
+    @patch("metasci_scribe.langgraph_dev.manager.psutil.net_connections")
     def test_empty_when_no_connections(self, mock_net):
         mock_net.return_value = []
         assert manager._list_pids_on_port(6174) == []
 
-    @patch("EvoScientist.langgraph_dev.manager.psutil.net_connections")
+    @patch("metasci_scribe.langgraph_dev.manager.psutil.net_connections")
     def test_returns_pid_for_matching_port(self, mock_net):
         mock_net.return_value = [
             SimpleNamespace(laddr=SimpleNamespace(port=6174), pid=12345),
@@ -365,7 +365,7 @@ class TestListPidsOnPort:
         result = manager._list_pids_on_port(6174)
         assert result == [12345]
 
-    @patch("EvoScientist.langgraph_dev.manager.psutil.net_connections")
+    @patch("metasci_scribe.langgraph_dev.manager.psutil.net_connections")
     def test_filters_none_pid(self, mock_net):
         mock_net.return_value = [
             SimpleNamespace(laddr=SimpleNamespace(port=6174), pid=None),
@@ -496,7 +496,7 @@ class TestEnsureLanggraphDev:
         self, tmp_path, runtime_paths
     ):
         """EvoMemory workers can require langgraph dev even without async subagents."""
-        cfg = EvoScientistConfig()
+        cfg = ScribeConfig()
         cfg.enable_async_subagents = False
         cfg.memory_workers_enabled = True
         cfg.langgraph_dev_port = 6174
@@ -507,7 +507,7 @@ class TestEnsureLanggraphDev:
             patch.object(manager, "start_langgraph_dev", return_value=proc) as start,
             # Intercept the real atexit hook: letting it register means the
             # callback fires at interpreter exit AFTER patches are restored,
-            # deleting the REAL ~/.config/evoscientist pid/sidecar files.
+            # deleting the REAL ~/.config/metasci-scribe pid/sidecar files.
             patch.object(manager.atexit, "register") as atexit_register,
             patch.object(
                 manager,
@@ -529,7 +529,7 @@ class TestEnsureLanggraphDev:
         self, tmp_path, runtime_paths
     ):
         """No background server is needed without async subagents, workers, or scheduler."""
-        cfg = EvoScientistConfig()
+        cfg = ScribeConfig()
         cfg.enable_async_subagents = False
         cfg.memory_workers_enabled = False
         cfg.enable_scheduler = False  # scheduler crons also require the backend
@@ -557,7 +557,7 @@ class TestEnsureLanggraphDev:
 
     def test_needs_langgraph_dev_for_scheduler_only(self):
         """enable_scheduler alone requires the backend (crons fire inside it)."""
-        cfg = EvoScientistConfig()
+        cfg = ScribeConfig()
         cfg.enable_async_subagents = False
         cfg.memory_workers_enabled = False
         cfg.memory_skill_synthesis_enabled = False
@@ -569,7 +569,7 @@ class TestEnsureLanggraphDev:
     def test_needs_langgraph_dev_for_server_backend_only(self):
         """gateway_backend=langgraph_server needs the server even with every
         other trigger off (execution itself is server-routed)."""
-        cfg = EvoScientistConfig()
+        cfg = ScribeConfig()
         cfg.enable_async_subagents = False
         cfg.memory_workers_enabled = False
         cfg.memory_skill_synthesis_enabled = False
@@ -586,7 +586,7 @@ class TestEnsureLanggraphDev:
         surface resolved to ``local`` must not be forced on by a server global
         when it has no other trigger.
         """
-        cfg = EvoScientistConfig()
+        cfg = ScribeConfig()
         cfg.enable_async_subagents = False
         cfg.memory_workers_enabled = False
         cfg.memory_skill_synthesis_enabled = False
@@ -598,7 +598,7 @@ class TestEnsureLanggraphDev:
 
     def test_reuses_existing_healthy_subprocess(self, tmp_path, runtime_paths):
         """When the subprocess is already running, no new Popen call."""
-        cfg = EvoScientistConfig()
+        cfg = ScribeConfig()
         cfg.enable_async_subagents = True
         cfg.langgraph_dev_port = 6174
         cfg.langgraph_dev_file_persistence = True
@@ -729,7 +729,7 @@ class TestRotateLogIfNeeded:
         log = tmp_path / "langgraph_dev.log"
         log.write_bytes(b"x" * 10)
         with patch(
-            "EvoScientist.langgraph_dev.manager.os.replace",
+            "metasci_scribe.langgraph_dev.manager.os.replace",
             side_effect=PermissionError("denied"),
         ):
             # Must not raise.
@@ -755,7 +755,7 @@ class TestStartLanggraphDevRotatesLog:
         # workspace_sidecar, lock_file) is rooted under ``tmp_path``.
         # ``dataclasses.replace(runtime_paths, …)`` would still carry
         # ``pid_file`` / ``workspace_sidecar`` / ``lock_file`` from the
-        # production object pointing at ``~/.config/evoscientist/``.
+        # production object pointing at ``~/.config/metasci-scribe/``.
         pid_dir = tmp_path / "pids"
         monkeypatch.setattr(
             manager,
@@ -785,7 +785,7 @@ class TestStartLanggraphDevRotatesLog:
                 manager, "_packaged_langgraph_config", return_value=fake_config
             ),
             patch(
-                "EvoScientist.langgraph_dev.manager.subprocess.Popen",
+                "metasci_scribe.langgraph_dev.manager.subprocess.Popen",
                 side_effect=FileNotFoundError("subprocess not available"),
             ),
         ):
@@ -796,7 +796,7 @@ class TestStartLanggraphDevRotatesLog:
         # After start attempt, the oversize log must have been rotated.
         assert (tmp_path / "langgraph_dev.log.1").exists()
         # And the redirect held — nothing leaked into the real
-        # ``~/.config/evoscientist/`` (we'd have observed a
+        # ``~/.config/metasci-scribe/`` (we'd have observed a
         # ``langgraph_dev.log.1`` *next* to the user's real log, not
         # under ``tmp_path``). The ``pid_dir`` we redirected to must
         # exist, proving the function reached past the mkdir prelude.
@@ -841,7 +841,7 @@ def start_langgraph_dev_capture(tmp_path, monkeypatch):
         raise FileNotFoundError("stop before real spawn")
 
     monkeypatch.setattr(
-        "EvoScientist.langgraph_dev.manager.subprocess.Popen", _fake_popen
+        "metasci_scribe.langgraph_dev.manager.subprocess.Popen", _fake_popen
     )
     return SimpleNamespace(tmp_path=tmp_path, log=log, captured=captured)
 
@@ -890,11 +890,11 @@ class TestStartLanggraphDevCapturesLogOffset:
 
 class TestStartLanggraphDevPropagatesPort:
     """``start_langgraph_dev`` must export the effective bind port into the
-    subprocess env as ``EVOSCIENTIST_LANGGRAPH_DEV_PORT`` so the deployed
+    subprocess env as ``METASCI_SCRIBE_LANGGRAPH_DEV_PORT`` so the deployed
     main agent's ``cfg.langgraph_dev_port`` matches what langgraph dev
-    actually bound to. Without this, ``EvoSci deploy --port X`` binds to X
+    actually bound to. Without this, ``metasci-scribe deploy --port X`` binds to X
     but the deployed agent reads the persisted ``langgraph_dev_port``
-    (whatever ``EvoSci config set langgraph_dev_port`` last wrote), and
+    (whatever ``metasci-scribe config set langgraph_dev_port`` last wrote), and
     every ``start_async_task`` fails with "All connection attempts failed"
     because the self-loop URL points at an unbound port.
     """
@@ -911,33 +911,33 @@ class TestStartLanggraphDevPropagatesPort:
             manager.start_langgraph_dev(workspace_dir=env.tmp_path, port=6617)
         except FileNotFoundError:
             pass
-        assert env.captured["env"]["EVOSCIENTIST_LANGGRAPH_DEV_PORT"] == "6617"
+        assert env.captured["env"]["METASCI_SCRIBE_LANGGRAPH_DEV_PORT"] == "6617"
         argv = env.captured["args"]
         assert (
             argv[argv.index("--port") + 1]
-            == env.captured["env"]["EVOSCIENTIST_LANGGRAPH_DEV_PORT"]
+            == env.captured["env"]["METASCI_SCRIBE_LANGGRAPH_DEV_PORT"]
         )
 
     def test_env_value_replaces_inherited(
         self, start_langgraph_dev_capture, monkeypatch
     ):
-        """A stray parent-shell export of ``EVOSCIENTIST_LANGGRAPH_DEV_PORT``
+        """A stray parent-shell export of ``METASCI_SCRIBE_LANGGRAPH_DEV_PORT``
         must NOT shadow the caller-resolved bind port in the subprocess env.
         Dict assignment on ``sub_env`` already guarantees this, but the
         argv-vs-env cross-check pins the invariant against a future refactor
         that decoupled the two."""
-        monkeypatch.setenv("EVOSCIENTIST_LANGGRAPH_DEV_PORT", "9999")
+        monkeypatch.setenv("METASCI_SCRIBE_LANGGRAPH_DEV_PORT", "9999")
         env = start_langgraph_dev_capture
         try:
             manager.start_langgraph_dev(workspace_dir=env.tmp_path, port=6606)
         except FileNotFoundError:
             pass
         # Parent's 9999 replaced; caller's 6606 wins in both env and argv.
-        assert env.captured["env"]["EVOSCIENTIST_LANGGRAPH_DEV_PORT"] == "6606"
+        assert env.captured["env"]["METASCI_SCRIBE_LANGGRAPH_DEV_PORT"] == "6606"
         argv = env.captured["args"]
         assert (
             argv[argv.index("--port") + 1]
-            == env.captured["env"]["EVOSCIENTIST_LANGGRAPH_DEV_PORT"]
+            == env.captured["env"]["METASCI_SCRIBE_LANGGRAPH_DEV_PORT"]
         )
 
 

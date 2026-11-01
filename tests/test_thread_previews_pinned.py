@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-from EvoScientist.gateway.server import _thread_preview
-from EvoScientist.sessions import _extract_preview
+from metasci_scribe.gateway.server import _thread_preview
+from metasci_scribe.sessions import _extract_preview
 
 _PINNED = HumanMessage(
     "<skill name='alpha'>SKILL BODY</skill>",

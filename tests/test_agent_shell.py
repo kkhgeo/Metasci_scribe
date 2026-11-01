@@ -1,4 +1,4 @@
-"""Tests for EvoScientist.agent_shell: the shell the agent's commands run in.
+"""Tests for metasci_scribe.agent_shell: the shell the agent's commands run in.
 
 The unit tests run anywhere: a "recorded bash" is faked with ``/bin/bash`` on
 POSIX, which runs the script file the same way Git Bash does. The tests marked
@@ -20,11 +20,11 @@ from types import SimpleNamespace
 import psutil
 import pytest
 
-from EvoScientist import agent_shell
-from EvoScientist import background as bg
-from EvoScientist.backends import CustomSandboxBackend
-from EvoScientist.setup import research_env
-from EvoScientist.setup.git import GitInfo
+from metasci_scribe import agent_shell
+from metasci_scribe import background as bg
+from metasci_scribe.backends import CustomSandboxBackend
+from metasci_scribe.setup import research_env
+from metasci_scribe.setup.git import GitInfo
 
 # Saved at import, before the autouse fixture in conftest pins them.
 _REAL_AGENT_BASH = agent_shell.agent_bash
@@ -48,7 +48,7 @@ def _info(bash: Path, source: str = "system") -> GitInfo:
 def scripts(tmp_path, monkeypatch) -> Path:
     """Script files go to a test directory, swept only when a test asks; the
     agent's git config file goes to a test data dir, not the real one."""
-    from EvoScientist import paths
+    from metasci_scribe import paths
 
     directory = tmp_path / "scripts"
     monkeypatch.setattr(agent_shell, "_script_dir", lambda: directory)
@@ -87,14 +87,14 @@ def real_bash(scripts, monkeypatch) -> GitInfo:
 # --------------------------------------------------------------------------- #
 def test_agent_bash_is_the_recorded_git(monkeypatch, caplog):
     info = _info(Path(r"C:\Git\bin\bash.exe"))
-    monkeypatch.setattr("EvoScientist.setup.git.recorded_git", lambda: info)
-    with caplog.at_level("INFO", logger="EvoScientist.agent_shell"):
+    monkeypatch.setattr("metasci_scribe.setup.git.recorded_git", lambda: info)
+    with caplog.at_level("INFO", logger="metasci_scribe.agent_shell"):
         assert _REAL_AGENT_BASH.__wrapped__() == info
     assert "Agent shell: " in caplog.text
 
 
 def test_agent_bash_is_none_without_a_record(monkeypatch):
-    monkeypatch.setattr("EvoScientist.setup.git.recorded_git", lambda: None)
+    monkeypatch.setattr("metasci_scribe.setup.git.recorded_git", lambda: None)
     assert _REAL_AGENT_BASH.__wrapped__() is None
 
 
@@ -126,7 +126,7 @@ def test_setup_hint_names_what_is_missing(monkeypatch, python, bash_missing, exp
     monkeypatch.setattr(agent_shell, "_bash_missing", lambda: bash_missing)
     hint = agent_shell.setup_hint()
     if expected == "combined":
-        assert hint.count("Run `EvoSci setup`") == 1
+        assert hint.count("Run `metasci-scribe setup`") == 1
         assert "no usable `python`" in hint
         assert "cmd.exe" in hint
     else:
@@ -190,11 +190,11 @@ def test_shell_drift_message_joins_python_and_bash(monkeypatch):
 
 
 def test_setup_hint_is_logged_once(monkeypatch, caplog):
-    monkeypatch.setattr(agent_shell, "setup_hint", lambda: "Run `EvoSci setup`")
+    monkeypatch.setattr(agent_shell, "setup_hint", lambda: "Run `metasci-scribe setup`")
     log_once = _REAL_LOG_SETUP_HINT.__wrapped__
-    with caplog.at_level("WARNING", logger="EvoScientist.agent_shell"):
+    with caplog.at_level("WARNING", logger="metasci_scribe.agent_shell"):
         log_once()
-    assert "Run `EvoSci setup`" in caplog.text
+    assert "Run `metasci-scribe setup`" in caplog.text
 
 
 # --------------------------------------------------------------------------- #
@@ -255,7 +255,7 @@ def test_windows_command_line_quotes_both_paths(monkeypatch):
     leave a path without spaces unquoted, so `'` and `[` would not survive."""
     monkeypatch.setattr(agent_shell.sys, "platform", "win32")
     bash = Path("C:/Program Files/Git/bin/bash.exe")
-    script = Path("C:/Users/O'Brien [x]/AppData/Local/Temp/evoscientist/cmd-a.sh")
+    script = Path("C:/Users/O'Brien [x]/AppData/Local/Temp/metasci-scribe/cmd-a.sh")
     line = agent_shell._bash_command_line(bash, script)
     assert line == f'"{bash}" "{script.as_posix()}"'
     monkeypatch.setattr(agent_shell.sys, "platform", "linux")
@@ -281,9 +281,9 @@ def test_execute_does_not_source_bash_env(fake_bash, tmp_path):
 
 
 def test_bash_env_inherits_ours_when_none_is_given(fake_bash, monkeypatch):
-    monkeypatch.setenv("EVOSCI_TEST_MARKER", "x")
+    monkeypatch.setenv("METASCI_SCRIBE_TEST_MARKER", "x")
     launch = agent_shell.prepare("true", None)
-    assert launch.env["EVOSCI_TEST_MARKER"] == "x"
+    assert launch.env["METASCI_SCRIBE_TEST_MARKER"] == "x"
     assert launch.env["PYTHONIOENCODING"] == "utf-8"
     launch.cleanup()
 
@@ -357,7 +357,7 @@ def test_started_resumes_and_warns_when_no_job_can_be_assigned(monkeypatch, capl
     api = FakeJobApi(assign_ok=False)
     launch = _windows_launch(monkeypatch, api)
     process = FakeProcess(1234)
-    with caplog.at_level("WARNING", logger="EvoScientist.agent_shell"):
+    with caplog.at_level("WARNING", logger="metasci_scribe.agent_shell"):
         launch.started(process)
     assert api.calls == [
         ("create",),
@@ -466,9 +466,9 @@ def _placeholder_bash(root: Path) -> Path:
 @pytest.fixture
 def portablegit(scripts, tmp_path, monkeypatch) -> GitInfo:
     """A recorded PortableGit under a path that needs quoting."""
-    from EvoScientist import paths
+    from metasci_scribe import paths
 
-    data = tmp_path / "Jan #1; ąę" / ".evoscientist"
+    data = tmp_path / "Jan #1; ąę" / ".metasci-scribe"
     root = data / "tools" / "git-2.56.0.windows.1"
     (root / "etc").mkdir(parents=True)
     (root / "etc" / "gitconfig").write_text(_SHIPPED_GITCONFIG)
@@ -587,9 +587,9 @@ def test_unwritable_agent_gitconfig_is_skipped_with_a_warning(
     blocker = tmp_path / "a-file"
     blocker.write_text("")
     monkeypatch.setattr(
-        "EvoScientist.setup._install.tools_dir", lambda: blocker / "tools"
+        "metasci_scribe.setup._install.tools_dir", lambda: blocker / "tools"
     )
-    with caplog.at_level("WARNING", logger="EvoScientist.agent_shell"):
+    with caplog.at_level("WARNING", logger="metasci_scribe.agent_shell"):
         launch = agent_shell.prepare("true", {})
     launch.cleanup()
     assert "GIT_CONFIG_SYSTEM" not in launch.env
@@ -761,7 +761,7 @@ def test_windows_native_python_output_is_decoded(real_bash, tmp_path):
 
 @windows_bash
 def test_windows_manual_background_recipe_returns_at_once(real_bash, tmp_path):
-    tag = "evosci-c07-bg"
+    tag = "metasci-scribe-c07-bg"
     backend = CustomSandboxBackend(root_dir=str(tmp_path / "ws"))
     started = time.monotonic()
     resp = backend.execute(
@@ -788,10 +788,10 @@ def test_windows_cancel_stops_a_python_child(real_bash, tmp_path):
     shell processes."""
     import threading
 
-    from EvoScientist.backends import cancel_active_shell_processes
-    from EvoScientist.cancellation import bind_cancel_event
+    from metasci_scribe.backends import cancel_active_shell_processes
+    from metasci_scribe.cancellation import bind_cancel_event
 
-    tag = "evosci-c07-cancel"
+    tag = "metasci-scribe-c07-cancel"
     backend = CustomSandboxBackend(root_dir=str(tmp_path / "ws"))
     event = threading.Event()
     box = {}
@@ -872,8 +872,8 @@ def test_windows_timeout_stops_msys_programs(real_bash, tmp_path, secs, template
 def test_windows_cancel_stops_msys_programs(real_bash, tmp_path, secs, template):
     import threading
 
-    from EvoScientist.backends import cancel_active_shell_processes
-    from EvoScientist.cancellation import bind_cancel_event
+    from metasci_scribe.backends import cancel_active_shell_processes
+    from metasci_scribe.cancellation import bind_cancel_event
 
     backend = CustomSandboxBackend(root_dir=str(tmp_path / "ws"))
     event = threading.Event()
@@ -915,7 +915,7 @@ def test_windows_stop_process_stops_msys_programs(real_bash, tmp_path):
 
 @windows_bash
 def test_windows_timeout_stops_a_python_child(real_bash, tmp_path):
-    tag = "evosci-c07-timeout"
+    tag = "metasci-scribe-c07-timeout"
     backend = CustomSandboxBackend(root_dir=str(tmp_path / "ws"), timeout=3)
     try:
         resp = backend.execute(f'"{_py()}" -c "import time; time.sleep(60)" {tag}')
@@ -931,7 +931,7 @@ def test_windows_timeout_stops_a_python_child(real_bash, tmp_path):
 
 @windows_bash
 def test_windows_background_job_runs_in_bash_and_stops(real_bash, tmp_path):
-    tag = "evosci-c07-job"
+    tag = "metasci-scribe-c07-job"
     bg._PROCESSES.clear()
     pid = bg.launch(
         f'echo "bash $BASH_VERSION"; "{_py()}" -c "import time; time.sleep(60)" {tag}',
@@ -971,16 +971,16 @@ def test_execute_names_a_missing_bash(scripts, tmp_path, monkeypatch):
     resp = CustomSandboxBackend(root_dir=str(tmp_path / "ws")).execute("echo hi")
     assert resp.exit_code == 1
     assert str(bash) in resp.output
-    assert "Run `EvoSci setup`, then restart EvoScientist." in resp.output
+    assert "Run `metasci-scribe setup`, then restart Metasci Scribe." in resp.output
     assert "FileNotFoundError" not in resp.output
     assert not scripts.exists() or list(scripts.iterdir()) == []
 
 
 def test_run_in_background_names_a_missing_bash(scripts, tmp_path, monkeypatch):
-    from EvoScientist.middleware.background import _make_run_in_background
+    from metasci_scribe.middleware.background import _make_run_in_background
 
     bash = _gone_bash(monkeypatch, tmp_path)
     tool = _make_run_in_background(work_dir=tmp_path, skills_dir=None, dangerous=False)
     result = tool.invoke({"command": "echo hi"})
     assert str(bash) in result
-    assert "Run `EvoSci setup`" in result
+    assert "Run `metasci-scribe setup`" in result

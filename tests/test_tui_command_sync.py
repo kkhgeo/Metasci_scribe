@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from EvoScientist.commands.base import ChannelRuntime, CommandContext
-from EvoScientist.paths import SessionDirs
+from metasci_scribe.commands.base import ChannelRuntime, CommandContext
+from metasci_scribe.paths import SessionDirs
 from tests.fakes.common import TEST_WORKSPACE
 
 pytest.importorskip("textual")
@@ -46,8 +46,8 @@ class _StubApp:
 
 
 async def test_sync_tui_command_completion_adopts_agent_swap(monkeypatch):
-    import EvoScientist.cli.tui_interactive as tui_mod
-    from EvoScientist import EvoScientist as evosci_mod
+    import metasci_scribe.cli.tui_interactive as tui_mod
+    from metasci_scribe import agent as scribe_mod
 
     app = _StubApp()
     ctx = CommandContext(
@@ -59,7 +59,7 @@ async def test_sync_tui_command_completion_adopts_agent_swap(monkeypatch):
     cmd = SimpleNamespace(name="/model")
 
     monkeypatch.setattr(
-        evosci_mod,
+        scribe_mod,
         "_ensure_config",
         lambda: SimpleNamespace(model="gpt-5.5", provider="openai"),
     )
@@ -76,7 +76,7 @@ async def test_sync_tui_command_completion_adopts_agent_swap(monkeypatch):
 
 
 async def test_sync_tui_command_completion_refreshes_without_agent_swap(monkeypatch):
-    import EvoScientist.cli.tui_interactive as tui_mod
+    import metasci_scribe.cli.tui_interactive as tui_mod
 
     app = _StubApp()
     ctx = CommandContext(
@@ -97,7 +97,7 @@ async def test_sync_tui_command_completion_refreshes_without_agent_swap(monkeypa
 
 
 async def test_sync_tui_command_completion_skips_unmounted_app(monkeypatch):
-    import EvoScientist.cli.tui_interactive as tui_mod
+    import metasci_scribe.cli.tui_interactive as tui_mod
 
     app = _StubApp()
     app._exiting = True
@@ -126,7 +126,7 @@ async def test_sync_tui_rebinds_runtime_on_thread_rotation_without_agent_swap(
     """Regression: ``/new`` and ``/resume`` rotate ``app._conversation_tid``
     without swapping the agent.  The runtime must still pick up the new
     thread id so the bus contract stays consistent with serve mode."""
-    import EvoScientist.cli.tui_interactive as tui_mod
+    import metasci_scribe.cli.tui_interactive as tui_mod
 
     app = _StubApp()
     app._conversation_tid = "rotated-thread"

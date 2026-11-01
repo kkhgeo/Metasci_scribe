@@ -16,12 +16,12 @@ from unittest.mock import patch
 import pytest
 from langchain_core.messages import SystemMessage
 
-from EvoScientist.subagents.expert_container_async import (
+from metasci_scribe.subagents.expert_container_async import (
     _PERSONA_SENTINEL,
     ExpertContainerState,
     ExpertSkillLoaderMiddleware,
 )
-from EvoScientist.tools.skills_manager import SkillInfo
+from metasci_scribe.tools.skills_manager import SkillInfo
 
 # Two base-stack witness blocks used across the wrap_model_call tests. Their
 # contents mirror the section headers deepagents emits per-turn — regressing
@@ -56,7 +56,7 @@ class TestComposePrompt:
     def test_returns_role_and_body_for_known_skill(self, workspace):
         mw = ExpertSkillLoaderMiddleware(workspace)
         with patch(
-            "EvoScientist.tools.skills_manager.list_expert_skills",
+            "metasci_scribe.tools.skills_manager.list_expert_skills",
             return_value=[_skill_info()],
         ):
             composed = mw._compose_prompt({"skill_name": "literature-review"})
@@ -69,7 +69,7 @@ class TestComposePrompt:
         mw = ExpertSkillLoaderMiddleware(workspace)
         info = _skill_info(role="", body="Second-person persona body.\n")
         with patch(
-            "EvoScientist.tools.skills_manager.list_expert_skills",
+            "metasci_scribe.tools.skills_manager.list_expert_skills",
             return_value=[info],
         ):
             composed = mw._compose_prompt({"skill_name": "literature-review"})
@@ -87,7 +87,7 @@ class TestComposePrompt:
         mw = ExpertSkillLoaderMiddleware(workspace)
         installed = [_skill_info(name="literature-review"), _skill_info(name="other")]
         with patch(
-            "EvoScientist.tools.skills_manager.list_expert_skills",
+            "metasci_scribe.tools.skills_manager.list_expert_skills",
             return_value=installed,
         ):
             composed = mw._compose_prompt({"skill_name": "not-installed"})
@@ -101,7 +101,7 @@ class TestComposePrompt:
     def test_no_installed_experts_reports_none(self, workspace):
         mw = ExpertSkillLoaderMiddleware(workspace)
         with patch(
-            "EvoScientist.tools.skills_manager.list_expert_skills", return_value=[]
+            "metasci_scribe.tools.skills_manager.list_expert_skills", return_value=[]
         ):
             composed = mw._compose_prompt({"skill_name": "literature-review"})
         assert composed.startswith("ERROR:")
@@ -114,7 +114,7 @@ class TestComposePrompt:
         skill-authoring bug through the LLM's error envelope."""
         mw = ExpertSkillLoaderMiddleware(workspace)
         with patch(
-            "EvoScientist.tools.skills_manager.list_expert_skills",
+            "metasci_scribe.tools.skills_manager.list_expert_skills",
             return_value=[_skill_info(body="")],
         ):
             composed = mw._compose_prompt({"skill_name": "literature-review"})
@@ -127,7 +127,7 @@ class TestComposePrompt:
         sense that matters — no persona, no pipeline. Same error cue."""
         mw = ExpertSkillLoaderMiddleware(workspace)
         with patch(
-            "EvoScientist.tools.skills_manager.list_expert_skills",
+            "metasci_scribe.tools.skills_manager.list_expert_skills",
             return_value=[_skill_info(body="   \n\n  \n")],
         ):
             composed = mw._compose_prompt({"skill_name": "literature-review"})
@@ -150,7 +150,7 @@ class TestComposePrompt:
         info.expert_source = "expert_md"
         info.expert_body = "## Persona\n\nYou are an adversarial reviewer.\n"
         with patch(
-            "EvoScientist.tools.skills_manager.list_expert_skills",
+            "metasci_scribe.tools.skills_manager.list_expert_skills",
             return_value=[info],
         ):
             composed = mw._compose_prompt({"skill_name": "paper-review"})
@@ -172,7 +172,7 @@ class TestComposePrompt:
         info.expert_source = "expert_md"
         info.expert_body = "  \n"
         with patch(
-            "EvoScientist.tools.skills_manager.list_expert_skills",
+            "metasci_scribe.tools.skills_manager.list_expert_skills",
             return_value=[info],
         ):
             composed = mw._compose_prompt({"skill_name": "paper-review"})
@@ -188,7 +188,7 @@ class TestComposePrompt:
         its own todo list per SKILL.md contract."""
         mw = ExpertSkillLoaderMiddleware(workspace)
         with patch(
-            "EvoScientist.tools.skills_manager.list_expert_skills",
+            "metasci_scribe.tools.skills_manager.list_expert_skills",
             return_value=[_skill_info()],
         ):
             composed = mw._compose_prompt({"skill_name": "literature-review"})
@@ -230,7 +230,7 @@ def _system_message_with_sentinel_and_witnesses() -> SystemMessage:
     time when the container graph was built with
     ``system_prompt=_FALLBACK_SYSTEM_PROMPT`` and the base stack has
     appended its sections on top."""
-    from EvoScientist.subagents.expert_container_async import _FALLBACK_SYSTEM_PROMPT
+    from metasci_scribe.subagents.expert_container_async import _FALLBACK_SYSTEM_PROMPT
 
     return SystemMessage(
         content=[
@@ -276,7 +276,7 @@ class TestWrapModelCall:
             _system_message_with_sentinel_and_witnesses()
         )
         with patch(
-            "EvoScientist.tools.skills_manager.list_expert_skills",
+            "metasci_scribe.tools.skills_manager.list_expert_skills",
             return_value=[_skill_info()],
         ):
             mw.wrap_model_call(request, handler)
@@ -313,12 +313,12 @@ class TestWrapModelCall:
         )
         with (
             patch(
-                "EvoScientist.tools.skills_manager.list_expert_skills",
+                "metasci_scribe.tools.skills_manager.list_expert_skills",
                 return_value=[_skill_info()],
             ),
             caplog.at_level(
                 logging.WARNING,
-                logger="EvoScientist.subagents.expert_container_async",
+                logger="metasci_scribe.subagents.expert_container_async",
             ),
         ):
             mw.wrap_model_call(request, handler)
@@ -381,18 +381,18 @@ class TestSpecWalkSkipsWarnOnce:
     broken."""
 
     def _walk(self, skills, workspace):
-        from EvoScientist.subagents.expert_container_async import (
+        from metasci_scribe.subagents.expert_container_async import (
             build_expert_async_subagent_specs,
         )
 
         cfg = SimpleNamespace(enable_async_subagents=True, langgraph_dev_port=6174)
         with (
             patch(
-                "EvoScientist.tools.skills_manager.list_expert_skills",
+                "metasci_scribe.tools.skills_manager.list_expert_skills",
                 return_value=skills,
             ),
             patch(
-                "EvoScientist.langgraph_dev.manager.is_async_subagents_available",
+                "metasci_scribe.langgraph_dev.manager.is_async_subagents_available",
                 return_value=True,
             ),
         ):
@@ -415,7 +415,7 @@ class TestSpecWalkSkipsWarnOnce:
         )
 
         with caplog.at_level(
-            logging.WARNING, logger="EvoScientist.tools.skills_manager"
+            logging.WARNING, logger="metasci_scribe.tools.skills_manager"
         ):
             first = self._walk([broken], workspace)
             second = self._walk([broken], workspace)
@@ -449,11 +449,11 @@ class TestSpecWalkSkipsWarnOnce:
 
         with (
             patch(
-                "EvoScientist.subagents.expert_container._reserved_subagent_names",
+                "metasci_scribe.subagents.expert_container._reserved_subagent_names",
                 return_value=frozenset({"warn-once-collision-expert"}),
             ),
             caplog.at_level(
-                logging.WARNING, logger="EvoScientist.tools.skills_manager"
+                logging.WARNING, logger="metasci_scribe.tools.skills_manager"
             ),
         ):
             first = self._walk([colliding], workspace)

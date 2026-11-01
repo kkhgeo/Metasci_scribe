@@ -6,34 +6,32 @@ import logging
 
 import pytest
 
-from EvoScientist.backends import MODEL_RETRY_RUN_KEY, model_retry_for_run
-from EvoScientist.config import EvoScientistConfig
-from EvoScientist.middleware.model_retry import (
+from metasci_scribe.backends import MODEL_RETRY_RUN_KEY, model_retry_for_run
+from metasci_scribe.config import ScribeConfig
+from metasci_scribe.middleware.model_retry import (
     ModelCallBoundaryMiddleware,
     ModelRetryMiddleware,
 )
 
 
 def test_config_defaults_and_env_names():
-    from EvoScientist.config.settings import _ENV_MAPPINGS
+    from metasci_scribe.config.settings import _ENV_MAPPINGS
 
-    cfg = EvoScientistConfig()
+    cfg = ScribeConfig()
     assert cfg.model_retry_wait_seconds == 60
     assert cfg.auto_mode_retry_wait_seconds == 1800
     assert (
         _ENV_MAPPINGS["model_retry_wait_seconds"]
-        == "EVOSCIENTIST_MODEL_RETRY_WAIT_SECONDS"
+        == "METASCI_SCRIBE_MODEL_RETRY_WAIT_SECONDS"
     )
     assert (
         _ENV_MAPPINGS["auto_mode_retry_wait_seconds"]
-        == "EVOSCIENTIST_AUTO_MODE_RETRY_WAIT_SECONDS"
+        == "METASCI_SCRIBE_AUTO_MODE_RETRY_WAIT_SECONDS"
     )
 
 
 def test_model_retry_for_run_follows_auto_mode():
-    cfg = EvoScientistConfig(
-        model_retry_wait_seconds=12, auto_mode_retry_wait_seconds=345
-    )
+    cfg = ScribeConfig(model_retry_wait_seconds=12, auto_mode_retry_wait_seconds=345)
     assert model_retry_for_run(cfg) == {"unattended": False, "wait_budget_seconds": 12}
     cfg.auto_mode = True
     assert model_retry_for_run(cfg) == {"unattended": True, "wait_budget_seconds": 345}
@@ -45,8 +43,8 @@ def test_model_retry_for_run_follows_auto_mode():
 def test_a_malformed_budget_goes_back_to_its_default_with_a_warning(bad, caplog):
     """A value that is not a whole number of seconds must not switch the
     retry off without a word; only 0 does that."""
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.config.settings"):
-        cfg = EvoScientistConfig(
+    with caplog.at_level(logging.WARNING, logger="metasci_scribe.config.settings"):
+        cfg = ScribeConfig(
             model_retry_wait_seconds=bad, auto_mode_retry_wait_seconds=bad
         )
     assert (cfg.model_retry_wait_seconds, cfg.auto_mode_retry_wait_seconds) == (
@@ -58,19 +56,17 @@ def test_a_malformed_budget_goes_back_to_its_default_with_a_warning(bad, caplog)
 
 
 def test_zero_and_whole_seconds_are_kept_as_written(caplog):
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.config.settings"):
-        cfg = EvoScientistConfig(
-            model_retry_wait_seconds=0, auto_mode_retry_wait_seconds=45
-        )
+    with caplog.at_level(logging.WARNING, logger="metasci_scribe.config.settings"):
+        cfg = ScribeConfig(model_retry_wait_seconds=0, auto_mode_retry_wait_seconds=45)
     assert (cfg.model_retry_wait_seconds, cfg.auto_mode_retry_wait_seconds) == (0, 45)
     assert "Invalid" not in caplog.text
 
 
 def test_a_negative_budget_is_kept_and_switches_the_retry_off(caplog):
-    from EvoScientist.EvoScientist import _model_retry_middleware
+    from metasci_scribe.agent import _model_retry_middleware
 
-    with caplog.at_level(logging.WARNING, logger="EvoScientist.config.settings"):
-        cfg = EvoScientistConfig(model_retry_wait_seconds=-5)
+    with caplog.at_level(logging.WARNING, logger="metasci_scribe.config.settings"):
+        cfg = ScribeConfig(model_retry_wait_seconds=-5)
     assert cfg.model_retry_wait_seconds == -5
     assert "Invalid" not in caplog.text
     assert _model_retry_middleware(cfg)._tier.wait_budget_seconds == 0.0
@@ -79,13 +75,13 @@ def test_a_negative_budget_is_kept_and_switches_the_retry_off(caplog):
 
 def test_a_malformed_budget_in_the_config_file_keeps_the_default(tmp_path, monkeypatch):
     """From the file, through the loader, to the retry layer and the run's key."""
-    from EvoScientist import paths
-    from EvoScientist.config.settings import load_config
-    from EvoScientist.EvoScientist import _model_retry_middleware
+    from metasci_scribe import paths
+    from metasci_scribe.agent import _model_retry_middleware
+    from metasci_scribe.config.settings import load_config
 
-    monkeypatch.setattr(paths, "CONFIG_DIR", tmp_path / "evoscientist")
-    (tmp_path / "evoscientist").mkdir()
-    (tmp_path / "evoscientist" / "config.yaml").write_text(
+    monkeypatch.setattr(paths, "CONFIG_DIR", tmp_path / "metasci-scribe")
+    (tmp_path / "metasci-scribe").mkdir()
+    (tmp_path / "metasci-scribe" / "config.yaml").write_text(
         "model_retry_wait_seconds: 60s\nauto_mode_retry_wait_seconds: .inf\n",
         encoding="utf-8",
     )
@@ -105,7 +101,7 @@ def test_the_readers_survive_a_value_the_config_did_not_normalise(value, auto_mo
     run's key agrees with the mounted layer, both without retries."""
     from types import SimpleNamespace
 
-    from EvoScientist.EvoScientist import _model_retry_middleware
+    from metasci_scribe.agent import _model_retry_middleware
 
     cfg = SimpleNamespace(
         auto_mode=auto_mode,
@@ -118,7 +114,7 @@ def test_the_readers_survive_a_value_the_config_did_not_normalise(value, auto_mo
 
 
 def test_resolve_per_run_config_writes_the_key_after_extras():
-    from EvoScientist.gateway.types import resolve_per_run_config
+    from metasci_scribe.gateway.types import resolve_per_run_config
 
     run_config = resolve_per_run_config(
         "t1",
@@ -144,7 +140,7 @@ def no_configured_model(monkeypatch):
     )
 
     monkeypatch.setattr(
-        "EvoScientist.EvoScientist._ensure_chat_model",
+        "metasci_scribe.agent._ensure_chat_model",
         lambda: FakeMessagesListChatModel(responses=[]),
     )
 
@@ -154,9 +150,9 @@ def _retry_of(middleware) -> ModelRetryMiddleware:
 
 
 def test_default_middleware_mounts_retry_first_and_always(workspace):
-    from EvoScientist.EvoScientist import _get_default_middleware
+    from metasci_scribe.agent import _get_default_middleware
 
-    cfg = EvoScientistConfig(model_retry_wait_seconds=0, auto_mode_retry_wait_seconds=0)
+    cfg = ScribeConfig(model_retry_wait_seconds=0, auto_mode_retry_wait_seconds=0)
     mw = _get_default_middleware(workspace=workspace, cfg=cfg)
     names = _mw_names(mw)
     assert names.index("model_retry") < names.index("error_normalization")
@@ -166,11 +162,9 @@ def test_default_middleware_mounts_retry_first_and_always(workspace):
 
 
 def test_default_middleware_tier_follows_auto_mode_and_the_unattended_flag(workspace):
-    from EvoScientist.EvoScientist import _get_default_middleware
+    from metasci_scribe.agent import _get_default_middleware
 
-    cfg = EvoScientistConfig(
-        model_retry_wait_seconds=60, auto_mode_retry_wait_seconds=1800
-    )
+    cfg = ScribeConfig(model_retry_wait_seconds=60, auto_mode_retry_wait_seconds=1800)
     interactive = _retry_of(_get_default_middleware(workspace=workspace, cfg=cfg))
     assert (interactive._tier.wait_budget_seconds, interactive._tier.unattended) == (
         60.0,
@@ -193,11 +187,11 @@ def test_default_middleware_tier_follows_auto_mode_and_the_unattended_flag(works
 
 
 def test_subagent_lists_get_the_retry_first(workspace):
-    from EvoScientist.EvoScientist import _inject_subagent_middleware
+    from metasci_scribe.agent import _inject_subagent_middleware
 
     subs = [{"name": "research", "middleware": []}]
     _inject_subagent_middleware(
-        subs, workspace=workspace, cfg=EvoScientistConfig(), unattended=True
+        subs, workspace=workspace, cfg=ScribeConfig(), unattended=True
     )
     names = _mw_names(subs[0]["middleware"])
     assert names[0] == "model_retry"
@@ -208,7 +202,7 @@ def test_subagent_lists_get_the_retry_first(workspace):
 def test_grader_list_contains_the_retry_when_given(tmp_path):
     from deepagents.backends import FilesystemBackend
 
-    from EvoScientist.middleware.rubric import create_rubric_middleware
+    from metasci_scribe.middleware.rubric import create_rubric_middleware
     from tests.fakes.rubric import ScriptedGrader
 
     retry = ModelRetryMiddleware(wait_budget_seconds=60, unattended=False)
@@ -225,7 +219,7 @@ def test_grader_boundary_comes_with_its_retry_layer(tmp_path):
     """Without the retry layer nothing rejects an error-finished grader response, so no marks either."""
     from deepagents.backends import FilesystemBackend
 
-    from EvoScientist.middleware.rubric import create_rubric_middleware
+    from metasci_scribe.middleware.rubric import create_rubric_middleware
     from tests.fakes.rubric import ScriptedGrader
 
     def _build(**kwargs):
@@ -248,9 +242,9 @@ def _index_of(middleware, name: str) -> int:
 
 
 def test_default_middleware_mounts_the_boundary_inside_the_fallback_chain(workspace):
-    from EvoScientist.EvoScientist import _get_default_middleware
+    from metasci_scribe.agent import _get_default_middleware
 
-    mw = _get_default_middleware(workspace=workspace, cfg=EvoScientistConfig())
+    mw = _get_default_middleware(workspace=workspace, cfg=ScribeConfig())
     names = _mw_names(mw)
     assert names.count("model_call_boundary") == 1
     boundary = _index_of(mw, "model_call_boundary")
@@ -261,13 +255,13 @@ def test_default_middleware_mounts_the_boundary_inside_the_fallback_chain(worksp
 
 
 def test_subagent_lists_get_the_boundary_inside_the_normalization_layer(workspace):
-    from EvoScientist.EvoScientist import _inject_subagent_middleware
+    from metasci_scribe.agent import _inject_subagent_middleware
 
     subs = [{"name": "research", "middleware": []}]
     _inject_subagent_middleware(
         subs,
         workspace=workspace,
-        cfg=EvoScientistConfig(),
+        cfg=ScribeConfig(),
         model_retry_honors_run_key=False,
     )
     mw = subs[0]["middleware"]

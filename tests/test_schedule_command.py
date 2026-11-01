@@ -2,12 +2,12 @@
 
 from unittest.mock import MagicMock, patch
 
-from EvoScientist.paths import SessionDirs
+from metasci_scribe.paths import SessionDirs
 from tests.fakes.common import TEST_WORKSPACE
 
 
 def _ctx():
-    from EvoScientist.commands.base import CommandContext
+    from metasci_scribe.commands.base import CommandContext
 
     ui = MagicMock()
     return CommandContext(
@@ -16,23 +16,23 @@ def _ctx():
 
 
 async def test_list_when_backend_down():
-    from EvoScientist.commands.implementation.schedule import ScheduleCommand
+    from metasci_scribe.commands.implementation.schedule import ScheduleCommand
 
     ctx, ui = _ctx()
-    with patch("EvoScientist.cron.schedule.is_available", return_value=False):
+    with patch("metasci_scribe.cron.schedule.is_available", return_value=False):
         await ScheduleCommand().execute(ctx, ["list"])
     msgs = [c.args[0] for c in ui.append_system.call_args_list]
     assert any("unavailable" in m.lower() for m in msgs)
 
 
 async def test_add_parses_five_field_cron_and_prompt():
-    from EvoScientist.commands.implementation.schedule import ScheduleCommand
+    from metasci_scribe.commands.implementation.schedule import ScheduleCommand
 
     ctx, _ui = _ctx()
     with (
-        patch("EvoScientist.cron.schedule.is_available", return_value=True),
+        patch("metasci_scribe.cron.schedule.is_available", return_value=True),
         patch(
-            "EvoScientist.cron.schedule.create_schedule",
+            "metasci_scribe.cron.schedule.create_schedule",
             return_value={"cron_id": "c-9"},
         ) as mk,
     ):
@@ -45,7 +45,7 @@ async def test_add_parses_five_field_cron_and_prompt():
 
 
 async def test_list_renders_table():
-    from EvoScientist.commands.implementation.schedule import ScheduleCommand
+    from metasci_scribe.commands.implementation.schedule import ScheduleCommand
 
     ctx, ui = _ctx()
     rows = [
@@ -58,21 +58,21 @@ async def test_list_renders_table():
         }
     ]
     with (
-        patch("EvoScientist.cron.schedule.is_available", return_value=True),
-        patch("EvoScientist.cron.schedule.list_schedules", return_value=rows),
+        patch("metasci_scribe.cron.schedule.is_available", return_value=True),
+        patch("metasci_scribe.cron.schedule.list_schedules", return_value=rows),
     ):
         await ScheduleCommand().execute(ctx, ["list"])
     ui.mount_renderable.assert_called_once()
 
 
 async def test_add_parses_quoted_cron_and_prompt():
-    from EvoScientist.commands.implementation.schedule import ScheduleCommand
+    from metasci_scribe.commands.implementation.schedule import ScheduleCommand
 
     ctx, _ui = _ctx()
     with (
-        patch("EvoScientist.cron.schedule.is_available", return_value=True),
+        patch("metasci_scribe.cron.schedule.is_available", return_value=True),
         patch(
-            "EvoScientist.cron.schedule.create_schedule",
+            "metasci_scribe.cron.schedule.create_schedule",
             return_value={"cron_id": "c-9"},
         ) as mk,
     ):
@@ -85,15 +85,15 @@ async def test_add_parses_quoted_cron_and_prompt():
 
 
 async def test_run_with_matching_prefix_fires_matched_prompt():
-    from EvoScientist.commands.implementation.schedule import ScheduleCommand
+    from metasci_scribe.commands.implementation.schedule import ScheduleCommand
 
     ctx, _ui = _ctx()
     rows = [{"cron_id": "c-12345", "metadata": {"prompt": "do the thing"}}]
     with (
-        patch("EvoScientist.cron.schedule.is_available", return_value=True),
-        patch("EvoScientist.cron.schedule.list_schedules", return_value=rows),
+        patch("metasci_scribe.cron.schedule.is_available", return_value=True),
+        patch("metasci_scribe.cron.schedule.list_schedules", return_value=rows),
         patch(
-            "EvoScientist.cron.schedule.run_now",
+            "metasci_scribe.cron.schedule.run_now",
             return_value={"run_id": "r-1"},
         ) as rn,
     ):
@@ -102,13 +102,13 @@ async def test_run_with_matching_prefix_fires_matched_prompt():
 
 
 async def test_run_with_no_match_reports():
-    from EvoScientist.commands.implementation.schedule import ScheduleCommand
+    from metasci_scribe.commands.implementation.schedule import ScheduleCommand
 
     ctx, ui = _ctx()
     with (
-        patch("EvoScientist.cron.schedule.is_available", return_value=True),
-        patch("EvoScientist.cron.schedule.list_schedules", return_value=[]),
-        patch("EvoScientist.cron.schedule.run_now") as rn,
+        patch("metasci_scribe.cron.schedule.is_available", return_value=True),
+        patch("metasci_scribe.cron.schedule.list_schedules", return_value=[]),
+        patch("metasci_scribe.cron.schedule.run_now") as rn,
     ):
         await ScheduleCommand().execute(ctx, ["run", "nope"])
     rn.assert_not_called()
@@ -117,15 +117,15 @@ async def test_run_with_no_match_reports():
 
 
 async def test_pause_resume_set_enabled_with_resolved_id():
-    from EvoScientist.commands.implementation.schedule import ScheduleCommand
+    from metasci_scribe.commands.implementation.schedule import ScheduleCommand
 
     rows = [{"cron_id": "c-abcdef", "metadata": {"name": "t"}}]
     for sub, expected in (("pause", False), ("resume", True)):
         ctx, _ui = _ctx()
         with (
-            patch("EvoScientist.cron.schedule.is_available", return_value=True),
-            patch("EvoScientist.cron.schedule.list_schedules", return_value=rows),
-            patch("EvoScientist.cron.schedule.set_enabled") as se,
+            patch("metasci_scribe.cron.schedule.is_available", return_value=True),
+            patch("metasci_scribe.cron.schedule.list_schedules", return_value=rows),
+            patch("metasci_scribe.cron.schedule.set_enabled") as se,
         ):
             await ScheduleCommand().execute(ctx, [sub, "c-abc"])
         se.assert_called_once_with(rows[0], expected, workspace=TEST_WORKSPACE)
@@ -138,13 +138,13 @@ async def test_pause_resume_set_enabled_with_resolved_id():
 
 async def test_list_error_shows_red_message_no_exception():
     """B1: list_schedules raising after is_available() shows a red error, not a traceback."""
-    from EvoScientist.commands.implementation.schedule import ScheduleCommand
+    from metasci_scribe.commands.implementation.schedule import ScheduleCommand
 
     ctx, ui = _ctx()
     with (
-        patch("EvoScientist.cron.schedule.is_available", return_value=True),
+        patch("metasci_scribe.cron.schedule.is_available", return_value=True),
         patch(
-            "EvoScientist.cron.schedule.list_schedules",
+            "metasci_scribe.cron.schedule.list_schedules",
             side_effect=RuntimeError("backend gone"),
         ),
     ):
@@ -161,7 +161,7 @@ async def test_list_error_shows_red_message_no_exception():
 
 async def test_remove_ambiguous_prefix_aborts_without_deleting():
     """B2: two crons sharing a prefix → ambiguity message, delete NOT called."""
-    from EvoScientist.commands.implementation.schedule import ScheduleCommand
+    from metasci_scribe.commands.implementation.schedule import ScheduleCommand
 
     ctx, ui = _ctx()
     rows = [
@@ -169,9 +169,9 @@ async def test_remove_ambiguous_prefix_aborts_without_deleting():
         {"cron_id": "abc-222", "metadata": {}},
     ]
     with (
-        patch("EvoScientist.cron.schedule.is_available", return_value=True),
-        patch("EvoScientist.cron.schedule.list_schedules", return_value=rows),
-        patch("EvoScientist.cron.schedule.delete_schedule") as mk,
+        patch("metasci_scribe.cron.schedule.is_available", return_value=True),
+        patch("metasci_scribe.cron.schedule.list_schedules", return_value=rows),
+        patch("metasci_scribe.cron.schedule.delete_schedule") as mk,
     ):
         await ScheduleCommand().execute(ctx, ["remove", "abc"])
     mk.assert_not_called()
@@ -186,16 +186,16 @@ async def test_remove_ambiguous_prefix_aborts_without_deleting():
 
 async def test_remove_backend_error_shows_red_error_not_no_match():
     """FIX 1: list_schedules() crashing in _resolve → red 'Error:' message, not 'No schedule matching'."""
-    from EvoScientist.commands.implementation.schedule import ScheduleCommand
+    from metasci_scribe.commands.implementation.schedule import ScheduleCommand
 
     ctx, ui = _ctx()
     with (
-        patch("EvoScientist.cron.schedule.is_available", return_value=True),
+        patch("metasci_scribe.cron.schedule.is_available", return_value=True),
         patch(
-            "EvoScientist.cron.schedule.list_schedules",
+            "metasci_scribe.cron.schedule.list_schedules",
             side_effect=RuntimeError("boom"),
         ),
-        patch("EvoScientist.cron.schedule.delete_schedule") as mk,
+        patch("metasci_scribe.cron.schedule.delete_schedule") as mk,
     ):
         await ScheduleCommand().execute(ctx, ["remove", "abc"])
     mk.assert_not_called()
@@ -214,15 +214,15 @@ async def test_add_name_sanitized_from_nasty_prompt():
     """B3: prompt with newline / slashes / special chars → clean kebab-case name."""
     import re
 
-    from EvoScientist.commands.implementation.schedule import ScheduleCommand
+    from metasci_scribe.commands.implementation.schedule import ScheduleCommand
 
     ctx, _ui = _ctx()
     # prompt with newline, slashes, and dots
     nasty_prompt = "Search /tmp/foo\nand summarize! Latest.Papers."
     with (
-        patch("EvoScientist.cron.schedule.is_available", return_value=True),
+        patch("metasci_scribe.cron.schedule.is_available", return_value=True),
         patch(
-            "EvoScientist.cron.schedule.create_schedule",
+            "metasci_scribe.cron.schedule.create_schedule",
             return_value={"cron_id": "c-x"},
         ) as mk,
     ):
@@ -243,13 +243,13 @@ async def test_add_name_sanitized_from_nasty_prompt():
 
 
 async def test_add_parses_trailing_rubric_flag():
-    from EvoScientist.commands.implementation.schedule import ScheduleCommand
+    from metasci_scribe.commands.implementation.schedule import ScheduleCommand
 
     ctx, _ui = _ctx()
     with (
-        patch("EvoScientist.cron.schedule.is_available", return_value=True),
+        patch("metasci_scribe.cron.schedule.is_available", return_value=True),
         patch(
-            "EvoScientist.cron.schedule.create_schedule",
+            "metasci_scribe.cron.schedule.create_schedule",
             return_value={"cron_id": "c-9"},
         ) as mk,
     ):
@@ -269,13 +269,13 @@ async def test_add_parses_trailing_rubric_flag():
 
 
 async def test_add_without_rubric_passes_none():
-    from EvoScientist.commands.implementation.schedule import ScheduleCommand
+    from metasci_scribe.commands.implementation.schedule import ScheduleCommand
 
     ctx, _ui = _ctx()
     with (
-        patch("EvoScientist.cron.schedule.is_available", return_value=True),
+        patch("metasci_scribe.cron.schedule.is_available", return_value=True),
         patch(
-            "EvoScientist.cron.schedule.create_schedule",
+            "metasci_scribe.cron.schedule.create_schedule",
             return_value={"cron_id": "c-9"},
         ) as mk,
     ):
@@ -286,7 +286,7 @@ async def test_add_without_rubric_passes_none():
 
 
 async def test_run_forwards_stored_rubric():
-    from EvoScientist.commands.implementation.schedule import ScheduleCommand
+    from metasci_scribe.commands.implementation.schedule import ScheduleCommand
 
     ctx, _ui = _ctx()
     rows = [
@@ -296,10 +296,10 @@ async def test_run_forwards_stored_rubric():
         }
     ]
     with (
-        patch("EvoScientist.cron.schedule.is_available", return_value=True),
-        patch("EvoScientist.cron.schedule.list_schedules", return_value=rows),
+        patch("metasci_scribe.cron.schedule.is_available", return_value=True),
+        patch("metasci_scribe.cron.schedule.list_schedules", return_value=rows),
         patch(
-            "EvoScientist.cron.schedule.run_now",
+            "metasci_scribe.cron.schedule.run_now",
             return_value={"run_id": "r-1"},
         ) as rn,
     ):
@@ -310,7 +310,7 @@ async def test_run_forwards_stored_rubric():
 
 
 async def test_list_table_marks_graded_rows():
-    from EvoScientist.commands.implementation.schedule import ScheduleCommand
+    from metasci_scribe.commands.implementation.schedule import ScheduleCommand
 
     ctx, ui = _ctx()
     rows = [
@@ -330,8 +330,8 @@ async def test_list_table_marks_graded_rows():
         },
     ]
     with (
-        patch("EvoScientist.cron.schedule.is_available", return_value=True),
-        patch("EvoScientist.cron.schedule.list_schedules", return_value=rows),
+        patch("metasci_scribe.cron.schedule.is_available", return_value=True),
+        patch("metasci_scribe.cron.schedule.list_schedules", return_value=rows),
     ):
         await ScheduleCommand().execute(ctx, ["list"])
     table = ui.mount_renderable.call_args.args[0]
@@ -341,13 +341,13 @@ async def test_list_table_marks_graded_rows():
 
 async def test_add_treats_last_rubric_flag_as_the_separator():
     """An unquoted prompt may mention the flag; only the final one splits."""
-    from EvoScientist.commands.implementation.schedule import ScheduleCommand
+    from metasci_scribe.commands.implementation.schedule import ScheduleCommand
 
     ctx, _ui = _ctx()
     with (
-        patch("EvoScientist.cron.schedule.is_available", return_value=True),
+        patch("metasci_scribe.cron.schedule.is_available", return_value=True),
         patch(
-            "EvoScientist.cron.schedule.create_schedule",
+            "metasci_scribe.cron.schedule.create_schedule",
             return_value={"cron_id": "c-9"},
         ) as mk,
     ):

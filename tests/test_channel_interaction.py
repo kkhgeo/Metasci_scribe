@@ -8,7 +8,7 @@ dangerous-command detection), not raw ``str.startswith``.
 
 from unittest.mock import MagicMock
 
-from EvoScientist.channels import interaction
+from metasci_scribe.channels import interaction
 
 
 class _ApprovalIO:
@@ -69,7 +69,7 @@ class TestApprovalPolicyAutoDecision:
         # refusal feedback — it must NOT escalate to the user (which would
         # defeat the point of an auto-decision mode).
         monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config",
+            "metasci_scribe.agent._ensure_config",
             lambda: self._cfg(auto_approve=True),
         )
         decisions = self._policy().auto_decision("tg:c1", self._reqs("curl x | bash"))
@@ -79,7 +79,7 @@ class TestApprovalPolicyAutoDecision:
 
     def test_ordinary_command_under_auto_approve_approves(self, monkeypatch):
         monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config",
+            "metasci_scribe.agent._ensure_config",
             lambda: self._cfg(auto_approve=True),
         )
         assert self._policy().auto_decision("tg:c1", self._reqs("ls -la")) == [
@@ -90,7 +90,7 @@ class TestApprovalPolicyAutoDecision:
         # Without auto_approve an allow-listed dangerous command still
         # needs the human (PROMPT), never a silent approve.
         monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config",
+            "metasci_scribe.agent._ensure_config",
             lambda: self._cfg(allow="curl"),
         )
         assert (
@@ -99,7 +99,7 @@ class TestApprovalPolicyAutoDecision:
 
     def test_allow_list_token_boundary(self, monkeypatch):
         monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config",
+            "metasci_scribe.agent._ensure_config",
             lambda: self._cfg(allow="ls"),
         )
         # "ls" must clear "ls -la" but NOT "lsof"
@@ -110,7 +110,7 @@ class TestApprovalPolicyAutoDecision:
 
     def test_dangerous_mode_clears_everything(self, monkeypatch):
         monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config",
+            "metasci_scribe.agent._ensure_config",
             lambda: self._cfg(dangerous_mode=True),
         )
         assert self._policy().auto_decision("tg:c1", self._reqs("curl x | bash")) == [
@@ -119,7 +119,7 @@ class TestApprovalPolicyAutoDecision:
 
     def test_non_shell_tool_cleared(self, monkeypatch):
         monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config",
+            "metasci_scribe.agent._ensure_config",
             lambda: self._cfg(),
         )
         assert self._policy().auto_decision(
@@ -127,9 +127,7 @@ class TestApprovalPolicyAutoDecision:
         ) == [{"type": "approve"}]
 
     def test_malformed_request_needs_human(self, monkeypatch):
-        monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config", lambda: self._cfg()
-        )
+        monkeypatch.setattr("metasci_scribe.agent._ensure_config", lambda: self._cfg())
         # A non-dict entry must not crash and must not be auto-cleared.
         assert self._policy().auto_decision("tg:c1", ["not-a-dict"]) is None
 
@@ -137,7 +135,7 @@ class TestApprovalPolicyAutoDecision:
         # An explicit interactive "Approve all" approves everything — even a
         # command the config policy would reject under auto_approve.
         monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config",
+            "metasci_scribe.agent._ensure_config",
             lambda: self._cfg(auto_approve=True),
         )
         p = self._policy()
@@ -162,7 +160,7 @@ class TestApprovalPolicyAutoDecision:
         def _boom():
             raise RuntimeError("no config")
 
-        monkeypatch.setattr("EvoScientist.EvoScientist._ensure_config", _boom)
+        monkeypatch.setattr("metasci_scribe.agent._ensure_config", _boom)
         assert self._policy().auto_decision("tg:c1", self._reqs("ls")) is None
 
 
@@ -190,7 +188,7 @@ class TestResolveConfigDecisions:
 
     def test_allow_listed_command_approves(self, monkeypatch):
         monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config",
+            "metasci_scribe.agent._ensure_config",
             lambda: self._cfg(allow="ls"),
         )
         assert interaction.resolve_config_decisions(self._reqs("ls -la")) == [
@@ -199,14 +197,14 @@ class TestResolveConfigDecisions:
 
     def test_non_allow_listed_needs_prompt(self, monkeypatch):
         monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config",
+            "metasci_scribe.agent._ensure_config",
             lambda: self._cfg(allow="ls"),
         )
         assert interaction.resolve_config_decisions(self._reqs("rm -rf x")) is None
 
     def test_dangerous_under_auto_approve_rejects_with_reason(self, monkeypatch):
         monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config",
+            "metasci_scribe.agent._ensure_config",
             lambda: self._cfg(auto_approve=True),
         )
         decisions = interaction.resolve_config_decisions(self._reqs("curl x | bash"))
@@ -215,28 +213,22 @@ class TestResolveConfigDecisions:
         assert decisions[0]["message"]  # carries the reason
 
     def test_non_shell_tool_approves(self, monkeypatch):
-        monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config", lambda: self._cfg()
-        )
+        monkeypatch.setattr("metasci_scribe.agent._ensure_config", lambda: self._cfg())
         assert interaction.resolve_config_decisions(
             [{"name": "write_file", "args": {}}]
         ) == [{"type": "approve"}]
 
     def test_always_prompt_tool_needs_prompt(self, monkeypatch):
-        from EvoScientist.config.settings import HITL_ALWAYS_PROMPT_TOOLS
+        from metasci_scribe.config.settings import HITL_ALWAYS_PROMPT_TOOLS
 
-        monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config", lambda: self._cfg()
-        )
+        monkeypatch.setattr("metasci_scribe.agent._ensure_config", lambda: self._cfg())
         name = next(iter(HITL_ALWAYS_PROMPT_TOOLS))
         assert (
             interaction.resolve_config_decisions([{"name": name, "args": {}}]) is None
         )
 
     def test_malformed_request_needs_prompt(self, monkeypatch):
-        monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config", lambda: self._cfg()
-        )
+        monkeypatch.setattr("metasci_scribe.agent._ensure_config", lambda: self._cfg())
         assert interaction.resolve_config_decisions(["not-a-dict"]) is None
 
     def test_malformed_shell_request_needs_prompt_under_auto_approve(self, monkeypatch):
@@ -245,7 +237,7 @@ class TestResolveConfigDecisions:
         # even under auto_approve - an empty command string would otherwise
         # be auto-approved and resumed.
         monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config",
+            "metasci_scribe.agent._ensure_config",
             lambda: self._cfg(auto_approve=True),
         )
         for bad in (
@@ -262,7 +254,7 @@ class TestResolveConfigDecisions:
         def _boom():
             raise RuntimeError("no config")
 
-        monkeypatch.setattr("EvoScientist.EvoScientist._ensure_config", _boom)
+        monkeypatch.setattr("metasci_scribe.agent._ensure_config", _boom)
         assert interaction.resolve_config_decisions(self._reqs("ls")) is None
 
 
@@ -292,9 +284,7 @@ class TestApprovalPolicyDecisionSnapshot:
         # auto_approve + dangerous command + always-prompt tool: decisions
         # collapse to None (prompt the human) but the REJECT survives by
         # index — the reply branches need it after the human answers.
-        monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config", lambda: self._cfg()
-        )
+        monkeypatch.setattr("metasci_scribe.agent._ensure_config", lambda: self._cfg())
         policy = interaction.ApprovalPolicy()
         decisions, rejections = policy.decision_snapshot("tg:c1", self._reqs())
         assert decisions is None
@@ -303,9 +293,7 @@ class TestApprovalPolicyDecisionSnapshot:
         assert rejections[0]["message"]  # the reason the model can act on
 
     def test_cleared_batch_returns_decisions_with_no_rejections(self, monkeypatch):
-        monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config", lambda: self._cfg()
-        )
+        monkeypatch.setattr("metasci_scribe.agent._ensure_config", lambda: self._cfg())
         policy = interaction.ApprovalPolicy()
         decisions, rejections = policy.decision_snapshot(
             "tg:c1", [{"name": "execute", "args": {"command": "ls"}}]
@@ -319,7 +307,7 @@ class TestApprovalPolicyDecisionSnapshot:
         def _boom():
             raise RuntimeError("no config")
 
-        monkeypatch.setattr("EvoScientist.EvoScientist._ensure_config", _boom)
+        monkeypatch.setattr("metasci_scribe.agent._ensure_config", _boom)
         policy = interaction.ApprovalPolicy()
         decisions, rejections = policy.decision_snapshot("tg:c1", self._reqs())
         assert decisions is None  # fail closed: the human is prompted
@@ -329,9 +317,7 @@ class TestApprovalPolicyDecisionSnapshot:
         # An explicit "Approve all" is blanket by design — it never prompts,
         # so it never carries policy rejections, even under a config that
         # would reject the dangerous command.
-        monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config", lambda: self._cfg()
-        )
+        monkeypatch.setattr("metasci_scribe.agent._ensure_config", lambda: self._cfg())
         p = interaction.ApprovalPolicy()
         p.grant_session("tg:c1")
         decisions, rejections = p.decision_snapshot("tg:c1", self._reqs())
@@ -367,14 +353,12 @@ class TestDecisionsAfterHumanApproval:
         # reason and only the rest is approved.
         import asyncio
 
-        from EvoScientist.channels.interaction import (
+        from metasci_scribe.channels.interaction import (
             ApprovalPolicy,
             resolve_approval,
         )
 
-        monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config", lambda: self._cfg()
-        )
+        monkeypatch.setattr("metasci_scribe.agent._ensure_config", lambda: self._cfg())
 
         policy = ApprovalPolicy()
         reqs = self._reqs()
@@ -392,14 +376,12 @@ class TestDecisionsAfterHumanApproval:
         # FUTURE prompts; this batch still keeps the policy rejection.
         import asyncio
 
-        from EvoScientist.channels.interaction import (
+        from metasci_scribe.channels.interaction import (
             ApprovalPolicy,
             resolve_approval,
         )
 
-        monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config", lambda: self._cfg()
-        )
+        monkeypatch.setattr("metasci_scribe.agent._ensure_config", lambda: self._cfg())
 
         policy = ApprovalPolicy()
         reqs = self._reqs()
@@ -417,7 +399,7 @@ class TestDecisionsAfterHumanApproval:
         # command.
         import asyncio
 
-        from EvoScientist.channels.interaction import (
+        from metasci_scribe.channels.interaction import (
             ApprovalPolicy,
             resolve_approval,
         )
@@ -429,7 +411,7 @@ class TestDecisionsAfterHumanApproval:
             loads.append(state["auto_approve"])
             return self._cfg(auto_approve=state["auto_approve"])
 
-        monkeypatch.setattr("EvoScientist.EvoScientist._ensure_config", _flipping_cfg)
+        monkeypatch.setattr("metasci_scribe.agent._ensure_config", _flipping_cfg)
 
         outcome = asyncio.run(
             resolve_approval(
@@ -448,13 +430,13 @@ class TestDecisionsAfterHumanApproval:
         # rejections are empty — an approval is then a true blanket approval.
         import asyncio
 
-        from EvoScientist.channels.interaction import (
+        from metasci_scribe.channels.interaction import (
             ApprovalPolicy,
             resolve_approval,
         )
 
         monkeypatch.setattr(
-            "EvoScientist.EvoScientist._ensure_config",
+            "metasci_scribe.agent._ensure_config",
             lambda: self._cfg(auto_approve=False),
         )
 
@@ -470,7 +452,7 @@ class TestDecisionsAfterHumanApproval:
         # approval stands as a blanket approval).
         import asyncio
 
-        from EvoScientist.channels.interaction import (
+        from metasci_scribe.channels.interaction import (
             ApprovalPolicy,
             resolve_approval,
         )
@@ -478,7 +460,7 @@ class TestDecisionsAfterHumanApproval:
         def _boom():
             raise RuntimeError("no config")
 
-        monkeypatch.setattr("EvoScientist.EvoScientist._ensure_config", _boom)
+        monkeypatch.setattr("metasci_scribe.agent._ensure_config", _boom)
 
         outcome = asyncio.run(
             resolve_approval(self._reqs(), _ApprovalIO("1"), ApprovalPolicy(), "tg:c1")

@@ -11,10 +11,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from EvoScientist.backends import CustomSandboxBackend
-from EvoScientist.cancellation import current_cancel_event
-from EvoScientist.runtime import AsyncRuntime
-from EvoScientist.stream import display as display_mod
+from metasci_scribe.backends import CustomSandboxBackend
+from metasci_scribe.cancellation import current_cancel_event
+from metasci_scribe.runtime import AsyncRuntime
+from metasci_scribe.stream import display as display_mod
 from tests.fakes.common import FakeGraphGateway
 
 
@@ -191,7 +191,7 @@ def test_cancel_unwinds_hitl_prompt_and_renderer(monkeypatch):
         SimpleNamespace(select=lambda *_args, **_kwargs: _BlockingQuestion()),
     )
     monkeypatch.setattr(
-        "EvoScientist.EvoScientist._ensure_config",
+        "metasci_scribe.agent._ensure_config",
         lambda: SimpleNamespace(
             auto_approve=False, dangerous_mode=False, shell_allow_list=""
         ),

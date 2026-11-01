@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import pytest
 
-from EvoScientist import agent_shell
-from EvoScientist.deploy import backend_job
+from metasci_scribe import agent_shell
+from metasci_scribe.deploy import backend_job
 
 
 class FakeProcess:

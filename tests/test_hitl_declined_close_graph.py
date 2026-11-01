@@ -10,13 +10,13 @@ from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langgraph.checkpoint.memory import InMemorySaver
 
-from EvoScientist.backends import build_hitl_resume, close_parked_checkpoint
-from EvoScientist.config import EvoScientistConfig
-from EvoScientist.EvoScientist import create_cli_agent
-from EvoScientist.gateway.local import LocalGraphGateway
-from EvoScientist.gateway.types import GraphTarget
-from EvoScientist.paths import Workspace
-from EvoScientist.stream.events import stream_agent_events
+from metasci_scribe.agent import create_cli_agent
+from metasci_scribe.backends import build_hitl_resume, close_parked_checkpoint
+from metasci_scribe.config import ScribeConfig
+from metasci_scribe.gateway.local import LocalGraphGateway
+from metasci_scribe.gateway.types import GraphTarget
+from metasci_scribe.paths import Workspace
+from metasci_scribe.stream.events import stream_agent_events
 from tests.fakes.common import close_result
 
 pytestmark = pytest.mark.usefixtures("no_mcp")
@@ -47,7 +47,7 @@ def _call(call_id: str, name: str, **args) -> dict:
 
 def _agent(tmp_path, script):
     model = _Scripted(script=list(script), seen=[])
-    cfg = EvoScientistConfig(enable_async_subagents=False, memory_workers_enabled=False)
+    cfg = ScribeConfig(enable_async_subagents=False, memory_workers_enabled=False)
     agent = create_cli_agent(
         workspace=Workspace(tmp_path),
         config=cfg,

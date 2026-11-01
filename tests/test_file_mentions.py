@@ -1,11 +1,11 @@
-"""Tests for EvoScientist.cli.file_mentions module."""
+"""Tests for metasci_scribe.cli.file_mentions module."""
 
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 
-from EvoScientist.cli.file_mentions import (
+from metasci_scribe.cli.file_mentions import (
     complete_file_mention,
     invalidate_file_cache,
     parse_file_mentions,

@@ -6,7 +6,7 @@ import io
 
 from rich.console import Console
 
-from EvoScientist.stream.display import create_streaming_display
+from metasci_scribe.stream.display import create_streaming_display
 
 
 def _render(**kwargs) -> str:

@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest an idea for EvoScientist core functionality
+about: Suggest an idea for Metasci Scribe core functionality
 title: ''
 labels: enhancement
 assignees: ''

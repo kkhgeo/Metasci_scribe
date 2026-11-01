@@ -1,13 +1,12 @@
-"""Tests for EvoScientist.paths — the Workspace type, start resolution, ensure_dirs."""
+"""Tests for metasci_scribe.paths — the Workspace type, start resolution, ensure_dirs."""
 
 import os
 from pathlib import Path
-from unittest import mock
 
 import pytest
 
-from EvoScientist import paths
-from EvoScientist.paths import (
+from metasci_scribe import paths
+from metasci_scribe.paths import (
     SessionDirs,
     Workspace,
     normalize_path,
@@ -97,9 +96,9 @@ class TestWorkspace:
 
     def test_ignores_removed_dir_overrides(self, tmp_path, monkeypatch):
         """The per-workspace folders always derive from the root."""
-        monkeypatch.setenv("EVOSCIENTIST_SKILLS_DIR", str(tmp_path / "s"))
-        monkeypatch.setenv("EVOSCIENTIST_RUNS_DIR", str(tmp_path / "r"))
-        monkeypatch.setenv("EVOSCIENTIST_MEDIA_DIR", str(tmp_path / "m"))
+        monkeypatch.setenv("METASCI_SCRIBE_SKILLS_DIR", str(tmp_path / "s"))
+        monkeypatch.setenv("METASCI_SCRIBE_RUNS_DIR", str(tmp_path / "r"))
+        monkeypatch.setenv("METASCI_SCRIBE_MEDIA_DIR", str(tmp_path / "m"))
         ws = Workspace(tmp_path / "proj")
         assert ws.skills_dir == ws.root / "skills"
         assert ws.runs_dir == ws.root / "runs"
@@ -148,18 +147,18 @@ class TestStartWorkspacePath:
 
 class TestProcessWorkspace:
     def test_env_var(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("EVOSCIENTIST_WORKSPACE_DIR", str(tmp_path))
+        monkeypatch.setenv("METASCI_SCRIBE_WORKSPACE_DIR", str(tmp_path))
         assert process_workspace() == Workspace(tmp_path)
 
     def test_cwd_without_env(self, tmp_path, monkeypatch):
-        monkeypatch.delenv("EVOSCIENTIST_WORKSPACE_DIR", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_WORKSPACE_DIR", raising=False)
         monkeypatch.chdir(tmp_path)
         assert process_workspace() == Workspace(tmp_path)
 
     def test_read_once_per_process(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("EVOSCIENTIST_WORKSPACE_DIR", str(tmp_path / "first"))
+        monkeypatch.setenv("METASCI_SCRIBE_WORKSPACE_DIR", str(tmp_path / "first"))
         first = process_workspace()
-        monkeypatch.setenv("EVOSCIENTIST_WORKSPACE_DIR", str(tmp_path / "second"))
+        monkeypatch.setenv("METASCI_SCRIBE_WORKSPACE_DIR", str(tmp_path / "second"))
         assert process_workspace() == first
 
 
@@ -255,8 +254,8 @@ class TestSessionDirsFromLegacy:
 class TestProcessSessionDirs:
     def test_with_run_dir(self, tmp_path, monkeypatch):
         run = tmp_path / "runs" / "exp"
-        monkeypatch.setenv("EVOSCIENTIST_WORKSPACE_DIR", str(tmp_path))
-        monkeypatch.setenv("EVOSCIENTIST_RUN_DIR", str(run))
+        monkeypatch.setenv("METASCI_SCRIBE_WORKSPACE_DIR", str(tmp_path))
+        monkeypatch.setenv("METASCI_SCRIBE_RUN_DIR", str(run))
         assert process_session_dirs() == SessionDirs(Workspace(tmp_path), run)
 
 
@@ -264,14 +263,14 @@ class TestReloadEnvDirs:
     """An override merged into the environment after import (project .env)."""
 
     def test_picks_up_a_late_memories_override(self, tmp_path, monkeypatch):
-        monkeypatch.delenv("EVOSCIENTIST_MEMORY_DIR", raising=False)
-        monkeypatch.setenv("EVOSCIENTIST_MEMORIES_DIR", str(tmp_path / "mem"))
+        monkeypatch.delenv("METASCI_SCRIBE_MEMORY_DIR", raising=False)
+        monkeypatch.setenv("METASCI_SCRIBE_MEMORIES_DIR", str(tmp_path / "mem"))
         paths.reload_env_dirs()
         assert paths.MEMORIES_DIR == tmp_path / "mem"
 
     def test_falls_back_to_global_memories(self, monkeypatch):
-        monkeypatch.delenv("EVOSCIENTIST_MEMORIES_DIR", raising=False)
-        monkeypatch.delenv("EVOSCIENTIST_MEMORY_DIR", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_MEMORIES_DIR", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_MEMORY_DIR", raising=False)
         paths.reload_env_dirs()
         assert paths.MEMORIES_DIR == paths.GLOBAL_MEMORIES_DIR
 
@@ -326,131 +325,49 @@ class TestDataDir:
         assert paths.GLOBAL_MEMORIES_DIR == paths.DATA_DIR / "memories"
 
 
-class TestLegacySessionsDbMigration:
-    """Tests for migrate_legacy_sessions_db() — transitional helper.
-
-    Tests redirect ``DATA_DIR`` and ``Path.home()`` so the real user home
-    is never touched.
-    """
-
-    def _setup(self, tmp_path, monkeypatch):
-        """Redirect the data folder to tmp_path/new_data and the config folder,
-        the legacy source, to tmp_path/config/evoscientist."""
-        data_dir = tmp_path / "new_data"
-        legacy_dir = tmp_path / "config" / "evoscientist"
-        monkeypatch.setattr(paths, "DATA_DIR", data_dir)
-        monkeypatch.setattr(paths, "CONFIG_DIR", legacy_dir)
-        return data_dir, legacy_dir
-
-    def test_copies_sqlite_trio_when_legacy_exists(self, tmp_path, monkeypatch):
-        """All three SQLite files should be copied to the new location."""
-        data_dir, legacy_dir = self._setup(tmp_path, monkeypatch)
-        legacy_dir.mkdir(parents=True)
-        for name in ("sessions.db", "sessions.db-wal", "sessions.db-shm"):
-            (legacy_dir / name).write_bytes(b"stub-" + name.encode())
-
-        paths.migrate_legacy_sessions_db()
-
-        for name in ("sessions.db", "sessions.db-wal", "sessions.db-shm"):
-            assert (data_dir / name).read_bytes() == b"stub-" + name.encode()
-            # Legacy files must remain (copy, not move)
-            assert (legacy_dir / name).exists()
-        assert (data_dir / ".migrated").exists()
-
-    def test_idempotent_via_marker(self, tmp_path, monkeypatch):
-        """Once .migrated exists, migration should be a no-op."""
-        data_dir, legacy_dir = self._setup(tmp_path, monkeypatch)
-        data_dir.mkdir()
-        (data_dir / ".migrated").touch()
-        legacy_dir.mkdir(parents=True)
-        (legacy_dir / "sessions.db").write_bytes(b"should-not-copy")
-
-        paths.migrate_legacy_sessions_db()
-
-        assert not (data_dir / "sessions.db").exists()
-
-    def test_no_legacy_just_creates_marker(self, tmp_path, monkeypatch):
-        """When legacy dir doesn't exist, only the marker is created."""
-        data_dir, _ = self._setup(tmp_path, monkeypatch)
-
-        paths.migrate_legacy_sessions_db()
-
-        assert data_dir.is_dir()
-        assert (data_dir / ".migrated").exists()
-        assert not (data_dir / "sessions.db").exists()
-
-    def test_does_not_overwrite_existing_files(self, tmp_path, monkeypatch):
-        """If new location already has a file, don't overwrite it."""
-        data_dir, legacy_dir = self._setup(tmp_path, monkeypatch)
-        data_dir.mkdir()
-        (data_dir / "sessions.db").write_bytes(b"new-content-keep")
-        legacy_dir.mkdir(parents=True)
-        (legacy_dir / "sessions.db").write_bytes(b"legacy-content")
-
-        paths.migrate_legacy_sessions_db()
-
-        assert (data_dir / "sessions.db").read_bytes() == b"new-content-keep"
-
-    def test_marker_not_written_on_partial_failure(self, tmp_path, monkeypatch):
-        """If any copy fails, the .migrated marker must not be written."""
-        data_dir, legacy_dir = self._setup(tmp_path, monkeypatch)
-        legacy_dir.mkdir(parents=True)
-        for name in ("sessions.db", "sessions.db-wal"):
-            (legacy_dir / name).write_bytes(b"ok")
-
-        real_copy2 = paths.shutil.copy2
-
-        def flaky_copy2(src, dst, *args, **kwargs):
-            if str(src).endswith("sessions.db-wal"):
-                raise OSError("simulated I/O failure")
-            return real_copy2(src, dst, *args, **kwargs)
-
-        with mock.patch.object(paths.shutil, "copy2", side_effect=flaky_copy2):
-            paths.migrate_legacy_sessions_db()
-
-        assert (data_dir / "sessions.db").exists()  # main db copied
-        assert not (data_dir / ".migrated").exists()  # retry allowed
-
-
 class TestSharedDirFromEnv:
     """The data and config folders, which other programs locate too, follow one
     path rule."""
 
     @pytest.mark.parametrize("value", ["", "   "])
     def test_shared_dir_from_env_blank_is_unset(self, value, monkeypatch):
-        monkeypatch.setenv("EVOSCIENTIST_DATA_DIR", value)
-        assert paths._shared_dir_from_env("EVOSCIENTIST_DATA_DIR") is None
+        monkeypatch.setenv("METASCI_SCRIBE_DATA_DIR", value)
+        assert paths._shared_dir_from_env("METASCI_SCRIBE_DATA_DIR") is None
 
     @pytest.mark.parametrize(("value", "suffix"), [("~", ""), ("~/evo", "evo")])
     def test_shared_dir_from_env_expands_a_leading_tilde(
         self, value, suffix, tmp_path, monkeypatch
     ):
         _fake_home(monkeypatch, tmp_path)
-        monkeypatch.setenv("EVOSCIENTIST_DATA_DIR", value)
-        assert paths._shared_dir_from_env("EVOSCIENTIST_DATA_DIR") == tmp_path / suffix
+        monkeypatch.setenv("METASCI_SCRIBE_DATA_DIR", value)
+        assert (
+            paths._shared_dir_from_env("METASCI_SCRIBE_DATA_DIR") == tmp_path / suffix
+        )
 
     @pytest.mark.parametrize("value", ["~nobody/evo", "$HOME/evo"])
     def test_shared_dir_from_env_expands_nothing_else(
         self, value, tmp_path, monkeypatch
     ):
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("EVOSCIENTIST_DATA_DIR", value)
-        assert paths._shared_dir_from_env("EVOSCIENTIST_DATA_DIR") == tmp_path / value
+        monkeypatch.setenv("METASCI_SCRIBE_DATA_DIR", value)
+        assert paths._shared_dir_from_env("METASCI_SCRIBE_DATA_DIR") == tmp_path / value
 
     def test_shared_dir_from_env_resolves_a_relative_path(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("EVOSCIENTIST_DATA_DIR", "data")
-        assert paths._shared_dir_from_env("EVOSCIENTIST_DATA_DIR") == tmp_path / "data"
+        monkeypatch.setenv("METASCI_SCRIBE_DATA_DIR", "data")
+        assert (
+            paths._shared_dir_from_env("METASCI_SCRIBE_DATA_DIR") == tmp_path / "data"
+        )
 
     @pytest.mark.parametrize("value", [None, "data"])
-    def test_data_dir_follows_evoscientist_data_dir(self, value, tmp_path, monkeypatch):
+    def test_data_dir_follows_scribe_data_dir(self, value, tmp_path, monkeypatch):
         _fake_home(monkeypatch, tmp_path)
         monkeypatch.chdir(tmp_path)
         if value is None:
-            monkeypatch.delenv("EVOSCIENTIST_DATA_DIR", raising=False)
-            expected = tmp_path / ".evoscientist"
+            monkeypatch.delenv("METASCI_SCRIBE_DATA_DIR", raising=False)
+            expected = tmp_path / ".metasci-scribe"
         else:
-            monkeypatch.setenv("EVOSCIENTIST_DATA_DIR", value)
+            monkeypatch.setenv("METASCI_SCRIBE_DATA_DIR", value)
             expected = tmp_path / value
         assert paths._data_dir() == expected
 
@@ -460,10 +377,10 @@ class TestSharedDirFromEnv:
         monkeypatch.chdir(tmp_path)
         if xdg is None:
             monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
-            expected = tmp_path / ".config" / "evoscientist"
+            expected = tmp_path / ".config" / "metasci-scribe"
         else:
             monkeypatch.setenv("XDG_CONFIG_HOME", xdg)
-            expected = tmp_path / xdg / "evoscientist"
+            expected = tmp_path / xdg / "metasci-scribe"
         assert paths._config_dir() == expected
 
     @pytest.mark.parametrize("xdg_set", [True, False])
@@ -473,12 +390,12 @@ class TestSharedDirFromEnv:
         """Children run in other folders and load their own ``.env``;
         ``XDG_CONFIG_HOME`` is passed only when this process started with it."""
         monkeypatch.setattr(paths, "DATA_DIR", tmp_path / "data")
-        monkeypatch.setattr(paths, "CONFIG_DIR", tmp_path / "cfg" / "evoscientist")
+        monkeypatch.setattr(paths, "CONFIG_DIR", tmp_path / "cfg" / "metasci-scribe")
         monkeypatch.setattr(paths, "_XDG_CONFIG_HOME_SET", xdg_set)
         env = paths.dir_env(
-            {"EVOSCIENTIST_DATA_DIR": "rel", "XDG_CONFIG_HOME": "rel", "OTHER": "x"}
+            {"METASCI_SCRIBE_DATA_DIR": "rel", "XDG_CONFIG_HOME": "rel", "OTHER": "x"}
         )
-        expected = {"EVOSCIENTIST_DATA_DIR": str(tmp_path / "data"), "OTHER": "x"}
+        expected = {"METASCI_SCRIBE_DATA_DIR": str(tmp_path / "data"), "OTHER": "x"}
         if xdg_set:
             expected["XDG_CONFIG_HOME"] = str(tmp_path / "cfg")
         assert env == expected

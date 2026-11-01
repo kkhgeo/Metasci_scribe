@@ -1,4 +1,4 @@
-"""``EvoSci`` writes redirected output as UTF-8 (#660).
+"""``metasci-scribe`` writes redirected output as UTF-8 (#660).
 
 On Windows, Python writes to a pipe or a file in the ANSI code page, so the
 first character outside it stopped the command with ``UnicodeEncodeError``.
@@ -11,7 +11,7 @@ import sys
 
 import pytest
 
-import EvoScientist.cli as cli_pkg
+import metasci_scribe.cli as cli_pkg
 
 
 class _Stream(io.TextIOWrapper):
@@ -26,10 +26,10 @@ class _Stream(io.TextIOWrapper):
 
 
 def test_redirected_output_is_written_as_utf8(monkeypatch):
-    from EvoScientist.cli import commands
-    from EvoScientist.setup import git as setup_git
-    from EvoScientist.setup import node as setup_node
-    from EvoScientist.stream.console import console
+    from metasci_scribe.cli import commands
+    from metasci_scribe.setup import git as setup_git
+    from metasci_scribe.setup import node as setup_node
+    from metasci_scribe.stream.console import console
 
     monkeypatch.delenv("PYTHONIOENCODING", raising=False)
     out, err = _Stream(), _Stream(errors="backslashreplace")

@@ -1,4 +1,4 @@
-"""Tests for EvoScientist onboarding wizard."""
+"""Tests for Metasci Scribe onboarding wizard."""
 
 import os
 import subprocess
@@ -7,21 +7,21 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from EvoScientist.config import EvoScientistConfig
-from EvoScientist.config.onboard.style import (
+from metasci_scribe.config import ScribeConfig
+from metasci_scribe.config.onboard.style import (
     CONFIRM_STYLE,
     WIZARD_STYLE,
 )
-from EvoScientist.config.onboard.validators import (
+from metasci_scribe.config.onboard.validators import (
     ChoiceValidator,
     IntegerValidator,
 )
-from EvoScientist.config.onboard.wizard import (
+from metasci_scribe.config.onboard.wizard import (
     STEPS,
     _skills_workspace,
     render_progress,
 )
-from EvoScientist.paths import Workspace
+from metasci_scribe.paths import Workspace
 
 
 @contextmanager
@@ -39,12 +39,12 @@ def _patch_all_questionary(mock_q):
     mocked side_effect sequences (platform-dependent StopIteration).
     """
     with (
-        patch("EvoScientist.config.onboard.wizard.questionary", mock_q),
-        patch("EvoScientist.config.onboard.steps.questionary", mock_q),
-        patch("EvoScientist.config.onboard.helpers.questionary", mock_q),
-        patch("EvoScientist.config.onboard.channels.questionary", mock_q),
-        patch("EvoScientist.config.onboard.style.questionary", mock_q),
-        patch("EvoScientist.config.onboard.helpers._check_npx", return_value=True),
+        patch("metasci_scribe.config.onboard.wizard.questionary", mock_q),
+        patch("metasci_scribe.config.onboard.steps.questionary", mock_q),
+        patch("metasci_scribe.config.onboard.helpers.questionary", mock_q),
+        patch("metasci_scribe.config.onboard.channels.questionary", mock_q),
+        patch("metasci_scribe.config.onboard.style.questionary", mock_q),
+        patch("metasci_scribe.config.onboard.helpers._check_npx", return_value=True),
     ):
         yield mock_q
 
@@ -93,7 +93,7 @@ class TestConstants:
 
 class TestSharedConstantsAlignment:
     """Drift guard: the canonical valid-value sets in
-    ``EvoScientist.config.onboard.constants`` must match the actual
+    ``metasci_scribe.config.onboard.constants`` must match the actual
     ``Choice(value=...)`` ids built by the interactive step functions in
     ``steps.py``. Without this, adding a new provider to one file but not
     the other would silently break either CLI flag validation or the
@@ -105,8 +105,8 @@ class TestSharedConstantsAlignment:
         ``VALID_PROVIDERS`` — and vice versa."""
         from unittest.mock import MagicMock, patch
 
-        from EvoScientist.config.onboard.constants import VALID_PROVIDERS
-        from EvoScientist.config.onboard.steps import _step_provider
+        from metasci_scribe.config.onboard.constants import VALID_PROVIDERS
+        from metasci_scribe.config.onboard.steps import _step_provider
 
         # Intercept questionary.select to capture the choices list before
         # any user prompt happens.
@@ -121,10 +121,10 @@ class TestSharedConstantsAlignment:
             return fake
 
         with patch(
-            "EvoScientist.config.onboard.steps.questionary.select",
+            "metasci_scribe.config.onboard.steps.questionary.select",
             side_effect=_capture,
         ):
-            _step_provider(EvoScientistConfig())
+            _step_provider(ScribeConfig())
 
         actual_provider_ids = {c.value for c in captured["choices"]}
         assert actual_provider_ids == set(VALID_PROVIDERS), (
@@ -134,14 +134,14 @@ class TestSharedConstantsAlignment:
         )
 
     def test_ui_constants_match_step_choices(self):
-        from EvoScientist.config.onboard.constants import VALID_UI_BACKENDS
+        from metasci_scribe.config.onboard.constants import VALID_UI_BACKENDS
 
         # _step_ui_backend hard-codes "tui", "cli", and "webui" — small enough
         # to check by direct lookup against the canonical set.
         assert VALID_UI_BACKENDS == frozenset({"tui", "cli", "webui"})
 
     def test_workspace_mode_constants_match_step_choices(self):
-        from EvoScientist.config.onboard.constants import VALID_WORKSPACE_MODES
+        from metasci_scribe.config.onboard.constants import VALID_WORKSPACE_MODES
 
         assert VALID_WORKSPACE_MODES == frozenset({"daemon", "run"})
 
@@ -149,8 +149,8 @@ class TestSharedConstantsAlignment:
         """The provider table in ``provider_keys`` has exactly one row per
         provider in ``VALID_PROVIDERS``: an unknown provider is an error, not
         an OpenAI fallback, so a missing row would break that provider."""
-        from EvoScientist.config.onboard.constants import VALID_PROVIDERS
-        from EvoScientist.config.provider_keys import PROVIDERS
+        from metasci_scribe.config.onboard.constants import VALID_PROVIDERS
+        from metasci_scribe.config.provider_keys import PROVIDERS
 
         assert set(PROVIDERS) == set(VALID_PROVIDERS)
 
@@ -158,25 +158,25 @@ class TestSharedConstantsAlignment:
         """Every key and base URL field in the table is a config field."""
         from dataclasses import fields
 
-        from EvoScientist.config.provider_keys import KEY_SPECS
+        from metasci_scribe.config.provider_keys import KEY_SPECS
 
-        names = {f.name for f in fields(EvoScientistConfig)}
+        names = {f.name for f in fields(ScribeConfig)}
         for provider, spec in KEY_SPECS.items():
             for attr in (spec.key_field, spec.base_url_field):
                 assert attr is None or attr in names, (provider, attr)
 
     def test_provider_key_info_rejects_unknown_provider(self):
-        from EvoScientist.config.onboard.helpers import _provider_key_info
+        from metasci_scribe.config.onboard.helpers import _provider_key_info
 
         with pytest.raises(KeyError):
-            _provider_key_info(EvoScientistConfig(), "no-such-provider")
+            _provider_key_info(ScribeConfig(), "no-such-provider")
 
 
 class TestOAuthModeReconcile:
     def test_reconcile_preserves_auxiliary_openai_oauth(self):
-        from EvoScientist.config.onboard.wizard import _reconcile_oauth_modes
+        from metasci_scribe.config.onboard.wizard import _reconcile_oauth_modes
 
-        config = EvoScientistConfig(
+        config = ScribeConfig(
             provider="minimax",
             auxiliary_provider="openai",
             auxiliary_model="gpt-6-luna",
@@ -190,9 +190,9 @@ class TestOAuthModeReconcile:
         assert config.anthropic_auth_mode == "api_key"
 
     def test_reconcile_preserves_auxiliary_provider_without_model(self):
-        from EvoScientist.config.onboard.wizard import _reconcile_oauth_modes
+        from metasci_scribe.config.onboard.wizard import _reconcile_oauth_modes
 
-        config = EvoScientistConfig(
+        config = ScribeConfig(
             provider="minimax",
             auxiliary_provider="openai",
             auxiliary_model="",
@@ -230,7 +230,7 @@ class TestRenderProgress:
     def test_panel_has_title(self):
         """Test that the panel has the expected title."""
         panel = render_progress(current_step=0, completed=set())
-        assert "EvoScientist Setup" in str(panel.title)
+        assert "Metasci Scribe Setup" in str(panel.title)
 
     def test_panel_has_blue_border(self):
         """Test that the panel has a blue border style."""
@@ -363,7 +363,7 @@ class TestChoiceValidator:
 
 class TestValidateAtlasCloudKey:
     def test_empty_key_skipped(self):
-        from EvoScientist.config.onboard.validators import validate_atlascloud_key
+        from metasci_scribe.config.onboard.validators import validate_atlascloud_key
 
         is_valid, msg = validate_atlascloud_key("")
         assert is_valid is True
@@ -371,7 +371,7 @@ class TestValidateAtlasCloudKey:
 
     @pytest.mark.parametrize("status", [200, 404])
     def test_accepts_authenticated_sentinel_statuses(self, status):
-        from EvoScientist.config.onboard.validators import validate_atlascloud_key
+        from metasci_scribe.config.onboard.validators import validate_atlascloud_key
 
         with patch("httpx.post") as mock_post:
             mock_post.return_value.status_code = status
@@ -385,7 +385,7 @@ class TestValidateAtlasCloudKey:
 
     @pytest.mark.parametrize("status", [401, 403])
     def test_auth_rejection_is_invalid(self, status):
-        from EvoScientist.config.onboard.validators import validate_atlascloud_key
+        from metasci_scribe.config.onboard.validators import validate_atlascloud_key
 
         with patch("httpx.post") as mock_post:
             mock_post.return_value.status_code = status
@@ -396,7 +396,7 @@ class TestValidateAtlasCloudKey:
 
     def test_insufficient_balance_means_valid_key(self):
         """402 fires before model resolution, so auth passed — key is valid."""
-        from EvoScientist.config.onboard.validators import validate_atlascloud_key
+        from metasci_scribe.config.onboard.validators import validate_atlascloud_key
 
         with patch("httpx.post") as mock_post:
             mock_post.return_value.status_code = 402
@@ -407,7 +407,7 @@ class TestValidateAtlasCloudKey:
 
     @pytest.mark.parametrize("status", [400, 429, 500, 503])
     def test_transient_status_is_inconclusive(self, status):
-        from EvoScientist.config.onboard.validators import validate_atlascloud_key
+        from metasci_scribe.config.onboard.validators import validate_atlascloud_key
 
         with patch("httpx.post") as mock_post:
             mock_post.return_value.status_code = status
@@ -419,7 +419,7 @@ class TestValidateAtlasCloudKey:
 
 class TestValidateNovitaKey:
     def test_empty_key_skipped(self):
-        from EvoScientist.config.onboard.validators import validate_novita_key
+        from metasci_scribe.config.onboard.validators import validate_novita_key
 
         is_valid, msg = validate_novita_key("")
         assert is_valid is True
@@ -427,7 +427,7 @@ class TestValidateNovitaKey:
 
     @pytest.mark.parametrize("status", [200, 404])
     def test_accepts_authenticated_sentinel_statuses(self, status):
-        from EvoScientist.config.onboard.validators import validate_novita_key
+        from metasci_scribe.config.onboard.validators import validate_novita_key
 
         with patch("httpx.post") as mock_post:
             mock_post.return_value.status_code = status
@@ -441,7 +441,7 @@ class TestValidateNovitaKey:
 
     @pytest.mark.parametrize("status", [401, 403])
     def test_auth_rejection_is_invalid(self, status):
-        from EvoScientist.config.onboard.validators import validate_novita_key
+        from metasci_scribe.config.onboard.validators import validate_novita_key
 
         with patch("httpx.post") as mock_post:
             mock_post.return_value.status_code = status
@@ -452,7 +452,7 @@ class TestValidateNovitaKey:
 
     @pytest.mark.parametrize("status", [400, 429, 500, 503])
     def test_transient_status_is_inconclusive(self, status):
-        from EvoScientist.config.onboard.validators import validate_novita_key
+        from metasci_scribe.config.onboard.validators import validate_novita_key
 
         with patch("httpx.post") as mock_post:
             mock_post.return_value.status_code = status
@@ -468,7 +468,7 @@ class TestValidateXiaomiKey:
         import httpx
         import openai
 
-        from EvoScientist.config.onboard.validators import validate_xiaomi_key
+        from metasci_scribe.config.onboard.validators import validate_xiaomi_key
 
         seen = []
 
@@ -490,7 +490,7 @@ class TestValidateXiaomiKey:
         return result, seen
 
     def test_empty_key_skipped(self):
-        from EvoScientist.config.onboard.validators import validate_xiaomi_key
+        from metasci_scribe.config.onboard.validators import validate_xiaomi_key
 
         assert validate_xiaomi_key("") == (True, "Skipped (no key provided)")
 
@@ -540,14 +540,14 @@ class TestStepPortsRenderConfiguredHost:
     def _capture(self, step, config, answer=""):
         printed: list[str] = []
         with (
-            patch("EvoScientist.config.onboard.steps.questionary") as mock_q,
-            patch("EvoScientist.config.onboard.steps.console") as mock_console,
+            patch("metasci_scribe.config.onboard.steps.questionary") as mock_q,
+            patch("metasci_scribe.config.onboard.steps.console") as mock_console,
             patch(
-                "EvoScientist.langgraph_dev.manager._is_port_occupied",
+                "metasci_scribe.langgraph_dev.manager._is_port_occupied",
                 lambda *_a, **_kw: False,
             ),
             patch(
-                "EvoScientist.langgraph_dev.manager.is_langgraph_dev_running",
+                "metasci_scribe.langgraph_dev.manager.is_langgraph_dev_running",
                 lambda *_a, **_kw: False,
             ),
         ):
@@ -557,11 +557,9 @@ class TestStepPortsRenderConfiguredHost:
         return "\n".join(printed)
 
     def test_langgraph_dev_step_shows_pinned_interface(self):
-        from EvoScientist.config.onboard.steps import _step_langgraph_dev_port
+        from metasci_scribe.config.onboard.steps import _step_langgraph_dev_port
 
-        config = EvoScientistConfig(
-            langgraph_dev_port=6174, langgraph_dev_host="192.168.1.5"
-        )
+        config = ScribeConfig(langgraph_dev_port=6174, langgraph_dev_host="192.168.1.5")
         assert "http://192.168.1.5:6174" in self._capture(
             _step_langgraph_dev_port, config
         )
@@ -569,30 +567,28 @@ class TestStepPortsRenderConfiguredHost:
     def test_langgraph_dev_step_shows_loopback_for_wildcard(self):
         """A wildcard bind is reported as loopback — that is the address this
         machine's own browser opens."""
-        from EvoScientist.config.onboard.steps import _step_langgraph_dev_port
+        from metasci_scribe.config.onboard.steps import _step_langgraph_dev_port
 
-        config = EvoScientistConfig(
-            langgraph_dev_port=6174, langgraph_dev_host="0.0.0.0"
-        )
+        config = ScribeConfig(langgraph_dev_port=6174, langgraph_dev_host="0.0.0.0")
         assert "http://127.0.0.1:6174" in self._capture(
             _step_langgraph_dev_port, config
         )
 
     def test_webui_step_shows_pinned_interface(self):
-        from EvoScientist.config.onboard.steps import _step_webui_port
+        from metasci_scribe.config.onboard.steps import _step_webui_port
 
-        config = EvoScientistConfig(webui_port=4716, webui_host="192.168.1.5")
+        config = ScribeConfig(webui_port=4716, webui_host="192.168.1.5")
         assert "http://192.168.1.5:4716" in self._capture(_step_webui_port, config)
 
 
 class TestStepProvider:
     def test_returns_selected_provider(self):
         """Test that _step_provider returns selected provider."""
-        from EvoScientist.config.onboard.steps import _step_provider
+        from metasci_scribe.config.onboard.steps import _step_provider
 
-        config = EvoScientistConfig()
+        config = ScribeConfig()
 
-        with patch("EvoScientist.config.onboard.steps.questionary") as mock_q:
+        with patch("metasci_scribe.config.onboard.steps.questionary") as mock_q:
             mock_q.select.return_value.ask.return_value = "anthropic"
             result = _step_provider(config)
 
@@ -602,10 +598,10 @@ class TestStepProvider:
     def test_default_value_and_label_override(self):
         """default_value preselects a provider (re-run co-pilot default) and
         label customizes the prompt text."""
-        from EvoScientist.config.onboard.steps import _step_provider
+        from metasci_scribe.config.onboard.steps import _step_provider
 
-        config = EvoScientistConfig(provider="anthropic")
-        with patch("EvoScientist.config.onboard.steps.questionary") as mock_q:
+        config = ScribeConfig(provider="anthropic")
+        with patch("metasci_scribe.config.onboard.steps.questionary") as mock_q:
             mock_q.select.return_value.ask.return_value = "openai"
             _step_provider(config, label="co-pilot", default_value="openrouter")
 
@@ -615,11 +611,11 @@ class TestStepProvider:
 
     def test_raises_keyboard_interrupt_on_cancel(self):
         """Test that _step_provider raises KeyboardInterrupt on cancel."""
-        from EvoScientist.config.onboard.steps import _step_provider
+        from metasci_scribe.config.onboard.steps import _step_provider
 
-        config = EvoScientistConfig()
+        config = ScribeConfig()
 
-        with patch("EvoScientist.config.onboard.steps.questionary") as mock_q:
+        with patch("metasci_scribe.config.onboard.steps.questionary") as mock_q:
             mock_q.select.return_value.ask.return_value = None
             with pytest.raises(KeyboardInterrupt):
                 _step_provider(config)
@@ -662,9 +658,9 @@ class TestStepOAuthAuthMode:
         login_prompt,
     ):
         """The Anthropic wrapper passes its provider-specific IDs to the ccproxy flow."""
-        from EvoScientist.config.onboard import steps as onboard_steps
+        from metasci_scribe.config.onboard import steps as onboard_steps
 
-        config = EvoScientistConfig(**{config_attr: "oauth"})
+        config = ScribeConfig(**{config_attr: "oauth"})
         select_question = MagicMock()
         select_question.ask.return_value = "oauth"
         confirm_question = MagicMock()
@@ -672,27 +668,29 @@ class TestStepOAuthAuthMode:
 
         with (
             patch(
-                "EvoScientist.ccproxy_manager.is_ccproxy_available", return_value=True
+                "metasci_scribe.ccproxy_manager.is_ccproxy_available", return_value=True
             ),
             patch(
-                "EvoScientist.ccproxy_manager.check_ccproxy_auth",
+                "metasci_scribe.ccproxy_manager.check_ccproxy_auth",
                 return_value=(False, "not authenticated"),
             ) as mock_check_auth,
             patch(
-                "EvoScientist.config.onboard.prompter.install_navigation_keys"
+                "metasci_scribe.config.onboard.prompter.install_navigation_keys"
             ) as mock_nav,
             patch(
-                "EvoScientist.config.onboard.steps.questionary.select",
+                "metasci_scribe.config.onboard.steps.questionary.select",
                 return_value=select_question,
             ) as mock_select,
             patch(
-                "EvoScientist.config.onboard.steps.questionary.confirm",
+                "metasci_scribe.config.onboard.steps.questionary.confirm",
                 return_value=confirm_question,
             ) as mock_confirm,
             patch(
-                "EvoScientist.config.onboard.steps._prompt_ccproxy_port"
+                "metasci_scribe.config.onboard.steps._prompt_ccproxy_port"
             ) as mock_port,
-            patch("EvoScientist.config.onboard.steps._run_ccproxy_login") as mock_login,
+            patch(
+                "metasci_scribe.config.onboard.steps._run_ccproxy_login"
+            ) as mock_login,
         ):
             result = getattr(onboard_steps, step_name)(config)
 
@@ -720,8 +718,8 @@ class TestStepOAuthAuthMode:
 
 class TestStepOpenAIAuthMode:
     def _run(self, *, picked, signed_in, confirm=True, plan="plus"):
-        from EvoScientist.config.onboard import steps as onboard_steps
-        from EvoScientist.llm.chatgpt_oauth import ChatGPTLogin
+        from metasci_scribe.config.onboard import steps as onboard_steps
+        from metasci_scribe.llm.chatgpt_oauth import ChatGPTLogin
 
         select_question = MagicMock()
         select_question.ask.return_value = picked
@@ -729,25 +727,29 @@ class TestStepOpenAIAuthMode:
         confirm_question.ask.return_value = confirm
         state = ChatGPTLogin(signed_in=signed_in, plan=plan if signed_in else None)
         with (
-            patch("EvoScientist.config.onboard.prompter.install_navigation_keys"),
+            patch("metasci_scribe.config.onboard.prompter.install_navigation_keys"),
             patch(
-                "EvoScientist.config.onboard.steps.questionary.select",
+                "metasci_scribe.config.onboard.steps.questionary.select",
                 return_value=select_question,
             ) as mock_select,
             patch(
-                "EvoScientist.config.onboard.steps.questionary.confirm",
+                "metasci_scribe.config.onboard.steps.questionary.confirm",
                 return_value=confirm_question,
             ) as mock_confirm,
-            patch("EvoScientist.llm.chatgpt_oauth.status", return_value=state),
-            patch("EvoScientist.config.onboard.steps._run_chatgpt_login") as mock_login,
-            patch("EvoScientist.ccproxy_manager.is_ccproxy_available") as mock_ccproxy,
+            patch("metasci_scribe.llm.chatgpt_oauth.status", return_value=state),
             patch(
-                "EvoScientist.config.onboard.steps._prompt_ccproxy_port"
+                "metasci_scribe.config.onboard.steps._run_chatgpt_login"
+            ) as mock_login,
+            patch(
+                "metasci_scribe.ccproxy_manager.is_ccproxy_available"
+            ) as mock_ccproxy,
+            patch(
+                "metasci_scribe.config.onboard.steps._prompt_ccproxy_port"
             ) as mock_port,
-            patch("EvoScientist.config.onboard.steps.console") as mock_console,
+            patch("metasci_scribe.config.onboard.steps.console") as mock_console,
         ):
             result = onboard_steps._step_openai_auth_mode(
-                EvoScientistConfig(openai_auth_mode="oauth")
+                ScribeConfig(openai_auth_mode="oauth")
             )
         printed = " ".join(str(c.args[0]) for c in mock_console.print.call_args_list)
         return {
@@ -810,7 +812,7 @@ class TestStepOpenAIAuthMode:
         out["login"].assert_not_called()
 
     def test_back_goes_back(self):
-        from EvoScientist.config.onboard.prompter import BACK_SENTINEL, GoBack
+        from metasci_scribe.config.onboard.prompter import BACK_SENTINEL, GoBack
 
         with pytest.raises(GoBack):
             self._run(picked=BACK_SENTINEL, signed_in=False)
@@ -818,16 +820,16 @@ class TestStepOpenAIAuthMode:
 
 class TestStepReasoningEffort:
     def _run(self, provider, stored, picked="high"):
-        from EvoScientist.config.onboard import steps as onboard_steps
+        from metasci_scribe.config.onboard import steps as onboard_steps
 
         question = MagicMock()
         question.ask.return_value = picked
         with patch(
-            "EvoScientist.config.onboard.steps.questionary.select",
+            "metasci_scribe.config.onboard.steps.questionary.select",
             return_value=question,
         ) as mock_select:
             result = onboard_steps._step_reasoning_effort(
-                EvoScientistConfig(reasoning_effort=stored), provider
+                ScribeConfig(reasoning_effort=stored), provider
             )
         call = mock_select.call_args
         return result, [c.value for c in call.kwargs["choices"]], call.kwargs["default"]
@@ -865,13 +867,13 @@ class TestStepReasoningEffort:
         [("openai", "openai"), ("openai", "chatgpt"), ("openrouter", "openrouter")],
     )
     def test_every_offered_level_is_sent_unchanged(self, provider, route):
-        from EvoScientist.llm.models import _resolve_reasoning_effort
+        from metasci_scribe.llm.models import _resolve_reasoning_effort
 
         _, values, _ = self._run(provider, "")
 
         with patch.dict("os.environ"):
             for value in filter(None, values):
-                os.environ["EVOSCIENTIST_REASONING_EFFORT"] = value
+                os.environ["METASCI_SCRIBE_REASONING_EFFORT"] = value
                 assert _resolve_reasoning_effort("high", route) == value
 
     @pytest.mark.parametrize(
@@ -879,23 +881,23 @@ class TestStepReasoningEffort:
         [("openai", True), ("openrouter", True), ("anthropic", False), ("", False)],
     )
     def test_only_providers_with_a_level_list_are_asked(self, provider, asked):
-        from EvoScientist.config.onboard import steps as onboard_steps
+        from metasci_scribe.config.onboard import steps as onboard_steps
 
         assert onboard_steps._asks_reasoning_effort(provider) is asked
 
     def test_model_section_asks_openai_users_for_a_level(self):
-        from EvoScientist.config.onboard.wizard import run_onboard
+        from metasci_scribe.config.onboard.wizard import run_onboard
 
         mock_q = MagicMock()
         with (
             _patch_all_questionary(mock_q),
-            patch("EvoScientist.config.onboard.wizard.load_config") as mock_load,
-            patch("EvoScientist.config.onboard.wizard.save_config") as mock_save,
-            patch("EvoScientist.config.onboard.wizard.console"),
-            patch("EvoScientist.config.onboard.steps.console"),
-            patch("EvoScientist.config.onboard.helpers.console"),
+            patch("metasci_scribe.config.onboard.wizard.load_config") as mock_load,
+            patch("metasci_scribe.config.onboard.wizard.save_config") as mock_save,
+            patch("metasci_scribe.config.onboard.wizard.console"),
+            patch("metasci_scribe.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.helpers.console"),
         ):
-            mock_load.return_value = EvoScientistConfig(
+            mock_load.return_value = ScribeConfig(
                 provider="openai", model="gpt-6-sol", openai_api_key="sk-test"
             )
             mock_q.select.return_value.ask.side_effect = [
@@ -928,7 +930,7 @@ class TestRunChatGPTLogin:
     def test_browser_is_opened_only_where_the_user_can_see_it(
         self, platform, env, expected, monkeypatch
     ):
-        from EvoScientist.config.onboard import helpers
+        from metasci_scribe.config.onboard import helpers
 
         for name in (
             "SSH_CONNECTION",
@@ -940,18 +942,18 @@ class TestRunChatGPTLogin:
             monkeypatch.delenv(name, raising=False)
         for name, value in env.items():
             monkeypatch.setenv(name, value)
-        monkeypatch.setattr("EvoScientist.deploy.launcher.sys.platform", platform)
+        monkeypatch.setattr("metasci_scribe.deploy.launcher.sys.platform", platform)
 
         assert helpers._open_browser_here() is expected
 
     def test_success_prints_the_status(self):
-        from EvoScientist.config.onboard import helpers
-        from EvoScientist.llm.chatgpt_oauth import ChatGPTLogin
+        from metasci_scribe.config.onboard import helpers
+        from metasci_scribe.llm.chatgpt_oauth import ChatGPTLogin
 
         with (
             patch.object(helpers, "_open_browser_here", return_value=True),
             patch(
-                "EvoScientist.llm.chatgpt_oauth.login",
+                "metasci_scribe.llm.chatgpt_oauth.login",
                 return_value=ChatGPTLogin(signed_in=True, plan="pro"),
             ) as mock_login,
             patch.object(helpers, "console") as mock_console,
@@ -972,11 +974,11 @@ class TestRunChatGPTLogin:
         ],
     )
     def test_failure_prints_one_line_and_returns_false(self, error):
-        from EvoScientist.config.onboard import helpers
+        from metasci_scribe.config.onboard import helpers
 
         with (
             patch.object(helpers, "_open_browser_here", return_value=False),
-            patch("EvoScientist.llm.chatgpt_oauth.login", side_effect=error),
+            patch("metasci_scribe.llm.chatgpt_oauth.login", side_effect=error),
             patch.object(helpers, "console") as mock_console,
         ):
             assert helpers._run_chatgpt_login() is False
@@ -986,12 +988,12 @@ class TestRunChatGPTLogin:
     def test_http_failure_is_reported_too(self):
         import httpx
 
-        from EvoScientist.config.onboard import helpers
+        from metasci_scribe.config.onboard import helpers
 
         with (
             patch.object(helpers, "_open_browser_here", return_value=True),
             patch(
-                "EvoScientist.llm.chatgpt_oauth.login",
+                "metasci_scribe.llm.chatgpt_oauth.login",
                 side_effect=httpx.ConnectError("no route"),
             ),
             patch.object(helpers, "console") as mock_console,
@@ -1003,13 +1005,13 @@ class TestRunChatGPTLogin:
     def test_failure_text_cannot_break_the_console_markup(self):
         from rich.console import Console
 
-        from EvoScientist.config.onboard import helpers
+        from metasci_scribe.config.onboard import helpers
 
         console = Console(record=True, width=120)
         with (
             patch.object(helpers, "_open_browser_here", return_value=True),
             patch(
-                "EvoScientist.llm.chatgpt_oauth.login",
+                "metasci_scribe.llm.chatgpt_oauth.login",
                 side_effect=RuntimeError("server said [/red] and [bold]"),
             ),
             patch.object(helpers, "console", console),
@@ -1022,11 +1024,11 @@ class TestRunChatGPTLogin:
 class TestStepModel:
     def test_returns_selected_model(self):
         """Test that _step_model returns selected model."""
-        from EvoScientist.config.onboard.steps import _step_model
+        from metasci_scribe.config.onboard.steps import _step_model
 
-        config = EvoScientistConfig()
+        config = ScribeConfig()
 
-        with patch("EvoScientist.config.onboard.steps.questionary") as mock_q:
+        with patch("metasci_scribe.config.onboard.steps.questionary") as mock_q:
             mock_q.select.return_value.ask.return_value = "claude-sonnet-4-6"
             result = _step_model(config, "anthropic")
 
@@ -1036,12 +1038,12 @@ class TestStepModel:
         """Reset/main flow: a config.model that isn't in the chosen provider's
         list (e.g. provider switched to google-genai) defaults to that
         provider's first model, NOT the custom 'Type a model name...' entry."""
-        from EvoScientist.config.onboard.steps import _step_model
-        from EvoScientist.llm.models import get_models_for_provider
+        from metasci_scribe.config.onboard.steps import _step_model
+        from metasci_scribe.llm.models import get_models_for_provider
 
-        config = EvoScientistConfig(model="claude-sonnet-4-6")
+        config = ScribeConfig(model="claude-sonnet-4-6")
         entries = get_models_for_provider("google-genai")
-        with patch("EvoScientist.config.onboard.steps.questionary") as mock_q:
+        with patch("metasci_scribe.config.onboard.steps.questionary") as mock_q:
             mock_q.select.return_value.ask.return_value = entries[0][0]
             _step_model(config, "google-genai")
 
@@ -1052,11 +1054,11 @@ class TestStepModel:
     def test_removed_model_defaults_to_the_default_model(self):
         """A saved model the provider no longer lists preselects the default
         model, not the provider's first (most expensive) entry."""
-        from EvoScientist.config.onboard.steps import _step_model
-        from EvoScientist.llm import DEFAULT_MODEL
+        from metasci_scribe.config.onboard.steps import _step_model
+        from metasci_scribe.llm import DEFAULT_MODEL
 
-        config = EvoScientistConfig(model="claude-sonnet-4-6")
-        with patch("EvoScientist.config.onboard.steps.questionary") as mock_q:
+        config = ScribeConfig(model="claude-sonnet-4-6")
+        with patch("metasci_scribe.config.onboard.steps.questionary") as mock_q:
             mock_q.select.return_value.ask.return_value = DEFAULT_MODEL
             _step_model(config, "anthropic")
 
@@ -1065,10 +1067,10 @@ class TestStepModel:
     def test_custom_default_value_preselects_and_prefills(self):
         """Co-pilot re-run: a saved custom (non-registry) model preselects and
         prefills the 'Type a model name...' entry."""
-        from EvoScientist.config.onboard.steps import _step_model
+        from metasci_scribe.config.onboard.steps import _step_model
 
-        config = EvoScientistConfig()
-        with patch("EvoScientist.config.onboard.steps.questionary") as mock_q:
+        config = ScribeConfig()
+        with patch("metasci_scribe.config.onboard.steps.questionary") as mock_q:
             mock_q.select.return_value.ask.return_value = "__custom__"
             mock_q.text.return_value.ask.return_value = "my-private/model"
             result = _step_model(config, "openrouter", default_value="my-private/model")
@@ -1079,11 +1081,11 @@ class TestStepModel:
 
     def test_raises_keyboard_interrupt_on_cancel(self):
         """Test that _step_model raises KeyboardInterrupt on cancel."""
-        from EvoScientist.config.onboard.steps import _step_model
+        from metasci_scribe.config.onboard.steps import _step_model
 
-        config = EvoScientistConfig()
+        config = ScribeConfig()
 
-        with patch("EvoScientist.config.onboard.steps.questionary") as mock_q:
+        with patch("metasci_scribe.config.onboard.steps.questionary") as mock_q:
             mock_q.select.return_value.ask.return_value = None
             with pytest.raises(KeyboardInterrupt):
                 _step_model(config, "anthropic")
@@ -1092,11 +1094,11 @@ class TestStepModel:
 class TestStepWorkspace:
     def test_returns_daemon_mode(self):
         """Test workspace step returns selected mode."""
-        from EvoScientist.config.onboard.steps import _step_workspace
+        from metasci_scribe.config.onboard.steps import _step_workspace
 
-        config = EvoScientistConfig()
+        config = ScribeConfig()
 
-        with patch("EvoScientist.config.onboard.steps.questionary") as mock_q:
+        with patch("metasci_scribe.config.onboard.steps.questionary") as mock_q:
             mock_q.select.return_value.ask.return_value = "daemon"
             result = _step_workspace(config)
 
@@ -1104,11 +1106,11 @@ class TestStepWorkspace:
 
     def test_returns_run_mode(self):
         """Test workspace step returns run mode."""
-        from EvoScientist.config.onboard.steps import _step_workspace
+        from metasci_scribe.config.onboard.steps import _step_workspace
 
-        config = EvoScientistConfig()
+        config = ScribeConfig()
 
-        with patch("EvoScientist.config.onboard.steps.questionary") as mock_q:
+        with patch("metasci_scribe.config.onboard.steps.questionary") as mock_q:
             mock_q.select.return_value.ask.return_value = "run"
             result = _step_workspace(config)
 
@@ -1118,13 +1120,13 @@ class TestStepWorkspace:
 class TestPromptAndValidateApiKey:
     def test_keep_existing_key_still_validates(self):
         """Pressing Enter to keep current key should validate the existing key."""
-        from EvoScientist.config.onboard.helpers import _prompt_and_validate_api_key
+        from metasci_scribe.config.onboard.helpers import _prompt_and_validate_api_key
 
         validate_fn = Mock(return_value=(True, "Valid"))
 
         with (
-            patch("EvoScientist.config.onboard.helpers.questionary") as mock_q,
-            patch("EvoScientist.config.onboard.helpers.console"),
+            patch("metasci_scribe.config.onboard.helpers.questionary") as mock_q,
+            patch("metasci_scribe.config.onboard.helpers.console"),
         ):
             mock_q.password.return_value.ask.return_value = ""  # keep existing
             result = _prompt_and_validate_api_key(
@@ -1139,11 +1141,11 @@ class TestPromptAndValidateApiKey:
 
     def test_new_key_still_validates(self):
         """Entering a new key should still run validation."""
-        from EvoScientist.config.onboard.helpers import _prompt_and_validate_api_key
+        from metasci_scribe.config.onboard.helpers import _prompt_and_validate_api_key
 
         validate_fn = Mock(return_value=(True, "valid"))
 
-        with patch("EvoScientist.config.onboard.helpers.questionary") as mock_q:
+        with patch("metasci_scribe.config.onboard.helpers.questionary") as mock_q:
             mock_q.password.return_value.ask.return_value = "new-key"
             result = _prompt_and_validate_api_key(
                 "Enter key:",
@@ -1159,15 +1161,15 @@ class TestPromptAndValidateApiKey:
 class TestValidateImessage:
     def test_valid_when_cli_found_with_rpc(self):
         """Test validate_imessage returns valid when imsg CLI found and RPC works."""
-        from EvoScientist.config.onboard.helpers import validate_imessage
+        from metasci_scribe.config.onboard.helpers import validate_imessage
 
         version_result = Mock(returncode=0, stdout="imsg 1.2.3")
         rpc_result = Mock(returncode=0)
 
         with (
-            patch("EvoScientist.config.onboard.helpers.sys") as mock_sys,
-            patch("EvoScientist.channels.imessage.probe.shutil") as mock_shutil,
-            patch("EvoScientist.config.onboard.helpers.subprocess") as mock_sub,
+            patch("metasci_scribe.config.onboard.helpers.sys") as mock_sys,
+            patch("metasci_scribe.channels.imessage.probe.shutil") as mock_shutil,
+            patch("metasci_scribe.config.onboard.helpers.subprocess") as mock_sub,
         ):
             mock_sys.platform = "darwin"
             mock_shutil.which.return_value = "/opt/homebrew/bin/imsg"
@@ -1180,11 +1182,11 @@ class TestValidateImessage:
 
     def test_invalid_when_cli_not_found(self):
         """Test validate_imessage returns not_installed when imsg CLI missing."""
-        from EvoScientist.config.onboard.helpers import validate_imessage
+        from metasci_scribe.config.onboard.helpers import validate_imessage
 
         with (
-            patch("EvoScientist.config.onboard.helpers.sys") as mock_sys,
-            patch("EvoScientist.channels.imessage.probe.shutil") as mock_shutil,
+            patch("metasci_scribe.config.onboard.helpers.sys") as mock_sys,
+            patch("metasci_scribe.channels.imessage.probe.shutil") as mock_shutil,
         ):
             mock_sys.platform = "darwin"
             mock_shutil.which.return_value = None
@@ -1195,9 +1197,9 @@ class TestValidateImessage:
 
     def test_invalid_on_non_macos(self):
         """Test validate_imessage returns invalid on non-macOS."""
-        from EvoScientist.config.onboard.helpers import validate_imessage
+        from metasci_scribe.config.onboard.helpers import validate_imessage
 
-        with patch("EvoScientist.config.onboard.helpers.sys") as mock_sys:
+        with patch("metasci_scribe.config.onboard.helpers.sys") as mock_sys:
             mock_sys.platform = "linux"
             valid, msg = validate_imessage()
 
@@ -1206,15 +1208,15 @@ class TestValidateImessage:
 
     def test_invalid_when_rpc_not_supported(self):
         """Test validate_imessage returns invalid when RPC check fails."""
-        from EvoScientist.config.onboard.helpers import validate_imessage
+        from metasci_scribe.config.onboard.helpers import validate_imessage
 
         version_result = Mock(returncode=0, stdout="imsg 0.1.0")
         rpc_result = Mock(returncode=1)
 
         with (
-            patch("EvoScientist.config.onboard.helpers.sys") as mock_sys,
-            patch("EvoScientist.channels.imessage.probe.shutil") as mock_shutil,
-            patch("EvoScientist.config.onboard.helpers.subprocess") as mock_sub,
+            patch("metasci_scribe.config.onboard.helpers.sys") as mock_sys,
+            patch("metasci_scribe.channels.imessage.probe.shutil") as mock_shutil,
+            patch("metasci_scribe.config.onboard.helpers.subprocess") as mock_sub,
         ):
             mock_sys.platform = "darwin"
             mock_shutil.which.return_value = "/usr/local/bin/imsg"
@@ -1228,9 +1230,9 @@ class TestValidateImessage:
 class TestInstallImsg:
     def test_install_success(self):
         """Test _install_imsg returns True on success."""
-        from EvoScientist.config.onboard.helpers import _install_imsg
+        from metasci_scribe.config.onboard.helpers import _install_imsg
 
-        with patch("EvoScientist.config.onboard.helpers.subprocess") as mock_sub:
+        with patch("metasci_scribe.config.onboard.helpers.subprocess") as mock_sub:
             mock_sub.run.return_value = Mock(returncode=0)
             mock_sub.TimeoutExpired = subprocess.TimeoutExpired
             result = _install_imsg()
@@ -1239,11 +1241,11 @@ class TestInstallImsg:
 
     def test_install_brew_not_found(self):
         """Test _install_imsg handles missing Homebrew."""
-        from EvoScientist.config.onboard.helpers import _install_imsg
+        from metasci_scribe.config.onboard.helpers import _install_imsg
 
         with (
-            patch("EvoScientist.config.onboard.helpers.subprocess") as mock_sub,
-            patch("EvoScientist.config.onboard.helpers.console"),
+            patch("metasci_scribe.config.onboard.helpers.subprocess") as mock_sub,
+            patch("metasci_scribe.config.onboard.helpers.console"),
         ):
             mock_sub.run.side_effect = FileNotFoundError()
             mock_sub.TimeoutExpired = subprocess.TimeoutExpired
@@ -1253,9 +1255,9 @@ class TestInstallImsg:
 
     def test_install_failure(self):
         """Test _install_imsg returns False on non-zero exit."""
-        from EvoScientist.config.onboard.helpers import _install_imsg
+        from metasci_scribe.config.onboard.helpers import _install_imsg
 
-        with patch("EvoScientist.config.onboard.helpers.subprocess") as mock_sub:
+        with patch("metasci_scribe.config.onboard.helpers.subprocess") as mock_sub:
             mock_sub.run.return_value = Mock(returncode=1)
             mock_sub.TimeoutExpired = subprocess.TimeoutExpired
             result = _install_imsg()
@@ -1266,14 +1268,14 @@ class TestInstallImsg:
 class TestSetupImessage:
     def test_already_installed(self):
         """Test _setup_imessage returns True when already installed."""
-        from EvoScientist.config.onboard.helpers import _setup_imessage
+        from metasci_scribe.config.onboard.helpers import _setup_imessage
 
         with (
             patch(
-                "EvoScientist.config.onboard.helpers.validate_imessage",
+                "metasci_scribe.config.onboard.helpers.validate_imessage",
                 return_value=(True, "imsg at /bin/imsg"),
             ),
-            patch("EvoScientist.config.onboard.helpers.console"),
+            patch("metasci_scribe.config.onboard.helpers.console"),
         ):
             result = _setup_imessage()
 
@@ -1281,14 +1283,14 @@ class TestSetupImessage:
 
     def test_not_macos(self):
         """Test _setup_imessage returns False on non-macOS."""
-        from EvoScientist.config.onboard.helpers import _setup_imessage
+        from metasci_scribe.config.onboard.helpers import _setup_imessage
 
         with (
             patch(
-                "EvoScientist.config.onboard.helpers.validate_imessage",
+                "metasci_scribe.config.onboard.helpers.validate_imessage",
                 return_value=(False, "iMessage requires macOS"),
             ),
-            patch("EvoScientist.config.onboard.helpers.console"),
+            patch("metasci_scribe.config.onboard.helpers.console"),
         ):
             result = _setup_imessage()
 
@@ -1296,15 +1298,17 @@ class TestSetupImessage:
 
     def test_install_then_valid(self):
         """Test _setup_imessage installs and re-validates successfully."""
-        from EvoScientist.config.onboard.helpers import _setup_imessage
+        from metasci_scribe.config.onboard.helpers import _setup_imessage
 
         with (
-            patch("EvoScientist.config.onboard.helpers.validate_imessage") as mock_val,
             patch(
-                "EvoScientist.config.onboard.helpers._install_imsg", return_value=True
+                "metasci_scribe.config.onboard.helpers.validate_imessage"
+            ) as mock_val,
+            patch(
+                "metasci_scribe.config.onboard.helpers._install_imsg", return_value=True
             ),
-            patch("EvoScientist.config.onboard.helpers.questionary") as mock_q,
-            patch("EvoScientist.config.onboard.helpers.console"),
+            patch("metasci_scribe.config.onboard.helpers.questionary") as mock_q,
+            patch("metasci_scribe.config.onboard.helpers.console"),
         ):
             mock_val.side_effect = [
                 (False, "not_installed"),  # First check
@@ -1317,15 +1321,15 @@ class TestSetupImessage:
 
     def test_user_declines_install(self):
         """Test _setup_imessage returns False when user declines install."""
-        from EvoScientist.config.onboard.helpers import _setup_imessage
+        from metasci_scribe.config.onboard.helpers import _setup_imessage
 
         with (
             patch(
-                "EvoScientist.config.onboard.helpers.validate_imessage",
+                "metasci_scribe.config.onboard.helpers.validate_imessage",
                 return_value=(False, "not_installed"),
             ),
-            patch("EvoScientist.config.onboard.helpers.questionary") as mock_q,
-            patch("EvoScientist.config.onboard.helpers.console"),
+            patch("metasci_scribe.config.onboard.helpers.questionary") as mock_q,
+            patch("metasci_scribe.config.onboard.helpers.console"),
         ):
             mock_q.confirm.return_value.ask.return_value = False
             result = _setup_imessage()
@@ -1337,34 +1341,34 @@ class TestSkillsWorkspace:
     """Onboarding checks skills where the CLI starts: env override, config, cwd."""
 
     def test_uses_default_workdir(self, monkeypatch, tmp_path):
-        monkeypatch.delenv("EVOSCIENTIST_WORKSPACE_DIR", raising=False)
-        config = EvoScientistConfig(default_workdir=str(tmp_path / "cfg"))
+        monkeypatch.delenv("METASCI_SCRIBE_WORKSPACE_DIR", raising=False)
+        config = ScribeConfig(default_workdir=str(tmp_path / "cfg"))
         assert _skills_workspace(config) == Workspace(tmp_path / "cfg")
 
     def test_prefers_env_override(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("EVOSCIENTIST_WORKSPACE_DIR", str(tmp_path / "env"))
-        config = EvoScientistConfig(default_workdir=str(tmp_path / "cfg"))
+        monkeypatch.setenv("METASCI_SCRIBE_WORKSPACE_DIR", str(tmp_path / "env"))
+        config = ScribeConfig(default_workdir=str(tmp_path / "cfg"))
         assert _skills_workspace(config) == Workspace(tmp_path / "env")
 
     def test_falls_back_to_cwd(self, monkeypatch, tmp_path):
-        monkeypatch.delenv("EVOSCIENTIST_WORKSPACE_DIR", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_WORKSPACE_DIR", raising=False)
         monkeypatch.chdir(tmp_path)
-        assert _skills_workspace(EvoScientistConfig()) == Workspace(tmp_path)
+        assert _skills_workspace(ScribeConfig()) == Workspace(tmp_path)
 
 
 class TestStepSkills:
     def test_returns_empty_when_none_selected(self, workspace):
         """Test skills step returns empty list when user selects nothing."""
-        from EvoScientist.config.onboard.steps import _step_skills
+        from metasci_scribe.config.onboard.steps import _step_skills
 
         with (
-            patch("EvoScientist.config.onboard.style.questionary") as mock_q,
-            patch("EvoScientist.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.style.questionary") as mock_q,
+            patch("metasci_scribe.config.onboard.steps.console"),
             # Empty selection triggers the npx easter-egg check; without this
             # mock the real questionary.confirm in _ensure_npx fires on hosts
             # where npx is missing/slow (NoConsoleScreenBufferError on
             # headless Windows CI).
-            patch("EvoScientist.config.onboard.steps._ensure_npx", return_value=True),
+            patch("metasci_scribe.config.onboard.steps._ensure_npx", return_value=True),
         ):
             mock_q.checkbox.return_value.ask.return_value = []
             result = _step_skills(workspace)
@@ -1373,14 +1377,17 @@ class TestStepSkills:
 
     def test_installs_selected_skills(self, workspace):
         """Test skills step installs selected skills and returns sources."""
-        from EvoScientist.config.onboard.steps import _RECOMMENDED_SKILLS, _step_skills
+        from metasci_scribe.config.onboard.steps import (
+            _RECOMMENDED_SKILLS,
+            _step_skills,
+        )
 
         source = _RECOMMENDED_SKILLS[0]["source"]
 
         with (
-            patch("EvoScientist.config.onboard.style.questionary") as mock_q,
-            patch("EvoScientist.config.onboard.steps.console"),
-            patch("EvoScientist.tools.skills_manager.install_skill") as mock_install,
+            patch("metasci_scribe.config.onboard.style.questionary") as mock_q,
+            patch("metasci_scribe.config.onboard.steps.console"),
+            patch("metasci_scribe.tools.skills_manager.install_skill") as mock_install,
         ):
             mock_q.checkbox.return_value.ask.return_value = [source]
             mock_install.return_value = {"success": True, "name": "test"}
@@ -1391,14 +1398,17 @@ class TestStepSkills:
 
     def test_handles_install_failure(self, workspace):
         """Test skills step handles installation errors gracefully."""
-        from EvoScientist.config.onboard.steps import _RECOMMENDED_SKILLS, _step_skills
+        from metasci_scribe.config.onboard.steps import (
+            _RECOMMENDED_SKILLS,
+            _step_skills,
+        )
 
         source = _RECOMMENDED_SKILLS[0]["source"]
 
         with (
-            patch("EvoScientist.config.onboard.style.questionary") as mock_q,
-            patch("EvoScientist.config.onboard.steps.console"),
-            patch("EvoScientist.tools.skills_manager.install_skill") as mock_install,
+            patch("metasci_scribe.config.onboard.style.questionary") as mock_q,
+            patch("metasci_scribe.config.onboard.steps.console"),
+            patch("metasci_scribe.tools.skills_manager.install_skill") as mock_install,
         ):
             mock_q.checkbox.return_value.ask.return_value = [source]
             mock_install.side_effect = Exception("network error")
@@ -1408,9 +1418,9 @@ class TestStepSkills:
 
     def test_raises_keyboard_interrupt_on_cancel(self, workspace):
         """Test skills step raises KeyboardInterrupt on cancel."""
-        from EvoScientist.config.onboard.steps import _step_skills
+        from metasci_scribe.config.onboard.steps import _step_skills
 
-        with patch("EvoScientist.config.onboard.style.questionary") as mock_q:
+        with patch("metasci_scribe.config.onboard.style.questionary") as mock_q:
             mock_q.checkbox.return_value.ask.return_value = None
             with pytest.raises(KeyboardInterrupt):
                 _step_skills(workspace)
@@ -1418,7 +1428,10 @@ class TestStepSkills:
     def test_detects_pack_via_manifest(self, tmp_path, workspace):
         """A pack source recorded in the manifest is detected as installed
         even when none of the unpacked child dir names match the source."""
-        from EvoScientist.config.onboard.steps import _RECOMMENDED_SKILLS, _step_skills
+        from metasci_scribe.config.onboard.steps import (
+            _RECOMMENDED_SKILLS,
+            _step_skills,
+        )
 
         # Recreate the EvoSkills-style layout: child dirs in GLOBAL_SKILLS_DIR
         # whose names share nothing with the pack source URL.
@@ -1444,14 +1457,15 @@ class TestStepSkills:
             return []
 
         with (
-            patch("EvoScientist.paths.GLOBAL_SKILLS_DIR", global_dir),
+            patch("metasci_scribe.paths.GLOBAL_SKILLS_DIR", global_dir),
             patch(
-                "EvoScientist.config.onboard.steps._checkbox_ask", side_effect=_capture
+                "metasci_scribe.config.onboard.steps._checkbox_ask",
+                side_effect=_capture,
             ),
-            patch("EvoScientist.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.steps.console"),
             # _capture returns [] (empty selection), which would otherwise
             # reach the real _ensure_npx — see test_returns_empty_when_none_selected.
-            patch("EvoScientist.config.onboard.steps._ensure_npx", return_value=True),
+            patch("metasci_scribe.config.onboard.steps._ensure_npx", return_value=True),
         ):
             _step_skills(workspace)
 
@@ -1471,7 +1485,10 @@ class TestStepSkills:
     def test_surfaces_update_available_when_upstream_moved(self, tmp_path, workspace):
         """When a pack records an install-time commit and `git ls-remote`
         reports a different SHA, the choice label should call out the update."""
-        from EvoScientist.config.onboard.steps import _RECOMMENDED_SKILLS, _step_skills
+        from metasci_scribe.config.onboard.steps import (
+            _RECOMMENDED_SKILLS,
+            _step_skills,
+        )
 
         pack_source = _RECOMMENDED_SKILLS[0]["source"]
         global_dir = tmp_path / "global"
@@ -1493,19 +1510,20 @@ class TestStepSkills:
             return []
 
         with (
-            patch("EvoScientist.paths.GLOBAL_SKILLS_DIR", global_dir),
+            patch("metasci_scribe.paths.GLOBAL_SKILLS_DIR", global_dir),
             # Upstream moved past the recorded commit.
             patch(
-                "EvoScientist.tools.skills_manager.resolve_remote_head",
+                "metasci_scribe.tools.skills_manager.resolve_remote_head",
                 return_value="bbb222",
             ),
             patch(
-                "EvoScientist.config.onboard.steps._checkbox_ask", side_effect=_capture
+                "metasci_scribe.config.onboard.steps._checkbox_ask",
+                side_effect=_capture,
             ),
-            patch("EvoScientist.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.steps.console"),
             # _capture returns [] (empty selection), which would otherwise
             # reach the real _ensure_npx — see test_returns_empty_when_none_selected.
-            patch("EvoScientist.config.onboard.steps._ensure_npx", return_value=True),
+            patch("metasci_scribe.config.onboard.steps._ensure_npx", return_value=True),
         ):
             _step_skills(workspace)
 
@@ -1518,7 +1536,10 @@ class TestStepSkills:
     def test_no_update_hint_when_remote_check_fails(self, tmp_path, workspace):
         """If `git ls-remote` returns None (offline, timeout, etc.), the label
         must fall back to plain 'installed' — never falsely claim 'update'."""
-        from EvoScientist.config.onboard.steps import _RECOMMENDED_SKILLS, _step_skills
+        from metasci_scribe.config.onboard.steps import (
+            _RECOMMENDED_SKILLS,
+            _step_skills,
+        )
 
         pack_source = _RECOMMENDED_SKILLS[0]["source"]
         global_dir = tmp_path / "global"
@@ -1539,18 +1560,19 @@ class TestStepSkills:
             return []
 
         with (
-            patch("EvoScientist.paths.GLOBAL_SKILLS_DIR", global_dir),
+            patch("metasci_scribe.paths.GLOBAL_SKILLS_DIR", global_dir),
             patch(
-                "EvoScientist.tools.skills_manager.resolve_remote_head",
+                "metasci_scribe.tools.skills_manager.resolve_remote_head",
                 return_value=None,
             ),
             patch(
-                "EvoScientist.config.onboard.steps._checkbox_ask", side_effect=_capture
+                "metasci_scribe.config.onboard.steps._checkbox_ask",
+                side_effect=_capture,
             ),
-            patch("EvoScientist.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.steps.console"),
             # _capture returns [] (empty selection), which would otherwise
             # reach the real _ensure_npx — see test_returns_empty_when_none_selected.
-            patch("EvoScientist.config.onboard.steps._ensure_npx", return_value=True),
+            patch("metasci_scribe.config.onboard.steps._ensure_npx", return_value=True),
         ):
             _step_skills(workspace)
 
@@ -1565,11 +1587,11 @@ class TestStepSkills:
 class TestStepChannels:
     def test_returns_disabled_when_skip(self):
         """Test channels step returns empty dict when user selects nothing."""
-        from EvoScientist.config.onboard.channels import _step_channels
+        from metasci_scribe.config.onboard.channels import _step_channels
 
-        config = EvoScientistConfig()
+        config = ScribeConfig()
 
-        with patch("EvoScientist.config.onboard.channels.questionary") as mock_q:
+        with patch("metasci_scribe.config.onboard.channels.questionary") as mock_q:
             mock_q.checkbox.return_value.ask.return_value = []
             result = _step_channels(config)
 
@@ -1577,14 +1599,14 @@ class TestStepChannels:
 
     def test_returns_enabled_when_setup_passes(self):
         """Test channels step returns enabled when iMessage setup succeeds."""
-        from EvoScientist.config.onboard.channels import _step_channels
+        from metasci_scribe.config.onboard.channels import _step_channels
 
-        config = EvoScientistConfig()
+        config = ScribeConfig()
 
         with (
-            patch("EvoScientist.config.onboard.channels.questionary") as mock_q,
+            patch("metasci_scribe.config.onboard.channels.questionary") as mock_q,
             patch(
-                "EvoScientist.config.onboard.channels._setup_imessage",
+                "metasci_scribe.config.onboard.channels._setup_imessage",
                 return_value=True,
             ),
         ):
@@ -1597,14 +1619,14 @@ class TestStepChannels:
 
     def test_returns_enabled_with_senders(self):
         """Test channels step returns enabled with specific senders."""
-        from EvoScientist.config.onboard.channels import _step_channels
+        from metasci_scribe.config.onboard.channels import _step_channels
 
-        config = EvoScientistConfig()
+        config = ScribeConfig()
 
         with (
-            patch("EvoScientist.config.onboard.channels.questionary") as mock_q,
+            patch("metasci_scribe.config.onboard.channels.questionary") as mock_q,
             patch(
-                "EvoScientist.config.onboard.channels._setup_imessage",
+                "metasci_scribe.config.onboard.channels._setup_imessage",
                 return_value=True,
             ),
         ):
@@ -1618,14 +1640,14 @@ class TestStepChannels:
 
     def test_setup_fails_user_declines(self):
         """Test channels step skips iMessage when setup fails and user declines."""
-        from EvoScientist.config.onboard.channels import _step_channels
+        from metasci_scribe.config.onboard.channels import _step_channels
 
-        config = EvoScientistConfig()
+        config = ScribeConfig()
 
         with (
-            patch("EvoScientist.config.onboard.channels.questionary") as mock_q,
+            patch("metasci_scribe.config.onboard.channels.questionary") as mock_q,
             patch(
-                "EvoScientist.config.onboard.channels._setup_imessage",
+                "metasci_scribe.config.onboard.channels._setup_imessage",
                 return_value=False,
             ),
         ):
@@ -1638,14 +1660,14 @@ class TestStepChannels:
 
     def test_setup_fails_user_enables_anyway(self):
         """Test channels step enables iMessage when setup fails but user confirms."""
-        from EvoScientist.config.onboard.channels import _step_channels
+        from metasci_scribe.config.onboard.channels import _step_channels
 
-        config = EvoScientistConfig()
+        config = ScribeConfig()
 
         with (
-            patch("EvoScientist.config.onboard.channels.questionary") as mock_q,
+            patch("metasci_scribe.config.onboard.channels.questionary") as mock_q,
             patch(
-                "EvoScientist.config.onboard.channels._setup_imessage",
+                "metasci_scribe.config.onboard.channels._setup_imessage",
                 return_value=False,
             ),
         ):
@@ -1659,20 +1681,20 @@ class TestStepChannels:
 
     def test_raises_keyboard_interrupt_on_cancel(self):
         """Test channels step raises KeyboardInterrupt on cancel."""
-        from EvoScientist.config.onboard.channels import _step_channels
+        from metasci_scribe.config.onboard.channels import _step_channels
 
-        config = EvoScientistConfig()
+        config = ScribeConfig()
 
-        with patch("EvoScientist.config.onboard.channels.questionary") as mock_q:
+        with patch("metasci_scribe.config.onboard.channels.questionary") as mock_q:
             mock_q.checkbox.return_value.ask.return_value = None
             with pytest.raises(KeyboardInterrupt):
                 _step_channels(config)
 
     def test_telegram_channel_selected(self):
         """Test channels step handles Telegram selection."""
-        from EvoScientist.config.onboard.channels import _step_channels
+        from metasci_scribe.config.onboard.channels import _step_channels
 
-        config = EvoScientistConfig()
+        config = ScribeConfig()
 
         _real_import = (
             __builtins__.__import__
@@ -1686,8 +1708,8 @@ class TestStepChannels:
             return _real_import(name, *args, **kwargs)
 
         with (
-            patch("EvoScientist.config.onboard.channels.questionary") as mock_q,
-            patch("EvoScientist.config.onboard.channels._probe_channel"),
+            patch("metasci_scribe.config.onboard.channels.questionary") as mock_q,
+            patch("metasci_scribe.config.onboard.channels._probe_channel"),
             patch("builtins.__import__", side_effect=_fake_import),
         ):
             mock_q.checkbox.return_value.ask.return_value = ["telegram"]
@@ -1701,9 +1723,9 @@ class TestStepChannels:
 
     def test_discord_channel_selected(self):
         """Test channels step handles Discord selection."""
-        from EvoScientist.config.onboard.channels import _step_channels
+        from metasci_scribe.config.onboard.channels import _step_channels
 
-        config = EvoScientistConfig()
+        config = ScribeConfig()
 
         _real_import = (
             __builtins__.__import__
@@ -1717,8 +1739,8 @@ class TestStepChannels:
             return _real_import(name, *args, **kwargs)
 
         with (
-            patch("EvoScientist.config.onboard.channels.questionary") as mock_q,
-            patch("EvoScientist.config.onboard.channels._probe_channel"),
+            patch("metasci_scribe.config.onboard.channels.questionary") as mock_q,
+            patch("metasci_scribe.config.onboard.channels._probe_channel"),
             patch("builtins.__import__", side_effect=_fake_import),
         ):
             mock_q.checkbox.return_value.ask.return_value = ["discord"]
@@ -1733,7 +1755,7 @@ class TestStepChannels:
 
 class TestStepMcpServersNpxFailure:
     def _make_test_servers(self):
-        from EvoScientist.mcp.registry import MCPServerEntry
+        from metasci_scribe.mcp.registry import MCPServerEntry
 
         return [
             MCPServerEntry(
@@ -1754,24 +1776,28 @@ class TestStepMcpServersNpxFailure:
 
     def test_npx_failure_skips_npx_servers(self):
         """When _ensure_npx returns False, npx-dependent servers must be skipped."""
-        from EvoScientist.config.onboard.steps import _step_mcp_servers
+        from metasci_scribe.config.onboard.steps import _step_mcp_servers
 
         servers = self._make_test_servers()
 
         with (
             patch(
-                "EvoScientist.mcp.registry.fetch_marketplace_index",
+                "metasci_scribe.mcp.registry.fetch_marketplace_index",
                 return_value=servers,
             ),
             patch(
-                "EvoScientist.config.onboard.steps._checkbox_ask",
+                "metasci_scribe.config.onboard.steps._checkbox_ask",
                 return_value=["npx-server", "url-server"],
             ),
-            patch("EvoScientist.config.onboard.steps._ensure_npx", return_value=False),
-            patch("EvoScientist.config.onboard.helpers._check_npx", return_value=False),
-            patch("EvoScientist.mcp.client._load_user_config", return_value={}),
-            patch("EvoScientist.mcp.client.add_mcp_server") as mock_add,
-            patch("EvoScientist.config.onboard.steps.console"),
+            patch(
+                "metasci_scribe.config.onboard.steps._ensure_npx", return_value=False
+            ),
+            patch(
+                "metasci_scribe.config.onboard.helpers._check_npx", return_value=False
+            ),
+            patch("metasci_scribe.mcp.client._load_user_config", return_value={}),
+            patch("metasci_scribe.mcp.client.add_mcp_server") as mock_add,
+            patch("metasci_scribe.config.onboard.steps.console"),
         ):
             result = _step_mcp_servers()
 
@@ -1785,25 +1811,29 @@ class TestStepMcpServersNpxFailure:
 
     def test_npx_failure_returns_empty_when_all_npx(self):
         """When all selected servers are npx-based and npx fails, return []."""
-        from EvoScientist.config.onboard.steps import _step_mcp_servers
+        from metasci_scribe.config.onboard.steps import _step_mcp_servers
 
         servers = self._make_test_servers()
         npx_names = [s.name for s in servers if s.command == "npx"]
 
         with (
             patch(
-                "EvoScientist.mcp.registry.fetch_marketplace_index",
+                "metasci_scribe.mcp.registry.fetch_marketplace_index",
                 return_value=servers,
             ),
             patch(
-                "EvoScientist.config.onboard.steps._checkbox_ask",
+                "metasci_scribe.config.onboard.steps._checkbox_ask",
                 return_value=npx_names,
             ),
-            patch("EvoScientist.config.onboard.steps._ensure_npx", return_value=False),
-            patch("EvoScientist.config.onboard.helpers._check_npx", return_value=False),
-            patch("EvoScientist.mcp.client._load_user_config", return_value={}),
-            patch("EvoScientist.mcp.client.add_mcp_server") as mock_add,
-            patch("EvoScientist.config.onboard.steps.console"),
+            patch(
+                "metasci_scribe.config.onboard.steps._ensure_npx", return_value=False
+            ),
+            patch(
+                "metasci_scribe.config.onboard.helpers._check_npx", return_value=False
+            ),
+            patch("metasci_scribe.mcp.client._load_user_config", return_value={}),
+            patch("metasci_scribe.mcp.client.add_mcp_server") as mock_add,
+            patch("metasci_scribe.config.onboard.steps.console"),
         ):
             result = _step_mcp_servers()
 
@@ -1817,13 +1847,15 @@ class TestStepMcpServersNpxFailure:
 
         from rich.console import Console
 
-        from EvoScientist.config.onboard.steps import _step_mcp_servers
+        from metasci_scribe.config.onboard.steps import _step_mcp_servers
 
         out = io.StringIO()
         with (
-            patch("EvoScientist.mcp.registry.fetch_marketplace_index", side_effect=exc),
             patch(
-                "EvoScientist.config.onboard.steps.console",
+                "metasci_scribe.mcp.registry.fetch_marketplace_index", side_effect=exc
+            ),
+            patch(
+                "metasci_scribe.config.onboard.steps.console",
                 Console(file=out, width=500, color_system=None),
             ),
         ):
@@ -1831,7 +1863,7 @@ class TestStepMcpServersNpxFailure:
         return result, out.getvalue()
 
     def test_index_failure_prints_the_reason(self):
-        from EvoScientist.git_cli import GitNotFoundError
+        from metasci_scribe.git_cli import GitNotFoundError
 
         result, output = self._render_fetch_failure(GitNotFoundError())
 
@@ -1851,11 +1883,11 @@ class TestStepMcpServersNpxFailure:
 class TestStepThinking:
     def test_returns_show_thinking(self):
         """Test thinking step returns selected value."""
-        from EvoScientist.config.onboard.steps import _step_thinking
+        from metasci_scribe.config.onboard.steps import _step_thinking
 
-        config = EvoScientistConfig()
+        config = ScribeConfig()
 
-        with patch("EvoScientist.config.onboard.steps.questionary") as mock_q:
+        with patch("metasci_scribe.config.onboard.steps.questionary") as mock_q:
             mock_q.select.return_value.ask.return_value = True
             result = _step_thinking(config)
 
@@ -1863,11 +1895,11 @@ class TestStepThinking:
 
     def test_returns_false_when_off(self):
         """Test thinking step returns False when user selects Off."""
-        from EvoScientist.config.onboard.steps import _step_thinking
+        from metasci_scribe.config.onboard.steps import _step_thinking
 
-        config = EvoScientistConfig(show_thinking=False)
+        config = ScribeConfig(show_thinking=False)
 
-        with patch("EvoScientist.config.onboard.steps.questionary") as mock_q:
+        with patch("metasci_scribe.config.onboard.steps.questionary") as mock_q:
             mock_q.select.return_value.ask.return_value = False
             result = _step_thinking(config)
 
@@ -1885,26 +1917,26 @@ class TestRunOnboard:
         """The MCP step clones the marketplace from GitHub; its own tests
         above cover it with the clone stubbed."""
         monkeypatch.setattr(
-            "EvoScientist.config.onboard.wizard._step_mcp_servers", lambda: None
+            "metasci_scribe.config.onboard.wizard._step_mcp_servers", lambda: None
         )
 
     def test_returns_true_on_save(self):
         """Test that run_onboard returns True when config is saved."""
-        from EvoScientist.config.onboard.wizard import run_onboard
+        from metasci_scribe.config.onboard.wizard import run_onboard
 
         mock_q = MagicMock()
         with (
             _patch_all_questionary(mock_q),
-            patch("EvoScientist.config.onboard.wizard.load_config") as mock_load,
-            patch("EvoScientist.config.onboard.wizard.save_config") as mock_save,
-            patch("EvoScientist.config.onboard.wizard.console"),
-            patch("EvoScientist.config.onboard.steps.console"),
-            patch("EvoScientist.config.onboard.channels.console"),
-            patch("EvoScientist.config.onboard.helpers.console"),
-            patch("EvoScientist.config.onboard.wizard._step_tinytex"),
+            patch("metasci_scribe.config.onboard.wizard.load_config") as mock_load,
+            patch("metasci_scribe.config.onboard.wizard.save_config") as mock_save,
+            patch("metasci_scribe.config.onboard.wizard.console"),
+            patch("metasci_scribe.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.channels.console"),
+            patch("metasci_scribe.config.onboard.helpers.console"),
+            patch("metasci_scribe.config.onboard.wizard._step_tinytex"),
         ):
             # Setup mock config
-            mock_load.return_value = EvoScientistConfig()
+            mock_load.return_value = ScribeConfig()
 
             # Mock all questionary calls — order matches the wizard's select
             # sequence: UI → Provider → Anthropic auth_mode → Model →
@@ -1948,20 +1980,20 @@ class TestRunOnboard:
     def test_auxiliary_model_enabled_collects_provider_and_key(self):
         """Enabling the auxiliary step stores its provider, model, and the
         chosen provider's API key (a different company than the main agent)."""
-        from EvoScientist.config.onboard.wizard import run_onboard
+        from metasci_scribe.config.onboard.wizard import run_onboard
 
         mock_q = MagicMock()
         with (
             _patch_all_questionary(mock_q),
-            patch("EvoScientist.config.onboard.wizard.load_config") as mock_load,
-            patch("EvoScientist.config.onboard.wizard.save_config") as mock_save,
-            patch("EvoScientist.config.onboard.wizard.console"),
-            patch("EvoScientist.config.onboard.steps.console"),
-            patch("EvoScientist.config.onboard.channels.console"),
-            patch("EvoScientist.config.onboard.helpers.console"),
-            patch("EvoScientist.config.onboard.wizard._step_tinytex"),
+            patch("metasci_scribe.config.onboard.wizard.load_config") as mock_load,
+            patch("metasci_scribe.config.onboard.wizard.save_config") as mock_save,
+            patch("metasci_scribe.config.onboard.wizard.console"),
+            patch("metasci_scribe.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.channels.console"),
+            patch("metasci_scribe.config.onboard.helpers.console"),
+            patch("metasci_scribe.config.onboard.wizard._step_tinytex"),
         ):
-            mock_load.return_value = EvoScientistConfig()
+            mock_load.return_value = ScribeConfig()
 
             mock_q.select.return_value.ask.side_effect = [
                 "tui",  # UI backend
@@ -2003,17 +2035,17 @@ class TestRunOnboard:
 
     def test_auxiliary_same_provider_reuses_main_credentials(self):
         """Same-provider co-pilot should not imply separate credentials exist."""
-        from EvoScientist.config.onboard.wizard import run_onboard
+        from metasci_scribe.config.onboard.wizard import run_onboard
 
         mock_q = MagicMock()
         with (
             _patch_all_questionary(mock_q),
-            patch("EvoScientist.config.onboard.wizard.load_config") as mock_load,
-            patch("EvoScientist.config.onboard.wizard.save_config") as mock_save,
-            patch("EvoScientist.config.onboard.wizard.console"),
-            patch("EvoScientist.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.wizard.load_config") as mock_load,
+            patch("metasci_scribe.config.onboard.wizard.save_config") as mock_save,
+            patch("metasci_scribe.config.onboard.wizard.console"),
+            patch("metasci_scribe.config.onboard.steps.console"),
         ):
-            mock_load.return_value = EvoScientistConfig(
+            mock_load.return_value = ScribeConfig(
                 provider="openai",
                 model="gpt-6-luna",
                 openai_api_key="sk-main-openai",
@@ -2039,21 +2071,21 @@ class TestRunOnboard:
 
     def test_auxiliary_same_provider_prompts_when_shared_key_missing(self):
         """Same-provider reuse should not hide a missing shared API key."""
-        from EvoScientist.config.onboard.wizard import run_onboard
+        from metasci_scribe.config.onboard.wizard import run_onboard
 
         mock_q = MagicMock()
         with (
             _patch_all_questionary(mock_q),
-            patch("EvoScientist.config.onboard.wizard.load_config") as mock_load,
-            patch("EvoScientist.config.onboard.wizard.save_config") as mock_save,
-            patch("EvoScientist.config.onboard.wizard.console"),
-            patch("EvoScientist.config.onboard.steps.console"),
-            patch("EvoScientist.config.onboard.helpers.console"),
+            patch("metasci_scribe.config.onboard.wizard.load_config") as mock_load,
+            patch("metasci_scribe.config.onboard.wizard.save_config") as mock_save,
+            patch("metasci_scribe.config.onboard.wizard.console"),
+            patch("metasci_scribe.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.helpers.console"),
             patch(
-                "EvoScientist.ccproxy_manager.is_ccproxy_available", return_value=True
+                "metasci_scribe.ccproxy_manager.is_ccproxy_available", return_value=True
             ),
         ):
-            mock_load.return_value = EvoScientistConfig(
+            mock_load.return_value = ScribeConfig(
                 provider="openai",
                 model="gpt-6-luna",
                 openai_auth_mode="api_key",
@@ -2085,23 +2117,23 @@ class TestRunOnboard:
 
     def test_auxiliary_openai_oauth_skips_api_key(self):
         """Auxiliary OpenAI goes through the auth step and skips keys on OAuth."""
-        from EvoScientist.config.onboard.wizard import run_onboard
-        from EvoScientist.llm.chatgpt_oauth import ChatGPTLogin
+        from metasci_scribe.config.onboard.wizard import run_onboard
+        from metasci_scribe.llm.chatgpt_oauth import ChatGPTLogin
 
         mock_q = MagicMock()
         with (
             _patch_all_questionary(mock_q),
-            patch("EvoScientist.config.onboard.wizard.load_config") as mock_load,
-            patch("EvoScientist.config.onboard.wizard.save_config") as mock_save,
-            patch("EvoScientist.config.onboard.wizard.console"),
-            patch("EvoScientist.config.onboard.steps.console"),
-            patch("EvoScientist.config.onboard.helpers.console"),
+            patch("metasci_scribe.config.onboard.wizard.load_config") as mock_load,
+            patch("metasci_scribe.config.onboard.wizard.save_config") as mock_save,
+            patch("metasci_scribe.config.onboard.wizard.console"),
+            patch("metasci_scribe.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.helpers.console"),
             patch(
-                "EvoScientist.llm.chatgpt_oauth.status",
+                "metasci_scribe.llm.chatgpt_oauth.status",
                 return_value=ChatGPTLogin(signed_in=False),
             ) as mock_status,
         ):
-            mock_load.return_value = EvoScientistConfig()
+            mock_load.return_value = ScribeConfig()
             mock_q.select.return_value.ask.side_effect = [
                 "assemble",  # Auxiliary: Assemble
                 "openai",  # Auxiliary provider
@@ -2128,18 +2160,18 @@ class TestRunOnboard:
 
     def test_auxiliary_reconfigure_clears_unused_openai_oauth(self):
         """Switching co-pilot away from OpenAI clears stale OpenAI OAuth mode."""
-        from EvoScientist.config.onboard.wizard import run_onboard
+        from metasci_scribe.config.onboard.wizard import run_onboard
 
         mock_q = MagicMock()
         with (
             _patch_all_questionary(mock_q),
-            patch("EvoScientist.config.onboard.wizard.load_config") as mock_load,
-            patch("EvoScientist.config.onboard.wizard.save_config") as mock_save,
-            patch("EvoScientist.config.onboard.wizard.console"),
-            patch("EvoScientist.config.onboard.steps.console"),
-            patch("EvoScientist.config.onboard.helpers.console"),
+            patch("metasci_scribe.config.onboard.wizard.load_config") as mock_load,
+            patch("metasci_scribe.config.onboard.wizard.save_config") as mock_save,
+            patch("metasci_scribe.config.onboard.wizard.console"),
+            patch("metasci_scribe.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.helpers.console"),
         ):
-            mock_load.return_value = EvoScientistConfig(
+            mock_load.return_value = ScribeConfig(
                 provider="anthropic",
                 model="claude-sonnet-4-6",
                 anthropic_auth_mode="oauth",
@@ -2171,19 +2203,19 @@ class TestRunOnboard:
     def test_auxiliary_custom_provider_collects_base_url(self):
         """Regression for the custom-provider fix: a custom auxiliary provider
         collects its base URL (provider -> base URL -> key -> model order)."""
-        from EvoScientist.config.onboard.wizard import run_onboard
+        from metasci_scribe.config.onboard.wizard import run_onboard
 
         mock_q = MagicMock()
         with (
             _patch_all_questionary(mock_q),
-            patch("EvoScientist.config.onboard.wizard.load_config") as mock_load,
-            patch("EvoScientist.config.onboard.wizard.save_config") as mock_save,
-            patch("EvoScientist.config.onboard.wizard.console"),
-            patch("EvoScientist.config.onboard.steps.console"),
-            patch("EvoScientist.config.onboard.channels.console"),
-            patch("EvoScientist.config.onboard.helpers.console"),
+            patch("metasci_scribe.config.onboard.wizard.load_config") as mock_load,
+            patch("metasci_scribe.config.onboard.wizard.save_config") as mock_save,
+            patch("metasci_scribe.config.onboard.wizard.console"),
+            patch("metasci_scribe.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.channels.console"),
+            patch("metasci_scribe.config.onboard.helpers.console"),
         ):
-            mock_load.return_value = EvoScientistConfig()
+            mock_load.return_value = ScribeConfig()
             mock_q.select.return_value.ask.side_effect = [
                 "assemble",  # Auxiliary: Assemble
                 "custom-openai",  # Auxiliary provider
@@ -2211,19 +2243,19 @@ class TestRunOnboard:
 
     def test_returns_false_on_cancel(self):
         """Test that run_onboard returns False when cancelled."""
-        from EvoScientist.config.onboard.wizard import run_onboard
+        from metasci_scribe.config.onboard.wizard import run_onboard
 
         mock_q = MagicMock()
         with (
             _patch_all_questionary(mock_q),
-            patch("EvoScientist.config.onboard.wizard.load_config") as mock_load,
-            patch("EvoScientist.config.onboard.wizard.console"),
-            patch("EvoScientist.config.onboard.steps.console"),
-            patch("EvoScientist.config.onboard.channels.console"),
-            patch("EvoScientist.config.onboard.helpers.console"),
-            patch("EvoScientist.config.onboard.wizard._step_tinytex"),
+            patch("metasci_scribe.config.onboard.wizard.load_config") as mock_load,
+            patch("metasci_scribe.config.onboard.wizard.console"),
+            patch("metasci_scribe.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.channels.console"),
+            patch("metasci_scribe.config.onboard.helpers.console"),
+            patch("metasci_scribe.config.onboard.wizard._step_tinytex"),
         ):
-            mock_load.return_value = EvoScientistConfig()
+            mock_load.return_value = ScribeConfig()
 
             # First selection returns None (Ctrl+C)
             mock_q.select.return_value.ask.return_value = None
@@ -2234,20 +2266,20 @@ class TestRunOnboard:
 
     def test_returns_false_when_not_saving(self):
         """Test that run_onboard returns False when user declines to save."""
-        from EvoScientist.config.onboard.wizard import run_onboard
+        from metasci_scribe.config.onboard.wizard import run_onboard
 
         mock_q = MagicMock()
         with (
             _patch_all_questionary(mock_q),
-            patch("EvoScientist.config.onboard.wizard.load_config") as mock_load,
-            patch("EvoScientist.config.onboard.wizard.save_config") as mock_save,
-            patch("EvoScientist.config.onboard.wizard.console"),
-            patch("EvoScientist.config.onboard.steps.console"),
-            patch("EvoScientist.config.onboard.channels.console"),
-            patch("EvoScientist.config.onboard.helpers.console"),
-            patch("EvoScientist.config.onboard.wizard._step_tinytex"),
+            patch("metasci_scribe.config.onboard.wizard.load_config") as mock_load,
+            patch("metasci_scribe.config.onboard.wizard.save_config") as mock_save,
+            patch("metasci_scribe.config.onboard.wizard.console"),
+            patch("metasci_scribe.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.channels.console"),
+            patch("metasci_scribe.config.onboard.helpers.console"),
+            patch("metasci_scribe.config.onboard.wizard._step_tinytex"),
         ):
-            mock_load.return_value = EvoScientistConfig()
+            mock_load.return_value = ScribeConfig()
 
             mock_q.select.return_value.ask.side_effect = [
                 "tui",  # UI backend
@@ -2276,18 +2308,18 @@ class TestRunOnboard:
 
     def test_reset_then_no_restores_pre_wizard_config(self, tmp_path):
         """Regression: Reset → No must restore the original user file,
-        NOT overwrite it with ``EvoScientistConfig()`` defaults.
+        NOT overwrite it with ``ScribeConfig()`` defaults.
 
         Reproduces a bug where the snapshot was refreshed after Reset, so
         declining the save silently wiped the user's previous settings.
         Verifies the raw-bytes revert path introduced for CodeRabbit's
         "file absence on cancel" comment.
         """
-        from EvoScientist.config.onboard.wizard import run_onboard
-        from EvoScientist.config.settings import save_config
+        from metasci_scribe.config.onboard.wizard import run_onboard
+        from metasci_scribe.config.settings import save_config
 
         config_file = tmp_path / "config.yaml"
-        existing = EvoScientistConfig(
+        existing = ScribeConfig(
             provider="openai",
             model="gpt-5",
             openai_api_key="sk-existing",
@@ -2296,7 +2328,7 @@ class TestRunOnboard:
 
         mock_q = MagicMock()
         with patch(
-            "EvoScientist.config.settings.get_config_path", return_value=config_file
+            "metasci_scribe.config.settings.get_config_path", return_value=config_file
         ):
             save_config(existing)
             # Append a comment that ``save_config`` would strip on
@@ -2310,14 +2342,14 @@ class TestRunOnboard:
             with (
                 _patch_all_questionary(mock_q),
                 patch(
-                    "EvoScientist.config.onboard.wizard.get_config_path",
+                    "metasci_scribe.config.onboard.wizard.get_config_path",
                     return_value=config_file,
                 ),
-                patch("EvoScientist.config.onboard.wizard.console"),
-                patch("EvoScientist.config.onboard.steps.console"),
-                patch("EvoScientist.config.onboard.channels.console"),
-                patch("EvoScientist.config.onboard.helpers.console"),
-                patch("EvoScientist.config.onboard.wizard._step_tinytex"),
+                patch("metasci_scribe.config.onboard.wizard.console"),
+                patch("metasci_scribe.config.onboard.steps.console"),
+                patch("metasci_scribe.config.onboard.channels.console"),
+                patch("metasci_scribe.config.onboard.helpers.console"),
+                patch("metasci_scribe.config.onboard.wizard._step_tinytex"),
             ):
                 mock_q.select.return_value.ask.side_effect = [
                     "reset",  # Keep/Modify/Reset → Reset
@@ -2348,7 +2380,7 @@ class TestRunOnboard:
         """Brand-new user (no config.yaml) declines the final save: the file
         created by autosaves should be deleted to match the original state.
         """
-        from EvoScientist.config.onboard.wizard import run_onboard
+        from metasci_scribe.config.onboard.wizard import run_onboard
 
         config_file = tmp_path / "config.yaml"
         assert not config_file.exists()
@@ -2357,18 +2389,18 @@ class TestRunOnboard:
         with (
             _patch_all_questionary(mock_q),
             patch(
-                "EvoScientist.config.settings.get_config_path",
+                "metasci_scribe.config.settings.get_config_path",
                 return_value=config_file,
             ),
             patch(
-                "EvoScientist.config.onboard.wizard.get_config_path",
+                "metasci_scribe.config.onboard.wizard.get_config_path",
                 return_value=config_file,
             ),
-            patch("EvoScientist.config.onboard.wizard.console"),
-            patch("EvoScientist.config.onboard.steps.console"),
-            patch("EvoScientist.config.onboard.channels.console"),
-            patch("EvoScientist.config.onboard.helpers.console"),
-            patch("EvoScientist.config.onboard.wizard._step_tinytex"),
+            patch("metasci_scribe.config.onboard.wizard.console"),
+            patch("metasci_scribe.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.channels.console"),
+            patch("metasci_scribe.config.onboard.helpers.console"),
+            patch("metasci_scribe.config.onboard.wizard._step_tinytex"),
         ):
             mock_q.select.return_value.ask.side_effect = [
                 "tui",
@@ -2399,20 +2431,20 @@ class TestRunOnboard:
         a rejected key raises rather than silently saving."""
         import pytest
 
-        from EvoScientist.config.onboard.prompter import NonInteractivePrompter
-        from EvoScientist.config.onboard.wizard import run_onboard
+        from metasci_scribe.config.onboard.prompter import NonInteractivePrompter
+        from metasci_scribe.config.onboard.wizard import run_onboard
 
         prompter = NonInteractivePrompter(answers={"tavily_key": "tvly-bad"})
 
         with (
             patch(
-                "EvoScientist.config.onboard.wizard.load_config",
-                return_value=EvoScientistConfig(),
+                "metasci_scribe.config.onboard.wizard.load_config",
+                return_value=ScribeConfig(),
             ),
-            patch("EvoScientist.config.onboard.wizard.save_config"),
-            patch("EvoScientist.config.onboard.wizard.console"),
+            patch("metasci_scribe.config.onboard.wizard.save_config"),
+            patch("metasci_scribe.config.onboard.wizard.console"),
             patch(
-                "EvoScientist.config.onboard.validators.validate_tavily_key",
+                "metasci_scribe.config.onboard.validators.validate_tavily_key",
                 return_value=(False, "Invalid API key"),
             ),
         ):
@@ -2425,8 +2457,8 @@ class TestRunOnboard:
 
     def test_preset_tavily_key_skips_validation_when_flagged(self):
         """``--skip-validation`` must bypass the preset tavily check."""
-        from EvoScientist.config.onboard.prompter import NonInteractivePrompter
-        from EvoScientist.config.onboard.wizard import run_onboard
+        from metasci_scribe.config.onboard.prompter import NonInteractivePrompter
+        from metasci_scribe.config.onboard.wizard import run_onboard
 
         prompter = NonInteractivePrompter(answers={"tavily_key": "tvly-bad"})
 
@@ -2434,13 +2466,13 @@ class TestRunOnboard:
         with (
             _patch_all_questionary(mock_q),
             patch(
-                "EvoScientist.config.onboard.wizard.load_config",
-                return_value=EvoScientistConfig(),
+                "metasci_scribe.config.onboard.wizard.load_config",
+                return_value=ScribeConfig(),
             ),
-            patch("EvoScientist.config.onboard.wizard.save_config"),
-            patch("EvoScientist.config.onboard.wizard.console"),
+            patch("metasci_scribe.config.onboard.wizard.save_config"),
+            patch("metasci_scribe.config.onboard.wizard.console"),
             patch(
-                "EvoScientist.config.onboard.validators.validate_tavily_key"
+                "metasci_scribe.config.onboard.validators.validate_tavily_key"
             ) as mock_validate,
         ):
             mock_q.confirm.return_value.ask.side_effect = [True]  # Save? = Yes
@@ -2459,14 +2491,14 @@ class TestOnboardCliErrorPresentation:
     def test_runtime_error_becomes_clean_typer_exit(self):
         import typer
 
-        from EvoScientist.cli.commands import _run_onboard_cli
+        from metasci_scribe.cli.commands import _run_onboard_cli
 
         with (
             patch(
-                "EvoScientist.config.onboard.run_onboard",
+                "metasci_scribe.config.onboard.run_onboard",
                 side_effect=RuntimeError("--tavily-key rejected by validator: nope"),
             ),
-            patch("EvoScientist.cli.commands.console") as mock_console,
+            patch("metasci_scribe.cli.commands.console") as mock_console,
         ):
             with pytest.raises(typer.Exit) as exc_info:
                 _run_onboard_cli(skip_validation=False)
@@ -2487,11 +2519,11 @@ class TestCheckLatexComponents:
 
     def test_all_available(self):
         """All three components found → all True."""
-        from EvoScientist.config.onboard.helpers import _check_latex_components
+        from metasci_scribe.config.onboard.helpers import _check_latex_components
 
         with (
-            patch("EvoScientist.config.onboard.helpers.shutil") as mock_sh,
-            patch("EvoScientist.config.onboard.helpers.subprocess") as mock_sp,
+            patch("metasci_scribe.config.onboard.helpers.shutil") as mock_sh,
+            patch("metasci_scribe.config.onboard.helpers.subprocess") as mock_sp,
         ):
             mock_sh.which.return_value = "/usr/local/bin/cmd"
             mock_sp.TimeoutExpired = subprocess.TimeoutExpired
@@ -2501,11 +2533,11 @@ class TestCheckLatexComponents:
 
     def test_only_pdflatex(self):
         """Only pdflatex available."""
-        from EvoScientist.config.onboard.helpers import _check_latex_components
+        from metasci_scribe.config.onboard.helpers import _check_latex_components
 
         with (
-            patch("EvoScientist.config.onboard.helpers.shutil") as mock_sh,
-            patch("EvoScientist.config.onboard.helpers.subprocess") as mock_sp,
+            patch("metasci_scribe.config.onboard.helpers.shutil") as mock_sh,
+            patch("metasci_scribe.config.onboard.helpers.subprocess") as mock_sp,
         ):
             mock_sh.which.side_effect = lambda cmd: (
                 "/usr/local/bin/pdflatex" if cmd == "pdflatex" else None
@@ -2521,9 +2553,9 @@ class TestCheckLatexComponents:
 
     def test_none_available(self):
         """Nothing found → all False."""
-        from EvoScientist.config.onboard.helpers import _check_latex_components
+        from metasci_scribe.config.onboard.helpers import _check_latex_components
 
-        with patch("EvoScientist.config.onboard.helpers.shutil") as mock_sh:
+        with patch("metasci_scribe.config.onboard.helpers.shutil") as mock_sh:
             mock_sh.which.return_value = None
             result = _check_latex_components()
             assert result == {
@@ -2538,12 +2570,12 @@ class TestAutoInstallLatexmk:
 
     def test_success(self):
         """tlmgr install latexmk succeeds."""
-        from EvoScientist.config.onboard.helpers import _auto_install_latexmk
+        from metasci_scribe.config.onboard.helpers import _auto_install_latexmk
 
         with (
-            patch("EvoScientist.config.onboard.helpers.shutil") as mock_sh,
-            patch("EvoScientist.config.onboard.helpers.subprocess") as mock_sp,
-            patch("EvoScientist.config.onboard.helpers.console") as mock_con,
+            patch("metasci_scribe.config.onboard.helpers.shutil") as mock_sh,
+            patch("metasci_scribe.config.onboard.helpers.subprocess") as mock_sp,
+            patch("metasci_scribe.config.onboard.helpers.console") as mock_con,
         ):
             mock_sh.which.side_effect = lambda cmd: f"/usr/local/bin/{cmd}"
             mock_sp.run.return_value = Mock(returncode=0)
@@ -2556,12 +2588,12 @@ class TestAutoInstallLatexmk:
 
     def test_tlmgr_not_found(self):
         """tlmgr not on PATH → does nothing."""
-        from EvoScientist.config.onboard.helpers import _auto_install_latexmk
+        from metasci_scribe.config.onboard.helpers import _auto_install_latexmk
 
         with (
-            patch("EvoScientist.config.onboard.helpers.shutil") as mock_sh,
-            patch("EvoScientist.config.onboard.helpers.subprocess") as mock_sp,
-            patch("EvoScientist.config.onboard.helpers.console"),
+            patch("metasci_scribe.config.onboard.helpers.shutil") as mock_sh,
+            patch("metasci_scribe.config.onboard.helpers.subprocess") as mock_sp,
+            patch("metasci_scribe.config.onboard.helpers.console"),
         ):
             mock_sh.which.return_value = None
             _auto_install_latexmk()
@@ -2569,12 +2601,12 @@ class TestAutoInstallLatexmk:
 
     def test_install_fails(self):
         """tlmgr install returns nonzero → warns."""
-        from EvoScientist.config.onboard.helpers import _auto_install_latexmk
+        from metasci_scribe.config.onboard.helpers import _auto_install_latexmk
 
         with (
-            patch("EvoScientist.config.onboard.helpers.shutil") as mock_sh,
-            patch("EvoScientist.config.onboard.helpers.subprocess") as mock_sp,
-            patch("EvoScientist.config.onboard.helpers.console") as mock_con,
+            patch("metasci_scribe.config.onboard.helpers.shutil") as mock_sh,
+            patch("metasci_scribe.config.onboard.helpers.subprocess") as mock_sp,
+            patch("metasci_scribe.config.onboard.helpers.console") as mock_con,
         ):
             mock_sh.which.side_effect = lambda cmd: (
                 "/usr/local/bin/tlmgr" if cmd == "tlmgr" else None
@@ -2593,11 +2625,11 @@ class TestCheckTinytex:
 
     def test_found_pdflatex(self):
         """pdflatex found and working → True."""
-        from EvoScientist.config.onboard.helpers import _check_tinytex
+        from metasci_scribe.config.onboard.helpers import _check_tinytex
 
         with (
-            patch("EvoScientist.config.onboard.helpers.shutil") as mock_sh,
-            patch("EvoScientist.config.onboard.helpers.subprocess") as mock_sp,
+            patch("metasci_scribe.config.onboard.helpers.shutil") as mock_sh,
+            patch("metasci_scribe.config.onboard.helpers.subprocess") as mock_sp,
         ):
             mock_sh.which.return_value = "/usr/local/bin/pdflatex"
             mock_sp.TimeoutExpired = subprocess.TimeoutExpired
@@ -2606,11 +2638,11 @@ class TestCheckTinytex:
 
     def test_tlmgr_only_not_enough(self):
         """pdflatex missing but tlmgr found → False (pdflatex is required)."""
-        from EvoScientist.config.onboard.helpers import _check_tinytex
+        from metasci_scribe.config.onboard.helpers import _check_tinytex
 
         with (
-            patch("EvoScientist.config.onboard.helpers.shutil") as mock_sh,
-            patch("EvoScientist.config.onboard.helpers.subprocess") as mock_sp,
+            patch("metasci_scribe.config.onboard.helpers.shutil") as mock_sh,
+            patch("metasci_scribe.config.onboard.helpers.subprocess") as mock_sp,
         ):
             mock_sh.which.side_effect = lambda cmd: (
                 "/usr/local/bin/tlmgr" if cmd == "tlmgr" else None
@@ -2621,19 +2653,19 @@ class TestCheckTinytex:
 
     def test_not_found(self):
         """Neither pdflatex nor tlmgr found → False."""
-        from EvoScientist.config.onboard.helpers import _check_tinytex
+        from metasci_scribe.config.onboard.helpers import _check_tinytex
 
-        with patch("EvoScientist.config.onboard.helpers.shutil") as mock_sh:
+        with patch("metasci_scribe.config.onboard.helpers.shutil") as mock_sh:
             mock_sh.which.return_value = None
             assert _check_tinytex() is False
 
     def test_version_timeout(self):
         """Command found but --version times out → False."""
-        from EvoScientist.config.onboard.helpers import _check_tinytex
+        from metasci_scribe.config.onboard.helpers import _check_tinytex
 
         with (
-            patch("EvoScientist.config.onboard.helpers.shutil") as mock_sh,
-            patch("EvoScientist.config.onboard.helpers.subprocess") as mock_sp,
+            patch("metasci_scribe.config.onboard.helpers.shutil") as mock_sh,
+            patch("metasci_scribe.config.onboard.helpers.subprocess") as mock_sp,
         ):
             mock_sh.which.return_value = "/usr/local/bin/pdflatex"
             mock_sp.TimeoutExpired = subprocess.TimeoutExpired
@@ -2642,11 +2674,11 @@ class TestCheckTinytex:
 
     def test_version_nonzero(self):
         """Command found but --version returns nonzero → False."""
-        from EvoScientist.config.onboard.helpers import _check_tinytex
+        from metasci_scribe.config.onboard.helpers import _check_tinytex
 
         with (
-            patch("EvoScientist.config.onboard.helpers.shutil") as mock_sh,
-            patch("EvoScientist.config.onboard.helpers.subprocess") as mock_sp,
+            patch("metasci_scribe.config.onboard.helpers.shutil") as mock_sh,
+            patch("metasci_scribe.config.onboard.helpers.subprocess") as mock_sp,
         ):
             mock_sp.TimeoutExpired = subprocess.TimeoutExpired
             mock_sp.run.return_value = Mock(returncode=1)
@@ -2662,11 +2694,11 @@ class TestDetectTinytexInstallMethod:
 
     def test_macos_with_curl(self):
         """macOS with curl → curl method."""
-        from EvoScientist.config.onboard.helpers import _detect_tinytex_install_method
+        from metasci_scribe.config.onboard.helpers import _detect_tinytex_install_method
 
         with (
-            patch("EvoScientist.config.onboard.helpers.sys") as mock_sys,
-            patch("EvoScientist.config.onboard.helpers.shutil") as mock_sh,
+            patch("metasci_scribe.config.onboard.helpers.sys") as mock_sys,
+            patch("metasci_scribe.config.onboard.helpers.shutil") as mock_sh,
         ):
             mock_sys.platform = "darwin"
             mock_sh.which.side_effect = lambda cmd: (
@@ -2678,11 +2710,11 @@ class TestDetectTinytexInstallMethod:
 
     def test_linux_wget_fallback(self):
         """Linux without curl, with wget → wget method."""
-        from EvoScientist.config.onboard.helpers import _detect_tinytex_install_method
+        from metasci_scribe.config.onboard.helpers import _detect_tinytex_install_method
 
         with (
-            patch("EvoScientist.config.onboard.helpers.sys") as mock_sys,
-            patch("EvoScientist.config.onboard.helpers.shutil") as mock_sh,
+            patch("metasci_scribe.config.onboard.helpers.sys") as mock_sys,
+            patch("metasci_scribe.config.onboard.helpers.shutil") as mock_sh,
         ):
             mock_sys.platform = "linux"
             mock_sh.which.side_effect = lambda cmd: (
@@ -2694,11 +2726,11 @@ class TestDetectTinytexInstallMethod:
 
     def test_windows_choco(self):
         """Windows with choco → choco method."""
-        from EvoScientist.config.onboard.helpers import _detect_tinytex_install_method
+        from metasci_scribe.config.onboard.helpers import _detect_tinytex_install_method
 
         with (
-            patch("EvoScientist.config.onboard.helpers.sys") as mock_sys,
-            patch("EvoScientist.config.onboard.helpers.shutil") as mock_sh,
+            patch("metasci_scribe.config.onboard.helpers.sys") as mock_sys,
+            patch("metasci_scribe.config.onboard.helpers.shutil") as mock_sh,
         ):
             mock_sys.platform = "win32"
             mock_sh.which.side_effect = lambda cmd: (
@@ -2710,11 +2742,11 @@ class TestDetectTinytexInstallMethod:
 
     def test_windows_scoop(self):
         """Windows with scoop (no choco) → scoop method."""
-        from EvoScientist.config.onboard.helpers import _detect_tinytex_install_method
+        from metasci_scribe.config.onboard.helpers import _detect_tinytex_install_method
 
         with (
-            patch("EvoScientist.config.onboard.helpers.sys") as mock_sys,
-            patch("EvoScientist.config.onboard.helpers.shutil") as mock_sh,
+            patch("metasci_scribe.config.onboard.helpers.sys") as mock_sys,
+            patch("metasci_scribe.config.onboard.helpers.shutil") as mock_sh,
         ):
             mock_sys.platform = "win32"
             mock_sh.which.side_effect = lambda cmd: (
@@ -2726,11 +2758,11 @@ class TestDetectTinytexInstallMethod:
 
     def test_no_tools(self):
         """No tools available → manual method."""
-        from EvoScientist.config.onboard.helpers import _detect_tinytex_install_method
+        from metasci_scribe.config.onboard.helpers import _detect_tinytex_install_method
 
         with (
-            patch("EvoScientist.config.onboard.helpers.sys") as mock_sys,
-            patch("EvoScientist.config.onboard.helpers.shutil") as mock_sh,
+            patch("metasci_scribe.config.onboard.helpers.sys") as mock_sys,
+            patch("metasci_scribe.config.onboard.helpers.shutil") as mock_sh,
         ):
             mock_sys.platform = "linux"
             mock_sh.which.return_value = None
@@ -2744,9 +2776,9 @@ class TestInstallTinytex:
 
     def test_curl_install_success(self):
         """curl install succeeds → True."""
-        from EvoScientist.config.onboard.helpers import _install_tinytex
+        from metasci_scribe.config.onboard.helpers import _install_tinytex
 
-        with patch("EvoScientist.config.onboard.helpers.subprocess") as mock_sp:
+        with patch("metasci_scribe.config.onboard.helpers.subprocess") as mock_sp:
             mock_sp.run.return_value = Mock(returncode=0)
             mock_sp.TimeoutExpired = subprocess.TimeoutExpired
             assert _install_tinytex("curl", "curl -sL ... | sh") is True
@@ -2757,11 +2789,11 @@ class TestInstallTinytex:
 
     def test_curl_install_timeout(self):
         """curl install times out → False."""
-        from EvoScientist.config.onboard.helpers import _install_tinytex
+        from metasci_scribe.config.onboard.helpers import _install_tinytex
 
         with (
-            patch("EvoScientist.config.onboard.helpers.subprocess") as mock_sp,
-            patch("EvoScientist.config.onboard.helpers.console"),
+            patch("metasci_scribe.config.onboard.helpers.subprocess") as mock_sp,
+            patch("metasci_scribe.config.onboard.helpers.console"),
         ):
             mock_sp.run.side_effect = subprocess.TimeoutExpired("curl", 300)
             mock_sp.TimeoutExpired = subprocess.TimeoutExpired
@@ -2769,11 +2801,11 @@ class TestInstallTinytex:
 
     def test_choco_install_success(self):
         """choco install succeeds → True."""
-        from EvoScientist.config.onboard.helpers import _install_tinytex
+        from metasci_scribe.config.onboard.helpers import _install_tinytex
 
         with (
-            patch("EvoScientist.config.onboard.helpers.subprocess") as mock_sp,
-            patch("EvoScientist.config.onboard.helpers.shutil") as mock_sh,
+            patch("metasci_scribe.config.onboard.helpers.subprocess") as mock_sp,
+            patch("metasci_scribe.config.onboard.helpers.shutil") as mock_sh,
         ):
             mock_sh.which.return_value = "C:\\choco\\choco.exe"
             mock_sp.run.return_value = Mock(returncode=0)
@@ -2782,7 +2814,7 @@ class TestInstallTinytex:
 
     def test_manual_returns_false(self):
         """manual method → False immediately."""
-        from EvoScientist.config.onboard.helpers import _install_tinytex
+        from metasci_scribe.config.onboard.helpers import _install_tinytex
 
         assert _install_tinytex("manual", "https://yihui.org/tinytex/") is False
 
@@ -2792,12 +2824,12 @@ class TestStepTinytex:
 
     def test_user_declines_prepare(self):
         """User says No to 'Prepare LaTeX environment?' → skipped."""
-        from EvoScientist.config.onboard.steps import _step_tinytex
+        from metasci_scribe.config.onboard.steps import _step_tinytex
 
         with (
-            patch("EvoScientist.config.onboard.steps.questionary") as mock_q,
-            patch("EvoScientist.config.onboard.steps._print_step_skipped") as mock_ps,
-            patch("EvoScientist.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.steps.questionary") as mock_q,
+            patch("metasci_scribe.config.onboard.steps._print_step_skipped") as mock_ps,
+            patch("metasci_scribe.config.onboard.steps.console"),
         ):
             mock_q.select.return_value.ask.return_value = False
             _step_tinytex()
@@ -2805,12 +2837,12 @@ class TestStepTinytex:
 
     def test_already_installed_all_components(self):
         """User says Yes, all components available → prints detailed status."""
-        from EvoScientist.config.onboard.steps import _step_tinytex
+        from metasci_scribe.config.onboard.steps import _step_tinytex
 
         with (
-            patch("EvoScientist.config.onboard.steps.questionary") as mock_q,
+            patch("metasci_scribe.config.onboard.steps.questionary") as mock_q,
             patch(
-                "EvoScientist.config.onboard.steps._check_latex_components",
+                "metasci_scribe.config.onboard.steps._check_latex_components",
                 return_value={
                     "pdflatex": True,
                     "latexmk": True,
@@ -2818,9 +2850,9 @@ class TestStepTinytex:
                 },
             ),
             patch(
-                "EvoScientist.config.onboard.steps._print_latex_status"
+                "metasci_scribe.config.onboard.steps._print_latex_status"
             ) as mock_status,
-            patch("EvoScientist.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.steps.console"),
         ):
             mock_q.select.return_value.ask.return_value = True
             _step_tinytex()
@@ -2828,23 +2860,23 @@ class TestStepTinytex:
 
     def test_already_installed_missing_latexmk(self):
         """pdflatex + tlmgr present but latexmk missing → auto-installs."""
-        from EvoScientist.config.onboard.steps import _step_tinytex
+        from metasci_scribe.config.onboard.steps import _step_tinytex
 
         with (
-            patch("EvoScientist.config.onboard.steps.questionary") as mock_q,
+            patch("metasci_scribe.config.onboard.steps.questionary") as mock_q,
             patch(
-                "EvoScientist.config.onboard.steps._check_latex_components",
+                "metasci_scribe.config.onboard.steps._check_latex_components",
                 return_value={
                     "pdflatex": True,
                     "latexmk": False,
                     "tlmgr": True,
                 },
             ),
-            patch("EvoScientist.config.onboard.steps._print_latex_status"),
+            patch("metasci_scribe.config.onboard.steps._print_latex_status"),
             patch(
-                "EvoScientist.config.onboard.steps._auto_install_latexmk"
+                "metasci_scribe.config.onboard.steps._auto_install_latexmk"
             ) as mock_auto,
-            patch("EvoScientist.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.steps.console"),
         ):
             mock_q.select.return_value.ask.return_value = True
             _step_tinytex()
@@ -2852,27 +2884,27 @@ class TestStepTinytex:
 
     def test_user_installs_successfully(self):
         """Yes → not found → confirms install → succeeds → re-check passes."""
-        from EvoScientist.config.onboard.steps import _step_tinytex
+        from metasci_scribe.config.onboard.steps import _step_tinytex
 
         all_false = {"pdflatex": False, "latexmk": False, "tlmgr": False}
         all_true = {"pdflatex": True, "latexmk": True, "tlmgr": True}
         with (
             patch(
-                "EvoScientist.config.onboard.steps._check_latex_components",
+                "metasci_scribe.config.onboard.steps._check_latex_components",
                 side_effect=[all_false, all_true],
             ),
             patch(
-                "EvoScientist.config.onboard.steps._detect_tinytex_install_method",
+                "metasci_scribe.config.onboard.steps._detect_tinytex_install_method",
                 return_value=("curl", "curl ... | sh"),
             ),
             patch(
-                "EvoScientist.config.onboard.steps._install_tinytex",
+                "metasci_scribe.config.onboard.steps._install_tinytex",
                 return_value=True,
             ),
-            patch("EvoScientist.config.onboard.steps.questionary") as mock_q,
-            patch("EvoScientist.config.onboard.steps._print_step_result") as mock_pr,
-            patch("EvoScientist.config.onboard.steps._print_latex_status"),
-            patch("EvoScientist.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.steps.questionary") as mock_q,
+            patch("metasci_scribe.config.onboard.steps._print_step_result") as mock_pr,
+            patch("metasci_scribe.config.onboard.steps._print_latex_status"),
+            patch("metasci_scribe.config.onboard.steps.console"),
         ):
             mock_q.select.return_value.ask.return_value = True
             mock_q.confirm.return_value.ask.return_value = True
@@ -2881,21 +2913,21 @@ class TestStepTinytex:
 
     def test_user_declines_install(self):
         """Yes to prepare → not found → declines install → skipped."""
-        from EvoScientist.config.onboard.steps import _step_tinytex
+        from metasci_scribe.config.onboard.steps import _step_tinytex
 
         all_false = {"pdflatex": False, "latexmk": False, "tlmgr": False}
         with (
             patch(
-                "EvoScientist.config.onboard.steps._check_latex_components",
+                "metasci_scribe.config.onboard.steps._check_latex_components",
                 return_value=all_false,
             ),
             patch(
-                "EvoScientist.config.onboard.steps._detect_tinytex_install_method",
+                "metasci_scribe.config.onboard.steps._detect_tinytex_install_method",
                 return_value=("curl", "curl ... | sh"),
             ),
-            patch("EvoScientist.config.onboard.steps.questionary") as mock_q,
-            patch("EvoScientist.config.onboard.steps._print_step_skipped") as mock_ps,
-            patch("EvoScientist.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.steps.questionary") as mock_q,
+            patch("metasci_scribe.config.onboard.steps._print_step_skipped") as mock_ps,
+            patch("metasci_scribe.config.onboard.steps.console"),
         ):
             mock_q.select.return_value.ask.return_value = True
             mock_q.confirm.return_value.ask.return_value = False
@@ -2904,25 +2936,25 @@ class TestStepTinytex:
 
     def test_install_fails(self):
         """Yes → not found → confirms install → install fails."""
-        from EvoScientist.config.onboard.steps import _step_tinytex
+        from metasci_scribe.config.onboard.steps import _step_tinytex
 
         all_false = {"pdflatex": False, "latexmk": False, "tlmgr": False}
         with (
             patch(
-                "EvoScientist.config.onboard.steps._check_latex_components",
+                "metasci_scribe.config.onboard.steps._check_latex_components",
                 return_value=all_false,
             ),
             patch(
-                "EvoScientist.config.onboard.steps._detect_tinytex_install_method",
+                "metasci_scribe.config.onboard.steps._detect_tinytex_install_method",
                 return_value=("curl", "curl ... | sh"),
             ),
             patch(
-                "EvoScientist.config.onboard.steps._install_tinytex",
+                "metasci_scribe.config.onboard.steps._install_tinytex",
                 return_value=False,
             ),
-            patch("EvoScientist.config.onboard.steps.questionary") as mock_q,
-            patch("EvoScientist.config.onboard.steps._print_step_result") as mock_pr,
-            patch("EvoScientist.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.steps.questionary") as mock_q,
+            patch("metasci_scribe.config.onboard.steps._print_step_result") as mock_pr,
+            patch("metasci_scribe.config.onboard.steps.console"),
         ):
             mock_q.select.return_value.ask.return_value = True
             mock_q.confirm.return_value.ask.return_value = True
@@ -2933,25 +2965,25 @@ class TestStepTinytex:
 
     def test_installed_but_not_in_path(self):
         """Install succeeds but pdflatex not yet in PATH → warns user."""
-        from EvoScientist.config.onboard.steps import _step_tinytex
+        from metasci_scribe.config.onboard.steps import _step_tinytex
 
         all_false = {"pdflatex": False, "latexmk": False, "tlmgr": False}
         with (
             patch(
-                "EvoScientist.config.onboard.steps._check_latex_components",
+                "metasci_scribe.config.onboard.steps._check_latex_components",
                 side_effect=[all_false, all_false],
             ),
             patch(
-                "EvoScientist.config.onboard.steps._detect_tinytex_install_method",
+                "metasci_scribe.config.onboard.steps._detect_tinytex_install_method",
                 return_value=("curl", "curl ... | sh"),
             ),
             patch(
-                "EvoScientist.config.onboard.steps._install_tinytex",
+                "metasci_scribe.config.onboard.steps._install_tinytex",
                 return_value=True,
             ),
-            patch("EvoScientist.config.onboard.steps.questionary") as mock_q,
-            patch("EvoScientist.config.onboard.steps._print_step_result") as mock_pr,
-            patch("EvoScientist.config.onboard.steps.console") as mock_con,
+            patch("metasci_scribe.config.onboard.steps.questionary") as mock_q,
+            patch("metasci_scribe.config.onboard.steps._print_step_result") as mock_pr,
+            patch("metasci_scribe.config.onboard.steps.console") as mock_con,
         ):
             mock_q.select.return_value.ask.return_value = True
             mock_q.confirm.return_value.ask.return_value = True
@@ -2966,21 +2998,21 @@ class TestStepTinytex:
 
     def test_manual_method(self):
         """Yes to prepare → not found → manual method → prints URL, no install prompt."""
-        from EvoScientist.config.onboard.steps import _step_tinytex
+        from metasci_scribe.config.onboard.steps import _step_tinytex
 
         all_false = {"pdflatex": False, "latexmk": False, "tlmgr": False}
         with (
             patch(
-                "EvoScientist.config.onboard.steps._check_latex_components",
+                "metasci_scribe.config.onboard.steps._check_latex_components",
                 return_value=all_false,
             ),
             patch(
-                "EvoScientist.config.onboard.steps._detect_tinytex_install_method",
+                "metasci_scribe.config.onboard.steps._detect_tinytex_install_method",
                 return_value=("manual", "https://yihui.org/tinytex/"),
             ),
-            patch("EvoScientist.config.onboard.steps.questionary") as mock_q,
-            patch("EvoScientist.config.onboard.steps._print_step_skipped") as mock_ps,
-            patch("EvoScientist.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.steps.questionary") as mock_q,
+            patch("metasci_scribe.config.onboard.steps._print_step_skipped") as mock_ps,
+            patch("metasci_scribe.config.onboard.steps.console"),
         ):
             mock_q.select.return_value.ask.return_value = True
             _step_tinytex()
@@ -2989,10 +3021,10 @@ class TestStepTinytex:
 
 class TestXiaomiTokenPlanRegion:
     def test_non_interactive_defaults_to_cn(self, monkeypatch):
-        from EvoScientist.config.onboard.wizard import _configure_provider_base_url
+        from metasci_scribe.config.onboard.wizard import _configure_provider_base_url
 
         monkeypatch.delenv("MIMO_TOKEN_PLAN_BASE_URL", raising=False)
-        config = EvoScientistConfig()
+        config = ScribeConfig()
         _configure_provider_base_url(config, "xiaomi-token-plan", strict=True)
 
         assert (
@@ -3001,14 +3033,14 @@ class TestXiaomiTokenPlanRegion:
         )
 
     def test_non_interactive_blank_env_reaches_validator_as_default(self, monkeypatch):
-        from EvoScientist.config.onboard.helpers import _provider_key_info
-        from EvoScientist.config.onboard.wizard import _configure_provider_base_url
+        from metasci_scribe.config.onboard.helpers import _provider_key_info
+        from metasci_scribe.config.onboard.wizard import _configure_provider_base_url
 
         monkeypatch.setenv("MIMO_TOKEN_PLAN_BASE_URL", "  ")
-        config = EvoScientistConfig()
+        config = ScribeConfig()
         _configure_provider_base_url(config, "xiaomi-token-plan", strict=True)
         with patch(
-            "EvoScientist.config.provider_keys.check_xiaomi_key"
+            "metasci_scribe.config.provider_keys.check_xiaomi_key"
         ) as mock_validate:
             _provider_key_info(config, "xiaomi-token-plan")[2]("tp-key")
 
@@ -3017,9 +3049,9 @@ class TestXiaomiTokenPlanRegion:
         assert mock_validate.call_args.kwargs["base_url"] == default
 
     def test_region_step_returns_selected_region(self):
-        from EvoScientist.config.onboard.steps import _step_xiaomi_token_plan_region
+        from metasci_scribe.config.onboard.steps import _step_xiaomi_token_plan_region
 
-        config = EvoScientistConfig(
+        config = ScribeConfig(
             mimo_token_plan_base_url="https://token-plan-ams.xiaomimimo.com/anthropic"
         )
         with patch("questionary.select") as mock_select:
@@ -3053,11 +3085,11 @@ def test_key_validator_ignores_blank_base_url(
     monkeypatch, provider, validator, field, env, default
 ):
     """Whitespace in either the saved config or the env var falls back to the default."""
-    from EvoScientist.config.onboard.helpers import _provider_key_info
+    from metasci_scribe.config.onboard.helpers import _provider_key_info
 
     monkeypatch.setenv(env, "  ")
-    config = EvoScientistConfig(**{field: "  "})
-    with patch(f"EvoScientist.config.provider_keys.{validator}") as mock_validate:
+    config = ScribeConfig(**{field: "  "})
+    with patch(f"metasci_scribe.config.provider_keys.{validator}") as mock_validate:
         _provider_key_info(config, provider)[2]("key")
 
     assert mock_validate.call_args.kwargs["base_url"] == default
@@ -3067,8 +3099,8 @@ class TestEnsureNpx:
     """_ensure_npx installs the private Node via ensure_node after confirmation."""
 
     def _run(self, *, npx_after: bool, confirm, ensure=None):
-        from EvoScientist.config.onboard import helpers
-        from EvoScientist.setup import node as setup_node
+        from metasci_scribe.config.onboard import helpers
+        from metasci_scribe.setup import node as setup_node
 
         checks = iter([False, npx_after])
         ensure = ensure or MagicMock()
@@ -3096,7 +3128,7 @@ class TestEnsureNpx:
         activate.assert_not_called()
 
     def test_failed_install_returns_false(self):
-        from EvoScientist.setup.protocol import StageError
+        from metasci_scribe.setup.protocol import StageError
 
         ensure = MagicMock(side_effect=StageError("download_failed", "offline"))
         result, _, activate = self._run(npx_after=False, confirm=True, ensure=ensure)
@@ -3110,17 +3142,17 @@ class TestEnsureNpx:
 
 class TestMirrorIsNotAnOnboardingSetting:
     def test_config_with_only_the_mirror_set_is_a_fresh_config(self):
-        from EvoScientist.config.onboard.wizard import _config_has_meaningful_settings
+        from metasci_scribe.config.onboard.wizard import _config_has_meaningful_settings
 
-        assert not _config_has_meaningful_settings(EvoScientistConfig(mirror="cn"))
-        assert _config_has_meaningful_settings(EvoScientistConfig(model="other"))
+        assert not _config_has_meaningful_settings(ScribeConfig(mirror="cn"))
+        assert _config_has_meaningful_settings(ScribeConfig(model="other"))
 
     def test_reset_keeps_the_mirror(self):
-        from EvoScientist.config.onboard import wizard
+        from metasci_scribe.config.onboard import wizard
 
         with patch.object(wizard.questionary, "select") as select:
             select.return_value.ask.return_value = "reset"
             _sections, config = wizard._open_existing_config_prompt(
-                EvoScientistConfig(mirror="cn", model="other")
+                ScribeConfig(mirror="cn", model="other")
             )
-        assert (config.mirror, config.model) == ("cn", EvoScientistConfig().model)
+        assert (config.mirror, config.model) == ("cn", ScribeConfig().model)

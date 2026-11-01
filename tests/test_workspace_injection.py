@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from EvoScientist.paths import Workspace
-from EvoScientist.tools.skills_manager import list_skills
+from metasci_scribe.paths import Workspace
+from metasci_scribe.tools.skills_manager import list_skills
 from tests.fakes.common import StubChannel
 
 
@@ -22,7 +22,7 @@ def _write_skill(skills_dir: Path, name: str) -> None:
 
 @pytest.fixture
 def two_workspaces(tmp_path, monkeypatch):
-    import EvoScientist.paths as paths
+    import metasci_scribe.paths as paths
 
     # Keep the global tier empty so only workspace skills show up.
     monkeypatch.setattr(paths, "GLOBAL_SKILLS_DIR", tmp_path / "global-skills")
@@ -40,7 +40,7 @@ def test_list_skills_reads_only_the_given_workspace(two_workspaces):
 
 
 def test_skill_manager_tool_is_bound_to_its_workspace(two_workspaces):
-    from EvoScientist.tools import make_skill_manager_tool
+    from metasci_scribe.tools import make_skill_manager_tool
 
     a, b = two_workspaces
     tool_a = make_skill_manager_tool(a)
@@ -56,7 +56,7 @@ def test_skill_manager_tool_is_bound_to_its_workspace(two_workspaces):
 
 
 def test_local_install_goes_into_the_given_workspace(two_workspaces, tmp_path):
-    from EvoScientist.tools.skills_manager import install_skill
+    from metasci_scribe.tools.skills_manager import install_skill
 
     a, b = two_workspaces
     source = tmp_path / "incoming"
@@ -71,8 +71,8 @@ def test_local_install_goes_into_the_given_workspace(two_workspaces, tmp_path):
 def test_skill_manager_install_resolves_virtual_source_in_its_work_dir(
     two_workspaces, tmp_path
 ):
-    import EvoScientist.paths as paths
-    from EvoScientist.tools import make_skill_manager_tool
+    import metasci_scribe.paths as paths
+    from metasci_scribe.tools import make_skill_manager_tool
 
     a, _ = two_workspaces
     work_dir = a.runs_dir / "r1"
@@ -88,7 +88,7 @@ def test_skill_manager_install_resolves_virtual_source_in_its_work_dir(
 
 
 def test_install_resolves_virtual_source_against_work_dir(two_workspaces, tmp_path):
-    from EvoScientist.tools.skills_manager import install_skill
+    from metasci_scribe.tools.skills_manager import install_skill
 
     a, _ = two_workspaces
     work_dir = tmp_path / "a" / "runs" / "r1"
@@ -102,7 +102,7 @@ def test_install_resolves_virtual_source_against_work_dir(two_workspaces, tmp_pa
 
 
 def test_default_backend_roots_sandbox_at_work_dir(two_workspaces, tmp_path):
-    from EvoScientist.EvoScientist import _get_default_backend
+    from metasci_scribe.agent import _get_default_backend
 
     a, _ = two_workspaces
     work_dir = tmp_path / "a" / "runs" / "r1"
@@ -114,7 +114,7 @@ def test_default_backend_roots_sandbox_at_work_dir(two_workspaces, tmp_path):
 
 
 def test_default_backend_defaults_to_workspace_root(two_workspaces):
-    from EvoScientist.EvoScientist import _get_default_backend
+    from metasci_scribe.agent import _get_default_backend
 
     a, _ = two_workspaces
     backend = _get_default_backend(a)
@@ -122,8 +122,8 @@ def test_default_backend_defaults_to_workspace_root(two_workspaces):
 
 
 def test_channel_media_goes_to_the_injected_folder(tmp_path):
-    from EvoScientist.channels.bus import MessageBus
-    from EvoScientist.channels.channel_manager import ChannelManager
+    from metasci_scribe.channels.bus import MessageBus
+    from metasci_scribe.channels.channel_manager import ChannelManager
 
     media_dir = tmp_path / "ws" / "media"
     manager = ChannelManager(MessageBus(), media_dir=media_dir)
@@ -143,10 +143,10 @@ def test_channel_without_media_folder_fails_loudly():
 
 def test_standalone_without_agent_does_not_load_config(tmp_path, monkeypatch):
     """A headless channel with no agent reads no config (as before)."""
-    import EvoScientist.channels.standalone as standalone
-    import EvoScientist.config as config_mod
+    import metasci_scribe.channels.standalone as standalone
+    import metasci_scribe.config as config_mod
 
-    monkeypatch.delenv("EVOSCIENTIST_WORKSPACE_DIR", raising=False)
+    monkeypatch.delenv("METASCI_SCRIBE_WORKSPACE_DIR", raising=False)
     monkeypatch.chdir(tmp_path)
 
     def _no_config(*_a, **_k):
@@ -167,7 +167,7 @@ def test_standalone_without_agent_does_not_load_config(tmp_path, monkeypatch):
 
 def test_compact_offloads_into_the_work_dir(two_workspaces, tmp_path, monkeypatch):
     """/compact's history backend is rooted where the agent works."""
-    import EvoScientist.EvoScientist as evo
+    import metasci_scribe.agent as evo
 
     a, _ = two_workspaces
     work_dir = a.runs_dir / "r1"
@@ -183,8 +183,8 @@ def test_compact_offloads_into_the_work_dir(two_workspaces, tmp_path, monkeypatc
 
     import asyncio
 
-    from EvoScientist.cli.commands import compact_conversation
-    from EvoScientist.gateway import GraphTarget
+    from metasci_scribe.cli.commands import compact_conversation
+    from metasci_scribe.gateway import GraphTarget
     from tests.fakes.common import FakeGraphGateway
 
     gateway = FakeGraphGateway()

@@ -16,10 +16,10 @@ pytest.importorskip("textual")
 
 from langchain_core.messages import AIMessage
 
-from EvoScientist.cli.widgets.approval_widget import ApprovalWidget
-from EvoScientist.cli.widgets.tool_call_widget import ToolCallWidget
-from EvoScientist.gateway import RuntimeGateways
-from EvoScientist.stream import display as display_mod
+from metasci_scribe.cli.widgets.approval_widget import ApprovalWidget
+from metasci_scribe.cli.widgets.tool_call_widget import ToolCallWidget
+from metasci_scribe.gateway import RuntimeGateways
+from metasci_scribe.stream import display as display_mod
 from tests.fakes.common import FakeCheckpointAgent, FakeGraphGateway
 
 # -- the app ------------------------------------------------------------------------
@@ -37,8 +37,8 @@ async def capture_app(monkeypatch, workspace) -> object:
 
     from textual.app import App
 
-    from EvoScientist.cli import tui_interactive as tui_mod
-    from EvoScientist.paths import SessionDirs, Workspace
+    from metasci_scribe.cli import tui_interactive as tui_mod
+    from metasci_scribe.paths import SessionDirs, Workspace
 
     captured: dict = {}
 
@@ -48,7 +48,7 @@ async def capture_app(monkeypatch, workspace) -> object:
     monkeypatch.setattr(App, "run_async", _no_run)
     # The status bar would build the user's configured model, which needs its key.
     monkeypatch.setattr(
-        "EvoScientist.cli.status_bar._get_default_chat_model",
+        "metasci_scribe.cli.status_bar._get_default_chat_model",
         lambda: SimpleNamespace(model_name="test-model"),
     )
 
@@ -61,7 +61,7 @@ async def capture_app(monkeypatch, workspace) -> object:
         yield None
 
     monkeypatch.setattr(
-        "EvoScientist.cli.tui_interactive.get_checkpointer",
+        "metasci_scribe.cli.tui_interactive.get_checkpointer",
         _fake_checkpointer,
         raising=False,
     )
@@ -71,16 +71,16 @@ async def capture_app(monkeypatch, workspace) -> object:
             pass
 
     monkeypatch.setattr(
-        "EvoScientist.cli.history_suggester.HistorySuggester", _FakeSuggester
+        "metasci_scribe.cli.history_suggester.HistorySuggester", _FakeSuggester
     )
 
     monkeypatch.setattr(
-        "EvoScientist.cli.tui_interactive._auto_start_channel",
+        "metasci_scribe.cli.tui_interactive._auto_start_channel",
         lambda *_a, **_k: None,
         raising=False,
     )
 
-    monkeypatch.setattr("EvoScientist.cli.tui_interactive.mode", "dev", raising=False)
+    monkeypatch.setattr("metasci_scribe.cli.tui_interactive.mode", "dev", raising=False)
     # Note: ``create_run_dir`` and ``load_agent`` are passed
     # as parameters to ``run_textual_interactive`` (the factory), so the
     # closure inside ``EvoTextualInteractiveApp`` uses the fakes directly
@@ -325,7 +325,7 @@ def rubric_gateway(events=None, state_values=None, post_state=None):
 
 
 def assistant_texts(app) -> list[str]:
-    from EvoScientist.cli.widgets.assistant_message import AssistantMessage
+    from metasci_scribe.cli.widgets.assistant_message import AssistantMessage
 
     out = []
     for w in app.query_one("#chat").children:
@@ -335,8 +335,8 @@ def assistant_texts(app) -> list[str]:
 
 
 def chat_sequence(app) -> list[tuple[str, str]]:
-    from EvoScientist.cli.widgets.assistant_message import AssistantMessage
-    from EvoScientist.cli.widgets.system_message import SystemMessage
+    from metasci_scribe.cli.widgets.assistant_message import AssistantMessage
+    from metasci_scribe.cli.widgets.system_message import SystemMessage
 
     seq = []
     for w in app.query_one("#chat").children:
@@ -387,9 +387,9 @@ async def run_gated(app, workspace, gated) -> None:
 @pytest.fixture(autouse=True)
 def isolated_skills(monkeypatch, tmp_path):
     """Keep the user's real skills and the notices thread out of the app."""
-    from EvoScientist import paths
-    from EvoScientist.cli import tui_interactive as tui_mod
-    from EvoScientist.tools import skills_manager
+    from metasci_scribe import paths
+    from metasci_scribe.cli import tui_interactive as tui_mod
+    from metasci_scribe.tools import skills_manager
 
     monkeypatch.setattr(paths, "GLOBAL_SKILLS_DIR", tmp_path / "noglobal")
     monkeypatch.setattr(tui_mod, "_agent_shell_notices", lambda: [])
@@ -411,7 +411,7 @@ class NoHistory:
 
 def prepare_app(app, workspace, gateway):
     """Point the booted app at *workspace* and a fake gateway."""
-    from EvoScientist.paths import SessionDirs
+    from metasci_scribe.paths import SessionDirs
 
     app._dirs = SessionDirs(workspace)
     app._runtime_gateways = SimpleNamespace(graph_gateway=gateway)
@@ -420,7 +420,7 @@ def prepare_app(app, workspace, gateway):
 
 
 def system_lines(app) -> list[str]:
-    from EvoScientist.cli.widgets.system_message import SystemMessage
+    from metasci_scribe.cli.widgets.system_message import SystemMessage
 
     return [
         str(w.render())

@@ -1,4 +1,4 @@
-"""Tests for the ``EvoSci setup`` event protocol, stage runner and command."""
+"""Tests for the ``metasci-scribe setup`` event protocol, stage runner and command."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ import sys
 
 import pytest
 
-import EvoScientist.setup as setup_pkg
-from EvoScientist.setup import Stage, StageResult, manifest, run_stages
-from EvoScientist.setup.protocol import (
+import metasci_scribe.setup as setup_pkg
+from metasci_scribe.setup import Stage, StageResult, manifest, run_stages
+from metasci_scribe.setup.protocol import (
     PROTOCOL,
     ConsoleEmitter,
     JsonEmitter,
@@ -257,10 +257,10 @@ def test_console_emitter_shows_every_step_message():
 
 def test_main_activates_the_private_tools(tmp_path, monkeypatch):
     """cli.main() must put the private Node and Git on PATH before the app runs."""
-    import EvoScientist.cli as cli_pkg
-    from EvoScientist.cli import commands
-    from EvoScientist.setup import git as setup_git
-    from EvoScientist.setup import node as setup_node
+    import metasci_scribe.cli as cli_pkg
+    from metasci_scribe.cli import commands
+    from metasci_scribe.setup import git as setup_git
+    from metasci_scribe.setup import node as setup_node
 
     order: list[str] = []
     monkeypatch.setattr(setup_node, "activate_runtime", lambda: order.append("node"))
@@ -278,8 +278,8 @@ def test_main_activates_the_private_tools(tmp_path, monkeypatch):
 def cli(tmp_path, monkeypatch):
     from typer.testing import CliRunner
 
-    from EvoScientist.cli._app import app
-    from EvoScientist.stream.console import console
+    from metasci_scribe.cli._app import app
+    from metasci_scribe.stream.console import console
 
     # --json redirects the shared console for the rest of the process; undo it.
     monkeypatch.setattr(console, "_file", None)
@@ -298,7 +298,7 @@ def test_cli_manifest(cli):
 
 
 def test_cli_json_stdout_holds_only_json_lines(cli, monkeypatch):
-    from EvoScientist.stream.console import console
+    from metasci_scribe.stream.console import console
 
     def run(emit, mirror):
         console.print("human noise that must not reach stdout")
@@ -330,7 +330,7 @@ def test_cli_unknown_stage_exits_non_zero(cli):
 
 
 def test_cli_cn_saves_mirror_and_passes_it(cli, monkeypatch):
-    from EvoScientist.config import get_config_value
+    from metasci_scribe.config import get_config_value
 
     seen: list[str] = []
     _fake_stage(
@@ -348,7 +348,7 @@ def test_cli_cn_saves_mirror_and_passes_it(cli, monkeypatch):
 def test_cli_cn_with_an_unwritable_config_still_runs_with_the_mirror(
     cli, monkeypatch, caplog
 ):
-    import EvoScientist.config as config_pkg
+    import metasci_scribe.config as config_pkg
 
     def read_only(key, value):
         raise PermissionError(13, "Read-only file system")
@@ -370,8 +370,8 @@ def test_cli_cn_with_an_unwritable_config_still_runs_with_the_mirror(
 
 
 def test_cli_json_keeps_config_warnings_off_stdout(cli, monkeypatch):
-    import EvoScientist.config as config_pkg
-    from EvoScientist.stream.console import console
+    import metasci_scribe.config as config_pkg
+    from metasci_scribe.stream.console import console
 
     real_load = config_pkg.load_config
 

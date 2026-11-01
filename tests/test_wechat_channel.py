@@ -8,14 +8,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from EvoScientist.channels.base import ChannelError
-from EvoScientist.channels.wechat.channel import (
+from metasci_scribe.channels.base import ChannelError
+from metasci_scribe.channels.wechat.channel import (
     WeChatChannel,
     WeChatMPConfig,
     WeComConfig,
     _strip_markdown,
 )
-from EvoScientist.channels.wechat.crypto import (
+from metasci_scribe.channels.wechat.crypto import (
     WeChatCrypto,
     _pkcs7_pad,
     _pkcs7_unpad,
@@ -113,7 +113,7 @@ class TestWeChatChannelInit:
         await channel.stop()  # Should not raise
 
     async def test_send_returns_false_without_client(self):
-        from EvoScientist.channels.base import OutboundMessage
+        from metasci_scribe.channels.base import OutboundMessage
 
         config = WeComConfig(corp_id="c", agent_id="1", secret="s")
         channel = WeChatChannel(config, backend="wecom")
@@ -568,7 +568,7 @@ class TestWebhookSignatureBypass:
 
 class TestChannelRegistration:
     def test_wechat_registered(self):
-        from EvoScientist.channels.channel_manager import available_channels
+        from metasci_scribe.channels.channel_manager import available_channels
 
         channels = available_channels()
         assert "wechat" in channels

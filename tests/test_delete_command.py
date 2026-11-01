@@ -2,12 +2,12 @@
 
 from unittest.mock import AsyncMock, MagicMock
 
-from EvoScientist.paths import SessionDirs
+from metasci_scribe.paths import SessionDirs
 from tests.fakes.common import TEST_WORKSPACE, FakeGraphGateway, FakeThreadStore
 
 
 def _ctx(thread_id="current", thread_store=None):
-    from EvoScientist.commands.base import CommandContext
+    from metasci_scribe.commands.base import CommandContext
 
     store = thread_store or FakeThreadStore()
     ui = MagicMock()
@@ -23,7 +23,7 @@ def _ctx(thread_id="current", thread_store=None):
 
 class TestDeleteCommand:
     async def test_refuses_to_delete_current(self):
-        from EvoScientist.commands.implementation.session import DeleteCommand
+        from metasci_scribe.commands.implementation.session import DeleteCommand
 
         thread_store = FakeThreadStore(resolved_thread_id="current", deleted=True)
         ctx, ui = _ctx(thread_id="current", thread_store=thread_store)
@@ -33,7 +33,7 @@ class TestDeleteCommand:
         assert any("Cannot delete the current session" in m for m in msgs)
 
     async def test_happy_path_success(self):
-        from EvoScientist.commands.implementation.session import DeleteCommand
+        from metasci_scribe.commands.implementation.session import DeleteCommand
 
         ctx, ui = _ctx(
             thread_id="current",
@@ -47,7 +47,7 @@ class TestDeleteCommand:
         assert any("Deleted session other-thread" in m for m in msgs)
 
     async def test_not_found(self):
-        from EvoScientist.commands.implementation.session import DeleteCommand
+        from metasci_scribe.commands.implementation.session import DeleteCommand
 
         ctx, ui = _ctx()
         await DeleteCommand().execute(ctx, ["missing"])
@@ -55,7 +55,7 @@ class TestDeleteCommand:
         assert any("not found" in m for m in msgs)
 
     async def test_ambiguous_prefix(self):
-        from EvoScientist.commands.implementation.session import DeleteCommand
+        from metasci_scribe.commands.implementation.session import DeleteCommand
 
         ctx, ui = _ctx(thread_store=FakeThreadStore(matches=["abc-one", "abc-two"]))
         await DeleteCommand().execute(ctx, ["abc"])
@@ -63,7 +63,7 @@ class TestDeleteCommand:
         assert any("Ambiguous" in m for m in msgs)
 
     async def test_prefix_resolves_to_unique_match(self):
-        from EvoScientist.commands.implementation.session import DeleteCommand
+        from metasci_scribe.commands.implementation.session import DeleteCommand
 
         ctx, ui = _ctx(
             thread_store=FakeThreadStore(resolved_thread_id="abc-one", deleted=True)
@@ -73,7 +73,7 @@ class TestDeleteCommand:
         assert any("Deleted session abc-one" in m for m in msgs)
 
     async def test_no_arg_empty_sessions_prints_notice(self):
-        from EvoScientist.commands.implementation.session import DeleteCommand
+        from metasci_scribe.commands.implementation.session import DeleteCommand
 
         ctx, ui = _ctx()
         await DeleteCommand().execute(ctx, [])
@@ -82,7 +82,7 @@ class TestDeleteCommand:
 
     async def test_no_arg_calls_picker_returns_none(self):
         """When no arg and picker returns None, nothing is deleted."""
-        from EvoScientist.commands.implementation.session import DeleteCommand
+        from metasci_scribe.commands.implementation.session import DeleteCommand
 
         ctx, ui = _ctx()
         ui.wait_for_thread_pick = AsyncMock(return_value=None)

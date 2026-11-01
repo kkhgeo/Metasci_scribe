@@ -5,14 +5,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from EvoScientist.cli import async_notifier
-from EvoScientist.cli.async_notifier import (
+from metasci_scribe.cli import async_notifier
+from metasci_scribe.cli.async_notifier import (
     dedup_notifications,
     drain_notifications,
     format_batch_message,
     format_notification_lines,
 )
-from EvoScientist.gateway import GraphTarget
+from metasci_scribe.gateway import GraphTarget
 from tests.fakes.common import FakeGraphGateway
 
 
@@ -345,7 +345,7 @@ def test_dedup_preserves_order():
 async def test_consume_notifications_calls_runner_with_batched_message():
     """When notifications arrive and agent is idle, consume_notifications fires
     the supplied async runner once with the formatted batch message and notifs list."""
-    from EvoScientist.cli import async_notifier as an
+    from metasci_scribe.cli import async_notifier as an
 
     # Set up two pending notifications, no dedup match
     an._notification_queue.put(an.AsyncTaskNotification("t1", "wA", "success", "", ""))
@@ -367,7 +367,7 @@ async def test_consume_notifications_calls_runner_with_batched_message():
 
 
 async def test_consume_notifications_no_op_when_queue_empty():
-    from EvoScientist.cli import async_notifier as an
+    from metasci_scribe.cli import async_notifier as an
 
     called = False
 
@@ -402,7 +402,7 @@ async def test_notification_consuming_flag_prevents_reentry():
     2. Blocked: flag pre-set to True → guarded_consume bails out immediately.
     3. Exception path: runner raises → flag is still cleared by finally.
     """
-    from EvoScientist.cli import async_notifier as an
+    from metasci_scribe.cli import async_notifier as an
 
     state = {"inject_count": 0, "consuming": False}
 
@@ -510,7 +510,7 @@ def _clean_async_notifier_state():
 async def test_consume_only_drains_matching_thread():
     """Notifications tagged with origin_cli_thread_id only drain when the
     consumer is invoked with the matching current_thread_id."""
-    from EvoScientist.cli import async_notifier as an
+    from metasci_scribe.cli import async_notifier as an
 
     n_a = an.AsyncTaskNotification(
         "tA", "writing-agent", "success", "", "", origin_cli_thread_id="threadA"
@@ -538,7 +538,7 @@ async def test_consume_only_drains_matching_thread():
 async def test_unrouted_notifications_drain_on_any_thread():
     """Notifications without origin_cli_thread_id (legacy / direct put) drain
     regardless of the current_thread_id arg."""
-    from EvoScientist.cli import async_notifier as an
+    from metasci_scribe.cli import async_notifier as an
 
     an._notification_queue.put(
         an.AsyncTaskNotification("tU", "writing-agent", "success", "", "")
@@ -559,7 +559,7 @@ async def test_unrouted_notifications_drain_on_any_thread():
 async def test_thread_switch_drains_pending():
     """Pending notifications for thread B are not delivered while consumer
     asks for thread A; once consumer runs with thread B they drain."""
-    from EvoScientist.cli import async_notifier as an
+    from metasci_scribe.cli import async_notifier as an
 
     an._enqueue(
         an.AsyncTaskNotification(
@@ -587,7 +587,7 @@ async def test_thread_switch_drains_pending():
 
 def test_has_pending_notifications_respects_routing():
     """has_pending_notifications returns true only for matching or unrouted."""
-    from EvoScientist.cli import async_notifier as an
+    from metasci_scribe.cli import async_notifier as an
 
     # Unrouted always counts
     an._notification_queue.put(
@@ -630,7 +630,7 @@ async def test_consume_notifications_propagates_inject_exception():
     """If the run_message callback raises, consume_notifications propagates
     the exception to the caller — pollers wrap it in try/except so the
     poller task does not die."""
-    from EvoScientist.cli import async_notifier as an
+    from metasci_scribe.cli import async_notifier as an
 
     an._notification_queue.put(
         an.AsyncTaskNotification("tX", "writing-agent", "success", "", "")

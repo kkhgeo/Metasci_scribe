@@ -17,8 +17,8 @@ import pytest
 from langchain.agents.middleware.types import ModelResponse
 from langchain_core.messages import AIMessage
 
-from EvoScientist.llm.errors import ProviderStreamError
-from EvoScientist.middleware.error_normalization import (
+from metasci_scribe.llm.errors import ProviderStreamError
+from metasci_scribe.middleware.error_normalization import (
     ErrorNormalizationMiddleware,
     ModelOutputTruncatedError,
     _normalize,
@@ -138,7 +138,7 @@ class TestNormalize:
         evo_class = type(
             "EvoChatOpenAI",
             (sdk_class,),
-            {"__module__": "EvoScientist.llm.test_models"},
+            {"__module__": "metasci_scribe.llm.test_models"},
         )
         model = evo_class()
         model.openai_api_base = None
@@ -146,7 +146,7 @@ class TestNormalize:
         assert _normalize(_request(model), _make_exc()).provider == "openai"
 
     def test_deepseek_subclass_precedes_openai_base(self, monkeypatch):
-        from EvoScientist.llm.deepseek import EvoChatDeepSeek
+        from metasci_scribe.llm.deepseek import EvoChatDeepSeek
 
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
         req = _request(EvoChatDeepSeek(model="deepseek-v4-flash"))
@@ -183,19 +183,19 @@ class TestNormalize:
 
 class TestIsProviderError:
     def test_openai_module_is_provider_error(self):
-        from EvoScientist.middleware.error_normalization import _is_provider_error
+        from metasci_scribe.middleware.error_normalization import _is_provider_error
 
         assert _is_provider_error(_make_exc(__module__="openai"))
 
     def test_httpx_timeout_is_provider_error(self):
-        from EvoScientist.middleware.error_normalization import _is_provider_error
+        from metasci_scribe.middleware.error_normalization import _is_provider_error
 
         assert _is_provider_error(
             _make_exc(cls_name="TimeoutException", __module__="httpx")
         )
 
     def test_langchain_wrapper_module_is_provider_error(self):
-        from EvoScientist.middleware.error_normalization import _is_provider_error
+        from metasci_scribe.middleware.error_normalization import _is_provider_error
 
         assert _is_provider_error(
             _make_exc(
@@ -209,14 +209,14 @@ class TestIsProviderError:
         langchain, NOT from a provider SDK — the tool selector's
         graceful-degrade path is right for these.
         """
-        from EvoScientist.middleware.error_normalization import _is_provider_error
+        from metasci_scribe.middleware.error_normalization import _is_provider_error
 
         assert not _is_provider_error(
             _make_exc(cls_name="ValidationError", __module__="pydantic")
         )
 
     def test_builtin_is_not_provider_error(self):
-        from EvoScientist.middleware.error_normalization import _is_provider_error
+        from metasci_scribe.middleware.error_normalization import _is_provider_error
 
         assert not _is_provider_error(RuntimeError("x"))
 
@@ -541,8 +541,8 @@ class TestMiddleware:
 
 # --- finish_reason == "error": a failure the provider did not raise ---------
 
-from EvoScientist.llm.errors import ModelErrorFinishError  # noqa: E402
-from EvoScientist.middleware.error_normalization import (  # noqa: E402
+from metasci_scribe.llm.errors import ModelErrorFinishError  # noqa: E402
+from metasci_scribe.middleware.error_normalization import (  # noqa: E402
     _check_truncated_output,
 )
 

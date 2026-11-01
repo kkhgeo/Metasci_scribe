@@ -1,4 +1,4 @@
-"""Tests for the shell-agnostic launcher core (``EvoScientist.deploy.launcher``).
+"""Tests for the shell-agnostic launcher core (``metasci_scribe.deploy.launcher``).
 
 These pin the pieces that moved out of ``run_webui`` so they can be reused by
 other front-ends: the backend reuse/start decision and its error-code taxonomy,
@@ -13,8 +13,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from EvoScientist.deploy import launcher as lm
-from EvoScientist.langgraph_dev import manager as lgm
+from metasci_scribe.deploy import launcher as lm
+from metasci_scribe.langgraph_dev import manager as lgm
 from tests.fakes.langgraph_dev import break_start_lock, start_lock_is_held
 
 
@@ -111,7 +111,7 @@ def test_resolve_backend_run_folder_hint_covers_kept_alive_server(monkeypatch):
     )
     with pytest.raises(lm.LauncherError) as ei:
         lm._resolve_backend(_cfg(workspace_dir="/tmp/wsA", keepalive=True), object())
-    assert "EvoSci server stop" in ei.value.detail
+    assert "metasci-scribe server stop" in ei.value.detail
 
 
 def test_resolve_backend_same_workspace_reuses(monkeypatch):
@@ -150,7 +150,7 @@ def test_resolve_backend_fingerprint_drift_reuses_with_warning(monkeypatch, lega
     )
     decision = lm._resolve_backend(_cfg(workspace_dir="/tmp/wsA"), object())
     assert decision.action == "reuse"
-    assert any("EvoSci server stop" in w for w in decision.warnings)
+    assert any("metasci-scribe server stop" in w for w in decision.warnings)
 
 
 def test_resolve_backend_reuse_returns_the_record_it_read(monkeypatch):
@@ -213,14 +213,14 @@ def test_launcher_error_fields_default_to_empty():
 
 
 def test_resolve_backend_no_drift_for_a_session_started_with_auto_flags(monkeypatch):
-    """``EvoSci --auto-approve`` / ``--auto-mode`` override fields the server
+    """``metasci-scribe --auto-approve`` / ``--auto-mode`` override fields the server
     reads from config.yaml; a second launcher with the file's values must not
-    report drift (and advise ``EvoSci server stop``)."""
-    from EvoScientist.config.settings import EvoScientistConfig
+    report drift (and advise ``metasci-scribe server stop``)."""
+    from metasci_scribe.config.settings import ScribeConfig
 
     fingerprint = lgm._server_config_fingerprint
     recorded = fingerprint(
-        EvoScientistConfig(auto_approve=True, auto_mode=True, enable_ask_user=False)
+        ScribeConfig(auto_approve=True, auto_mode=True, enable_ask_user=False)
     )
     _patch_backend_probes(
         monkeypatch,
@@ -229,13 +229,13 @@ def test_resolve_backend_no_drift_for_a_session_started_with_auto_flags(monkeypa
         sidecar={"workspace": "/tmp/wsA", "config_fingerprint": recorded},
     )
     monkeypatch.setattr(lgm, "_server_config_fingerprint", fingerprint)
-    decision = lm._resolve_backend(_cfg(workspace_dir="/tmp/wsA"), EvoScientistConfig())
+    decision = lm._resolve_backend(_cfg(workspace_dir="/tmp/wsA"), ScribeConfig())
     assert decision.action == "reuse"
     assert decision.warnings == []
 
 
 def test_resolve_backend_python_drift_reuses_with_warning(monkeypatch):
-    from EvoScientist.setup import research_env
+    from metasci_scribe.setup import research_env
 
     _patch_backend_probes(
         monkeypatch,
@@ -263,10 +263,10 @@ def test_resolve_backend_python_drift_reuses_with_warning(monkeypatch):
     ],
 )
 def test_start_hint_follows_the_reused_server(monkeypatch, recorded, own, hinted):
-    from EvoScientist.setup import research_env
+    from metasci_scribe.setup import research_env
 
     sidecar = {"workspace": "/tmp/wsA", "pid": 1}
-    _patch_for_evosci_occupant(monkeypatch, {**sidecar, "agent_python": recorded})
+    _patch_for_scribe_occupant(monkeypatch, {**sidecar, "agent_python": recorded})
     monkeypatch.setattr(research_env, "agent_python", lambda: own)
     result = lm.WebUILauncher(object(), _cfg(), _FakeRunner()).start()
     assert (research_env.MISSING_PYTHON_HINT in result.warnings) is hinted
@@ -294,7 +294,7 @@ def test_resolve_backend_sidecar_pid_not_serving_port_is_refused(monkeypatch):
         lm._resolve_backend(_cfg(workspace_dir="/tmp/wsA"), object())
     assert ei.value.code == "sidecar_port_mismatch"
     assert ei.value.fields == {"reason": "record_mismatch"}
-    # The remedy must not misdirect to `EvoSci server stop` (which stops the
+    # The remedy must not misdirect to `metasci-scribe server stop` (which stops the
     # recorded server on another port, not the one occupying this one).
     assert "not this one" in (ei.value.detail or "")
 
@@ -657,7 +657,7 @@ def test_stop_mid_backend_start_stops_only_owned_process(monkeypatch):
 
 
 def test_stop_after_reuse_leaves_backend_running(monkeypatch):
-    _patch_for_evosci_occupant(monkeypatch, sidecar={"workspace": "/tmp/wsA", "pid": 1})
+    _patch_for_scribe_occupant(monkeypatch, sidecar={"workspace": "/tmp/wsA", "pid": 1})
     calls: list = []
     monkeypatch.setattr(lgm, "stop_langgraph_dev", lambda *a, **k: calls.append(a))
     monkeypatch.setattr(lgm, "stop_inflight_owned_server", lambda: calls.append(0))
@@ -667,8 +667,8 @@ def test_stop_after_reuse_leaves_backend_running(monkeypatch):
     assert calls == []
 
 
-def _patch_for_evosci_occupant(monkeypatch, sidecar, occupied=(6174,)):
-    """An EvoSci langgraph dev occupies ``occupied`` with ``sidecar``."""
+def _patch_for_scribe_occupant(monkeypatch, sidecar, occupied=(6174,)):
+    """An metasci-scribe langgraph dev occupies ``occupied`` with ``sidecar``."""
     occ = set(occupied)
     monkeypatch.setattr(lgm, "_is_port_occupied", lambda port, *a, **k: port in occ)
     monkeypatch.setattr(lgm, "is_langgraph_dev_running", lambda **k: True)
@@ -682,7 +682,7 @@ def _patch_for_evosci_occupant(monkeypatch, sidecar, occupied=(6174,)):
 
 def test_start_raises_on_workspace_mismatch(monkeypatch):
     """A server for a different workspace is refused; no second backend starts."""
-    _patch_for_evosci_occupant(monkeypatch, sidecar={"workspace": "/tmp/wsB"})
+    _patch_for_scribe_occupant(monkeypatch, sidecar={"workspace": "/tmp/wsB"})
     started: list = []
     monkeypatch.setattr(lgm, "start_langgraph_dev", lambda **k: started.append(k))
     launcher = lm.WebUILauncher(object(), _cfg(workspace_dir="/tmp/wsA"), _FakeRunner())
@@ -754,7 +754,7 @@ def test_scrubbed_env_strips_secrets_keeps_essentials(monkeypatch):
 def test_frontend_env_drops_a_config_folder_set_after_startup(monkeypatch):
     """A workspace ``.env`` merged into os.environ must not give the WebUI
     another config folder than this process uses."""
-    from EvoScientist import paths
+    from metasci_scribe import paths
 
     monkeypatch.setattr(paths, "_XDG_CONFIG_HOME_SET", False)
     monkeypatch.setenv("XDG_CONFIG_HOME", "/from/a/dotenv")
@@ -764,12 +764,12 @@ def test_frontend_env_drops_a_config_folder_set_after_startup(monkeypatch):
 
 def test_frontend_env_has_this_process_data_folder(monkeypatch, tmp_path):
     """The WebUI reads the same local files as this process."""
-    from EvoScientist import paths
+    from metasci_scribe import paths
 
     monkeypatch.setattr(paths, "DATA_DIR", tmp_path / "data")
-    monkeypatch.setenv("EVOSCIENTIST_DATA_DIR", "rel-data")
+    monkeypatch.setenv("METASCI_SCRIBE_DATA_DIR", "rel-data")
     env = lm.WebUILauncher(object(), _cfg(), _FakeRunner())._build_frontend_env()
-    assert env["EVOSCIENTIST_DATA_DIR"] == str(tmp_path / "data")
+    assert env["METASCI_SCRIBE_DATA_DIR"] == str(tmp_path / "data")
 
 
 # --------------------------------------------------------------------------- #
@@ -777,8 +777,8 @@ def test_frontend_env_has_this_process_data_folder(monkeypatch, tmp_path):
 # --------------------------------------------------------------------------- #
 def _installed_env(monkeypatch, tmp_path, *, node_error=None, webui_error=None):
     """Stub Node / WebUI provisioning for :class:`InstalledWebUIRunner`."""
-    from EvoScientist.setup import node as setup_node
-    from EvoScientist.setup import webui as setup_webui
+    from metasci_scribe.setup import node as setup_node
+    from metasci_scribe.setup import webui as setup_webui
 
     node = _bundled_runner_files(tmp_path)
     calls: dict = {"marked": [], "cleanups": 0, "progress": []}
@@ -847,7 +847,7 @@ def test_installed_runner_provides_node_and_webui_then_runs_them(monkeypatch, tm
 def test_installed_runner_preflight_reports_setup_failures(
     monkeypatch, tmp_path, which, code
 ):
-    from EvoScientist.setup.protocol import StageError
+    from metasci_scribe.setup.protocol import StageError
 
     error = StageError("download_failed", "offline")
     _installed_env(
@@ -860,12 +860,12 @@ def test_installed_runner_preflight_reports_setup_failures(
         lm.InstalledWebUIRunner().preflight(_cfg())
     assert ei.value.code == code
     assert "offline" in ei.value.message
-    assert "EvoSci setup" in ei.value.detail
+    assert "metasci-scribe setup" in ei.value.detail
 
 
 def test_failed_install_starts_no_backend(monkeypatch, tmp_path):
     """preflight runs before the backend, so a failed install leaves nothing."""
-    from EvoScientist.setup.protocol import StageError
+    from metasci_scribe.setup.protocol import StageError
 
     _installed_env(
         monkeypatch, tmp_path, webui_error=StageError("download_failed", "offline")
@@ -879,7 +879,7 @@ def test_failed_install_starts_no_backend(monkeypatch, tmp_path):
 
 
 def test_installed_runner_update_check_runs_in_a_daemon_thread(monkeypatch, tmp_path):
-    from EvoScientist.setup import webui as setup_webui
+    from metasci_scribe.setup import webui as setup_webui
 
     node, _calls = _installed_env(monkeypatch, tmp_path)
     seen = []
@@ -897,7 +897,7 @@ def test_installed_runner_update_check_runs_in_a_daemon_thread(monkeypatch, tmp_
 def test_bundled_runner_cleans_env_only_for_private_node(
     monkeypatch, tmp_path, private
 ):
-    from EvoScientist.setup import node as setup_node
+    from metasci_scribe.setup import node as setup_node
 
     node = _bundled_runner_files(tmp_path)
     captured = {}
@@ -931,7 +931,7 @@ def test_bundled_runner_preflight_missing_server(tmp_path):
         runner.preflight(_cfg())
     assert ei.value.code == "node_missing"
     assert "server" in ei.value.message.lower()
-    assert "EvoSci setup" in ei.value.detail
+    assert "metasci-scribe setup" in ei.value.detail
 
 
 def test_bundled_runner_preflight_ok(tmp_path):

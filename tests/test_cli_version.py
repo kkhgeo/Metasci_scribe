@@ -1,4 +1,4 @@
-"""Tests for ``EvoSci --version`` and ``EvoSci --version --json``."""
+"""Tests for ``metasci-scribe --version`` and ``metasci-scribe --version --json``."""
 
 from __future__ import annotations
 
@@ -9,17 +9,17 @@ from importlib.metadata import version
 import pytest
 from typer.testing import CliRunner
 
-from EvoScientist.cli._app import app
-from EvoScientist.setup import webui
-from EvoScientist.setup.protocol import PROTOCOL
+from metasci_scribe.cli._app import app
+from metasci_scribe.setup import webui
+from metasci_scribe.setup.protocol import PROTOCOL
 
 
 @pytest.fixture
-def evosci(monkeypatch):
+def scribe(monkeypatch):
     """Invoke the CLI with ``sys.argv`` set as a real run would set it: the
     eager ``--version`` callback reads the raw arguments."""
-    import EvoScientist.config as config_mod
-    from EvoScientist.stream.console import console
+    import metasci_scribe.config as config_mod
+    from metasci_scribe.stream.console import console
 
     monkeypatch.delenv(webui.COMPAT_ENV, raising=False)
     # A fall-through to the main callback would load the developer's config
@@ -34,42 +34,42 @@ def evosci(monkeypatch):
     runner = CliRunner()
 
     def invoke(*argv):
-        monkeypatch.setattr(sys, "argv", ["EvoSci", *argv])
+        monkeypatch.setattr(sys, "argv", ["metasci-scribe", *argv])
         return runner.invoke(app, list(argv))
 
     return invoke
 
 
 @pytest.mark.parametrize("flag", ["--version", "-V"])
-def test_version_prints_plain_text(evosci, flag):
-    result = evosci(flag)
+def test_version_prints_plain_text(scribe, flag):
+    result = scribe(flag)
     assert result.exit_code == 0
-    assert result.stdout == f"EvoScientist {version('EvoScientist')}\n"
+    assert result.stdout == f"Metasci Scribe {version('metasci-scribe')}\n"
 
 
 @pytest.mark.parametrize(
     "argv", [("--version", "--json"), ("--json", "--version"), ("-V", "--json")]
 )
-def test_version_json_in_either_order(evosci, argv):
-    result = evosci(*argv)
+def test_version_json_in_either_order(scribe, argv):
+    result = scribe(*argv)
     assert result.exit_code == 0
     assert json.loads(result.stdout) == {
-        "version": version("EvoScientist"),
+        "version": version("metasci-scribe"),
         "protocol": PROTOCOL,
         "webui_compat": webui.WEBUI_COMPAT,
     }
 
 
-def test_version_json_reports_the_range_in_effect(evosci, monkeypatch):
+def test_version_json_reports_the_range_in_effect(scribe, monkeypatch):
     monkeypatch.setenv(webui.COMPAT_ENV, ">=0.2,<0.4")
     monkeypatch.setattr(webui, "_warned_override", None)
-    result = evosci("--version", "--json")
+    result = scribe("--version", "--json")
     assert result.exit_code == 0
     assert json.loads(result.stdout)["webui_compat"] == ">=0.2,<0.4"
 
 
-def test_json_without_version_exits_2(evosci):
-    result = evosci("--json")
+def test_json_without_version_exits_2(scribe):
+    result = scribe("--json")
     assert result.exit_code == 2
     assert result.stdout == ""
     assert "--version" in result.stderr

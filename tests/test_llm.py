@@ -1,4 +1,4 @@
-"""Tests for EvoScientist LLM module."""
+"""Tests for Metasci Scribe LLM module."""
 
 import warnings
 from unittest.mock import MagicMock, patch
@@ -8,8 +8,8 @@ import pytest
 # Side-effect import: applies module-level monkey-patches (e.g.,
 # _patch_openai_capture_reasoning_content) before tests reference patched
 # functions from langchain_openai.
-import EvoScientist.llm.patches  # noqa: F401
-from EvoScientist.llm import (
+import metasci_scribe.llm.patches  # noqa: F401
+from metasci_scribe.llm import (
     DEFAULT_MODEL,
     MODELS,
     get_chat_model,
@@ -17,7 +17,7 @@ from EvoScientist.llm import (
     get_models_for_provider,
     list_models,
 )
-from EvoScientist.llm.models import _MODEL_ENTRIES
+from metasci_scribe.llm.models import _MODEL_ENTRIES
 
 # =============================================================================
 # Test MODELS registry
@@ -42,7 +42,7 @@ class TestModelsRegistry:
         assert {name for name, _ in get_models_for_provider(custom)} <= native_names
 
     def test_a_native_user_is_never_moved_to_a_provider_picked_on_purpose(self):
-        from EvoScientist.llm.registry import (
+        from metasci_scribe.llm.registry import (
             _ANTHROPIC_ROUTED_PROVIDERS,
             _OPENAI_ROUTED_PROVIDERS,
             resolve_provider,
@@ -210,7 +210,7 @@ class TestGetModelInfo:
 
 
 class TestGetChatModel:
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_uses_default_model_when_none(self, mock_init):
         """Test that get_chat_model uses default model when model=None."""
         mock_init.return_value = "mock_model"
@@ -224,7 +224,7 @@ class TestGetChatModel:
         assert call_kwargs["model"] == expected_model_id
         assert call_kwargs["model_provider"] == expected_provider
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_resolves_short_name(self, mock_init):
         """Test that get_chat_model resolves short names correctly."""
         mock_init.return_value = "mock_model"
@@ -235,7 +235,7 @@ class TestGetChatModel:
         assert call_kwargs["model"] == "claude-opus-5-5"
         assert call_kwargs["model_provider"] == "anthropic"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_resolves_openai_short_name(self, mock_init):
         """Test that get_chat_model resolves OpenAI short names."""
         mock_init.return_value = "mock_model"
@@ -246,7 +246,7 @@ class TestGetChatModel:
         assert call_kwargs["model"] == "gpt-6-luna"
         assert call_kwargs["model_provider"] == "openai"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_uses_full_model_id(self, mock_init):
         """Test that get_chat_model accepts full model IDs."""
         mock_init.return_value = "mock_model"
@@ -258,7 +258,7 @@ class TestGetChatModel:
         # Should infer anthropic from the model prefix
         assert call_kwargs["model_provider"] == "anthropic"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_provider_override(self, mock_init):
         """Test that provider can be overridden."""
         mock_init.return_value = "mock_model"
@@ -268,7 +268,7 @@ class TestGetChatModel:
         call_kwargs = mock_init.call_args[1]
         assert call_kwargs["model_provider"] == "custom_provider"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_passes_kwargs(self, mock_init):
         """Test that additional kwargs are passed through."""
         mock_init.return_value = "mock_model"
@@ -279,7 +279,7 @@ class TestGetChatModel:
         assert call_kwargs["temperature"] == 0.7
         assert call_kwargs["max_tokens"] == 1000
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_infers_openai_from_gpt_prefix(self, mock_init):
         """Test that OpenAI is inferred from gpt- prefix."""
         mock_init.return_value = "mock_model"
@@ -289,7 +289,7 @@ class TestGetChatModel:
         call_kwargs = mock_init.call_args[1]
         assert call_kwargs["model_provider"] == "openai"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_infers_openai_from_o1_prefix(self, mock_init):
         """Test that OpenAI is inferred from o1 prefix."""
         mock_init.return_value = "mock_model"
@@ -299,7 +299,7 @@ class TestGetChatModel:
         call_kwargs = mock_init.call_args[1]
         assert call_kwargs["model_provider"] == "openai"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_infers_google_from_gemini_prefix(self, mock_init):
         """Test that google-genai is inferred from gemini prefix."""
         mock_init.return_value = "mock_model"
@@ -309,7 +309,7 @@ class TestGetChatModel:
         call_kwargs = mock_init.call_args[1]
         assert call_kwargs["model_provider"] == "google-genai"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_defaults_to_anthropic_for_unknown(self, mock_init):
         """Test that anthropic is default for unknown model prefixes."""
         mock_init.return_value = "mock_model"
@@ -329,7 +329,7 @@ class TestOllamaProvider:
     """Ollama models are not in the static registry (detected dynamically).
     All tests use explicit provider or ollama: prefix."""
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_explicit_provider(self, mock_init):
         """Test that explicit provider='ollama' routes correctly."""
         mock_init.return_value = "mock_model"
@@ -340,7 +340,7 @@ class TestOllamaProvider:
         assert call_kwargs["model"] == "llama3.1:8b"
         assert call_kwargs["model_provider"] == "ollama"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_ollama_base_url_passthrough(self, mock_init, monkeypatch):
         """Test that OLLAMA_BASE_URL env var is passed to kwargs."""
         mock_init.return_value = "mock_model"
@@ -352,7 +352,7 @@ class TestOllamaProvider:
         assert call_kwargs["base_url"] == "http://gpu-cluster:11434"
         assert call_kwargs["model_provider"] == "ollama"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_ollama_no_base_url_when_unset(self, mock_init, monkeypatch):
         """Test that base_url is not set when OLLAMA_BASE_URL is empty."""
         mock_init.return_value = "mock_model"
@@ -363,7 +363,7 @@ class TestOllamaProvider:
         call_kwargs = mock_init.call_args[1]
         assert "base_url" not in call_kwargs
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_reasoning_auto_enabled_for_ollama(self, mock_init, monkeypatch):
         """Test that reasoning is auto-enabled for Ollama models."""
         mock_init.return_value = "mock_model"
@@ -375,7 +375,7 @@ class TestOllamaProvider:
         assert "thinking" not in call_kwargs
         assert call_kwargs["reasoning"] is True
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_reasoning_not_overridden_for_ollama(self, mock_init, monkeypatch):
         """Test that explicit reasoning=False is not overridden for Ollama."""
         mock_init.return_value = "mock_model"
@@ -391,7 +391,7 @@ class TestOllamaProvider:
         ollama_models = get_models_for_provider("ollama")
         assert len(ollama_models) == 0
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_ollama_prefix_inference(self, mock_init, monkeypatch):
         """Test that ollama: prefix infers ollama provider."""
         mock_init.return_value = "mock_model"
@@ -410,7 +410,7 @@ class TestOllamaProvider:
 
 
 class TestSlashModelIdFallback:
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_slash_model_id_defaults_to_anthropic(self, mock_init):
         """Unregistered model IDs containing '/' should NOT route to nvidia.
 
@@ -439,7 +439,7 @@ def _sdk_retry_supports_status_codes_override() -> bool:
 
 
 class TestThirdPartyRouting:
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_atlascloud_routes_through_openai(self, mock_init, monkeypatch):
         """Atlas Cloud should use OpenAI-compatible routing with its default URL."""
         mock_init.return_value = "mock_model"
@@ -456,14 +456,14 @@ class TestThirdPartyRouting:
 
     def test_atlascloud_host_maps_to_provider(self):
         """Provider error envelopes should identify Atlas Cloud by host."""
-        from EvoScientist.llm.errors import _lookup_host_or_compat
+        from metasci_scribe.llm.errors import _lookup_host_or_compat
 
         assert (
             _lookup_host_or_compat("https://api.atlascloud.ai/v1", "openai")
             == "atlascloud"
         )
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_siliconflow_routes_through_openai(self, mock_init, monkeypatch):
         """SiliconFlow provider should route through OpenAI with correct base_url."""
         mock_init.return_value = "mock_model"
@@ -478,7 +478,7 @@ class TestThirdPartyRouting:
         # SiliconFlow should disable thinking
         assert call_kwargs["extra_body"]["enable_thinking"] is False
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_requesty_routes_through_openai(self, mock_init, monkeypatch):
         """Requesty provider should route through OpenAI with correct base_url."""
         mock_init.return_value = "mock_model"
@@ -491,7 +491,7 @@ class TestThirdPartyRouting:
         assert call_kwargs["base_url"] == "https://router.requesty.ai/v1"
         assert call_kwargs["api_key"] == "rq-key-123"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_novita_routes_through_openai(self, mock_init, monkeypatch):
         """Novita provider should route through OpenAI with correct base_url."""
         mock_init.return_value = "mock_model"
@@ -507,14 +507,14 @@ class TestThirdPartyRouting:
 
     def test_novita_host_maps_to_provider(self):
         """Provider error envelopes should identify Novita by host."""
-        from EvoScientist.llm.errors import _lookup_host_or_compat
+        from metasci_scribe.llm.errors import _lookup_host_or_compat
 
         assert (
             _lookup_host_or_compat("https://api.novita.ai/openai/v1", "openai")
             == "novita"
         )
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_requesty_anthropic_prompt_cache_enabled_by_default(
         self, mock_init, monkeypatch
     ):
@@ -522,7 +522,7 @@ class TestThirdPartyRouting:
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("REQUESTY_API_KEY", "rq-key")
         monkeypatch.delenv(
-            "EVOSCIENTIST_REQUESTY_ANTHROPIC_PROMPT_CACHE", raising=False
+            "METASCI_SCRIBE_REQUESTY_ANTHROPIC_PROMPT_CACHE", raising=False
         )
 
         get_chat_model("anthropic/claude-sonnet-4-6", provider="requesty")
@@ -532,12 +532,12 @@ class TestThirdPartyRouting:
         assert call_kwargs["base_url"] == "https://router.requesty.ai/v1"
         assert call_kwargs["model_kwargs"]["cache_control"] == {"type": "ephemeral"}
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_requesty_anthropic_prompt_cache_opt_out(self, mock_init, monkeypatch):
         """The opt-out flag should skip caching for Requesty Claude models."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("REQUESTY_API_KEY", "rq-key")
-        monkeypatch.setenv("EVOSCIENTIST_REQUESTY_ANTHROPIC_PROMPT_CACHE", "false")
+        monkeypatch.setenv("METASCI_SCRIBE_REQUESTY_ANTHROPIC_PROMPT_CACHE", "false")
 
         get_chat_model("anthropic/claude-sonnet-4-6", provider="requesty")
 
@@ -545,13 +545,13 @@ class TestThirdPartyRouting:
         assert "cache_control" not in call_kwargs
         assert "cache_control" not in call_kwargs.get("model_kwargs", {})
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_requesty_prompt_cache_skips_non_anthropic(self, mock_init, monkeypatch):
         """Requesty caching should not touch non-Anthropic models."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("REQUESTY_API_KEY", "rq-key")
         monkeypatch.delenv(
-            "EVOSCIENTIST_REQUESTY_ANTHROPIC_PROMPT_CACHE", raising=False
+            "METASCI_SCRIBE_REQUESTY_ANTHROPIC_PROMPT_CACHE", raising=False
         )
 
         get_chat_model("openai/gpt-4o-mini", provider="requesty")
@@ -560,7 +560,7 @@ class TestThirdPartyRouting:
         assert "cache_control" not in call_kwargs
         assert "cache_control" not in call_kwargs.get("model_kwargs", {})
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_opper_routes_through_openai(self, mock_init, monkeypatch):
         """The short name resolves through the registry to Opper's pool id."""
         mock_init.return_value = "mock_model"
@@ -577,7 +577,7 @@ class TestThirdPartyRouting:
         assert call_kwargs["base_url"] == "https://api.opper.ai/v3/compat"
         assert call_kwargs["api_key"] == "op-key-123"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_opper_accepts_route_pinned_model_ids(self, mock_init, monkeypatch):
         """A provider/model id pins one route and is passed through unchanged."""
         mock_init.return_value = "mock_model"
@@ -590,12 +590,12 @@ class TestThirdPartyRouting:
         assert call_kwargs["model_provider"] == "openai"
         assert call_kwargs["base_url"] == "https://api.opper.ai/v3/compat"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_opper_forwards_explicit_reasoning_effort(self, mock_init, monkeypatch):
         """An explicit effort reaches Opper's compat request unchanged."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("OPPER_API_KEY", "op-key")
-        monkeypatch.setenv("EVOSCIENTIST_REASONING_EFFORT", "low")
+        monkeypatch.setenv("METASCI_SCRIBE_REASONING_EFFORT", "low")
 
         get_chat_model("claude-sonnet-5.5", provider="opper")
 
@@ -603,25 +603,25 @@ class TestThirdPartyRouting:
         assert call_kwargs["base_url"] == "https://api.opper.ai/v3/compat"
         assert call_kwargs["reasoning_effort"] == "low"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_opper_omits_unconfigured_reasoning_effort(self, mock_init, monkeypatch):
         """Opper's pools mix reasoning and non-reasoning models, so no default."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("OPPER_API_KEY", "op-key")
-        monkeypatch.delenv("EVOSCIENTIST_REASONING_EFFORT", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_REASONING_EFFORT", raising=False)
 
         get_chat_model("claude-sonnet-5.5", provider="opper")
 
         assert "reasoning_effort" not in mock_init.call_args[1]
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_opper_anthropic_prompt_cache_enabled_by_default(
         self, mock_init, monkeypatch
     ):
         """Opper takes the same top-level cache_control for Claude pool ids."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("OPPER_API_KEY", "op-key")
-        monkeypatch.delenv("EVOSCIENTIST_OPPER_ANTHROPIC_PROMPT_CACHE", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_OPPER_ANTHROPIC_PROMPT_CACHE", raising=False)
 
         get_chat_model("claude-sonnet-5.5", provider="opper")
 
@@ -629,14 +629,14 @@ class TestThirdPartyRouting:
         assert call_kwargs["model"] == "claude-sonnet-5-5"
         assert call_kwargs["model_kwargs"]["cache_control"] == {"type": "ephemeral"}
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_opper_prompt_cache_covers_route_pinned_claude(
         self, mock_init, monkeypatch
     ):
         """A provider/claude-... id pins a route and is still a Claude model."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("OPPER_API_KEY", "op-key")
-        monkeypatch.delenv("EVOSCIENTIST_OPPER_ANTHROPIC_PROMPT_CACHE", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_OPPER_ANTHROPIC_PROMPT_CACHE", raising=False)
 
         get_chat_model("aws/claude-sonnet-4-6-eu", provider="opper")
 
@@ -644,12 +644,12 @@ class TestThirdPartyRouting:
         assert call_kwargs["model"] == "aws/claude-sonnet-4-6-eu"
         assert call_kwargs["model_kwargs"]["cache_control"] == {"type": "ephemeral"}
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_opper_anthropic_prompt_cache_opt_out(self, mock_init, monkeypatch):
         """The opt-out flag should skip caching for Opper Claude models."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("OPPER_API_KEY", "op-key")
-        monkeypatch.setenv("EVOSCIENTIST_OPPER_ANTHROPIC_PROMPT_CACHE", "false")
+        monkeypatch.setenv("METASCI_SCRIBE_OPPER_ANTHROPIC_PROMPT_CACHE", "false")
 
         get_chat_model("claude-sonnet-5.5", provider="opper")
 
@@ -657,12 +657,12 @@ class TestThirdPartyRouting:
         assert "cache_control" not in call_kwargs
         assert "cache_control" not in call_kwargs.get("model_kwargs", {})
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_opper_prompt_cache_skips_non_claude(self, mock_init, monkeypatch):
         """Opper caching should not touch non-Claude pools."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("OPPER_API_KEY", "op-key")
-        monkeypatch.delenv("EVOSCIENTIST_OPPER_ANTHROPIC_PROMPT_CACHE", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_OPPER_ANTHROPIC_PROMPT_CACHE", raising=False)
 
         get_chat_model("gpt-5.5", provider="opper")
 
@@ -670,9 +670,9 @@ class TestThirdPartyRouting:
         assert "cache_control" not in call_kwargs
         assert "cache_control" not in call_kwargs.get("model_kwargs", {})
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_deepseek_uses_copy_safe_native_model(self, mock_init, monkeypatch):
-        from EvoScientist.llm.deepseek import EvoChatDeepSeek
+        from metasci_scribe.llm.deepseek import EvoChatDeepSeek
 
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
 
@@ -681,13 +681,13 @@ class TestThirdPartyRouting:
         mock_init.assert_not_called()
         assert isinstance(model, EvoChatDeepSeek)
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_openrouter_uses_native_provider(self, mock_init, monkeypatch):
         """OpenRouter should use native 'openrouter' provider via init_chat_model."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key-456")
         # Assert the DEFAULT effort, so isolate from any leaked env override.
-        monkeypatch.delenv("EVOSCIENTIST_REASONING_EFFORT", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_REASONING_EFFORT", raising=False)
 
         get_chat_model("x-ai/grok-4.3", provider="openrouter")
 
@@ -696,7 +696,7 @@ class TestThirdPartyRouting:
         assert call_kwargs["api_key"] == "or-key-456"
         assert call_kwargs["reasoning"] == {"effort": "high", "summary": "auto"}
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_openrouter_reasoning_user_override(self, mock_init, monkeypatch):
         """User-supplied reasoning config should not be overridden."""
         mock_init.return_value = "mock_model"
@@ -711,19 +711,19 @@ class TestThirdPartyRouting:
         call_kwargs = mock_init.call_args[1]
         assert call_kwargs["reasoning"] == {"effort": "low"}
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_openrouter_reasoning_effort_from_env(self, mock_init, monkeypatch):
         """Reasoning effort should be configurable via env var."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
-        monkeypatch.setenv("EVOSCIENTIST_REASONING_EFFORT", "medium")
+        monkeypatch.setenv("METASCI_SCRIBE_REASONING_EFFORT", "medium")
 
         get_chat_model("x-ai/grok-4.3", provider="openrouter")
 
         call_kwargs = mock_init.call_args[1]
         assert call_kwargs["reasoning"] == {"effort": "medium", "summary": "auto"}
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_moonshot_thinking_disable_exempts_kimi_k3(self, mock_init, monkeypatch):
         """Native Moonshot: K3 must not receive the K2.x thinking-disable field.
 
@@ -946,14 +946,14 @@ class TestThirdPartyRouting:
     # --- OpenRouter app attribution (issue #339) ---
 
     _APP_ATTR_ENV = (
-        "EVOSCIENTIST_OPENROUTER_HTTP_REFERER",
-        "EVOSCIENTIST_OPENROUTER_APP_TITLE",
-        "EVOSCIENTIST_OPENROUTER_APP_CATEGORIES",
+        "METASCI_SCRIBE_OPENROUTER_HTTP_REFERER",
+        "METASCI_SCRIBE_OPENROUTER_APP_TITLE",
+        "METASCI_SCRIBE_OPENROUTER_APP_CATEGORIES",
     )
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_openrouter_app_attribution_defaults(self, mock_init, monkeypatch):
-        """OpenRouter init should carry EvoScientist's default app attribution."""
+        """OpenRouter init should carry Metasci Scribe's default app attribution."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
         # Isolate from any leaked env overrides so we assert the built-in defaults.
@@ -964,20 +964,22 @@ class TestThirdPartyRouting:
 
         call_kwargs = mock_init.call_args[1]
         assert call_kwargs["app_url"] == "https://github.com/EvoScientist/EvoScientist"
-        assert call_kwargs["app_title"] == "EvoScientist"
+        assert call_kwargs["app_title"] == "metasci-scribe"
         # Must be a list[str] (not the comma string) — langchain-openrouter joins it.
         assert call_kwargs["app_categories"] == ["creative-writing", "personal-agent"]
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_openrouter_app_attribution_from_env(self, mock_init, monkeypatch):
         """Env vars should override the default app attribution values."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
-        monkeypatch.setenv("EVOSCIENTIST_OPENROUTER_HTTP_REFERER", "https://acme.test")
-        monkeypatch.setenv("EVOSCIENTIST_OPENROUTER_APP_TITLE", "Acme")
+        monkeypatch.setenv(
+            "METASCI_SCRIBE_OPENROUTER_HTTP_REFERER", "https://acme.test"
+        )
+        monkeypatch.setenv("METASCI_SCRIBE_OPENROUTER_APP_TITLE", "Acme")
         # Include a space to prove each category is stripped.
         monkeypatch.setenv(
-            "EVOSCIENTIST_OPENROUTER_APP_CATEGORIES", "cli-agent, programming-app"
+            "METASCI_SCRIBE_OPENROUTER_APP_CATEGORIES", "cli-agent, programming-app"
         )
 
         get_chat_model("x-ai/grok-4.3", provider="openrouter")
@@ -987,7 +989,7 @@ class TestThirdPartyRouting:
         assert call_kwargs["app_title"] == "Acme"
         assert call_kwargs["app_categories"] == ["cli-agent", "programming-app"]
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_openrouter_app_attribution_user_override_not_clobbered(
         self, mock_init, monkeypatch
     ):
@@ -997,10 +999,10 @@ class TestThirdPartyRouting:
         # Env is also set, to prove an explicit kwarg outranks the env override
         # (not just the built-in default).
         monkeypatch.setenv(
-            "EVOSCIENTIST_OPENROUTER_HTTP_REFERER", "https://env.example"
+            "METASCI_SCRIBE_OPENROUTER_HTTP_REFERER", "https://env.example"
         )
-        monkeypatch.setenv("EVOSCIENTIST_OPENROUTER_APP_TITLE", "EnvTitle")
-        monkeypatch.setenv("EVOSCIENTIST_OPENROUTER_APP_CATEGORIES", "env-cat")
+        monkeypatch.setenv("METASCI_SCRIBE_OPENROUTER_APP_TITLE", "EnvTitle")
+        monkeypatch.setenv("METASCI_SCRIBE_OPENROUTER_APP_CATEGORIES", "env-cat")
 
         get_chat_model(
             "x-ai/grok-4.3",
@@ -1017,12 +1019,12 @@ class TestThirdPartyRouting:
         assert call_kwargs["app_categories"] == ["only-this"]
 
     @pytest.mark.parametrize("source", ["env", "kwarg"])
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_openrouter_title_override_without_referer_falls_back_silently(
         self, mock_init, monkeypatch, source
     ):
         """OpenRouter keys app pages by HTTP-Referer, so a custom title on the
-        default referer would rename the shared EvoScientist page. It is
+        default referer would rename the shared Metasci Scribe page. It is
         replaced by the default title, without any user-facing warning,
         whether the title came from the env (config) or an explicit kwarg."""
         mock_init.return_value = "mock_model"
@@ -1031,7 +1033,7 @@ class TestThirdPartyRouting:
             monkeypatch.delenv(_env, raising=False)
         extra = {}
         if source == "env":
-            monkeypatch.setenv("EVOSCIENTIST_OPENROUTER_APP_TITLE", "Acme")
+            monkeypatch.setenv("METASCI_SCRIBE_OPENROUTER_APP_TITLE", "Acme")
         else:
             extra["app_title"] = "Acme"
 
@@ -1042,9 +1044,9 @@ class TestThirdPartyRouting:
         assert not [w for w in caught if "openrouter" in str(w.message).lower()]
         call_kwargs = mock_init.call_args[1]
         assert call_kwargs["app_url"] == "https://github.com/EvoScientist/EvoScientist"
-        assert call_kwargs["app_title"] == "EvoScientist"
+        assert call_kwargs["app_title"] == "metasci-scribe"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_non_openrouter_providers_get_no_app_attribution(
         self, mock_init, monkeypatch
     ):
@@ -1063,16 +1065,16 @@ class TestThirdPartyRouting:
             assert "app_title" not in call_kwargs
             assert "app_categories" not in call_kwargs
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_openrouter_app_attribution_coexists_with_reasoning_and_cache(
         self, mock_init, monkeypatch
     ):
         """Attribution must not disturb reasoning or Anthropic prompt caching."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
-        monkeypatch.delenv("EVOSCIENTIST_REASONING_EFFORT", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_REASONING_EFFORT", raising=False)
         monkeypatch.delenv(
-            "EVOSCIENTIST_OPENROUTER_ANTHROPIC_PROMPT_CACHE", raising=False
+            "METASCI_SCRIBE_OPENROUTER_ANTHROPIC_PROMPT_CACHE", raising=False
         )
         for _env in self._APP_ATTR_ENV:
             monkeypatch.delenv(_env, raising=False)
@@ -1085,23 +1087,23 @@ class TestThirdPartyRouting:
         assert call_kwargs["model_kwargs"]["cache_control"] == {"type": "ephemeral"}
         # Attribution added alongside.
         assert call_kwargs["app_url"] == "https://github.com/EvoScientist/EvoScientist"
-        assert call_kwargs["app_title"] == "EvoScientist"
+        assert call_kwargs["app_title"] == "metasci-scribe"
         assert call_kwargs["app_categories"] == ["creative-writing", "personal-agent"]
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_openrouter_app_categories_env_strips_blank_items(
         self, mock_init, monkeypatch
     ):
         """A messy comma value (stray commas / spaces) yields a clean list."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
-        monkeypatch.setenv("EVOSCIENTIST_OPENROUTER_APP_CATEGORIES", "a,,  b  ")
+        monkeypatch.setenv("METASCI_SCRIBE_OPENROUTER_APP_CATEGORIES", "a,,  b  ")
 
         get_chat_model("x-ai/grok-4.3", provider="openrouter")
 
         assert mock_init.call_args[1]["app_categories"] == ["a", "b"]
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_openrouter_app_categories_capped_to_per_request_limit(
         self, mock_init, monkeypatch
     ):
@@ -1109,7 +1111,7 @@ class TestThirdPartyRouting:
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
         monkeypatch.setenv(
-            "EVOSCIENTIST_OPENROUTER_APP_CATEGORIES",
+            "METASCI_SCRIBE_OPENROUTER_APP_CATEGORIES",
             "cli-agent,programming-app,personal-agent,writing-assistant",
         )
 
@@ -1122,14 +1124,14 @@ class TestThirdPartyRouting:
             "programming-app",
         ]
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_openrouter_app_categories_all_separators_omit_kwarg(
         self, mock_init, monkeypatch
     ):
         """A categories value with no real items omits the kwarg entirely."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
-        monkeypatch.setenv("EVOSCIENTIST_OPENROUTER_APP_CATEGORIES", " , , ")
+        monkeypatch.setenv("METASCI_SCRIBE_OPENROUTER_APP_CATEGORIES", " , , ")
 
         get_chat_model("x-ai/grok-4.3", provider="openrouter")
 
@@ -1157,7 +1159,7 @@ class TestThirdPartyRouting:
 
         assert isinstance(model, ChatOpenRouter)
         assert model.app_url == "https://github.com/EvoScientist/EvoScientist"
-        assert model.app_title == "EvoScientist"
+        assert model.app_title == "metasci-scribe"
         assert model.app_categories == ["creative-writing", "personal-agent"]
         # Not silently swallowed into model_kwargs (the passthrough failure mode).
         model_kwargs = model.model_kwargs or {}
@@ -1165,7 +1167,7 @@ class TestThirdPartyRouting:
         assert "app_title" not in model_kwargs
         assert "app_categories" not in model_kwargs
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_openrouter_anthropic_prompt_cache_enabled_by_default(
         self, mock_init, monkeypatch
     ):
@@ -1173,7 +1175,7 @@ class TestThirdPartyRouting:
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
         monkeypatch.delenv(
-            "EVOSCIENTIST_OPENROUTER_ANTHROPIC_PROMPT_CACHE", raising=False
+            "METASCI_SCRIBE_OPENROUTER_ANTHROPIC_PROMPT_CACHE", raising=False
         )
 
         get_chat_model("claude-sonnet-5.5", provider="openrouter")
@@ -1190,15 +1192,15 @@ class TestThirdPartyRouting:
         # another provider's bare id (native Google's ``gemini-3.1-pro-preview``).
         ["claude-sonnet-4.6", "gemini-3.1-pro"],
     )
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_router_rejects_a_bare_model_id(self, mock_init, provider, model):
-        with pytest.raises(ValueError, match="not in EvoScientist's"):
+        with pytest.raises(ValueError, match="not in Metasci Scribe's"):
             get_chat_model(model, provider=provider)
 
         mock_init.assert_not_called()
 
     @pytest.mark.parametrize("provider", ["openrouter", "requesty"])
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_router_does_not_borrow_another_providers_id(
         self, mock_init, monkeypatch, provider
     ):
@@ -1206,12 +1208,12 @@ class TestThirdPartyRouting:
         # and would silently run an older snapshot.
         monkeypatch.setitem(MODELS, "listed-elsewhere", ("vendor/model-0731", "novita"))
 
-        with pytest.raises(ValueError, match="not in EvoScientist's"):
+        with pytest.raises(ValueError, match="not in Metasci Scribe's"):
             get_chat_model("listed-elsewhere", provider=provider)
 
         mock_init.assert_not_called()
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_router_accepts_a_full_model_id(self, mock_init, monkeypatch):
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
 
@@ -1219,12 +1221,12 @@ class TestThirdPartyRouting:
 
         assert mock_init.call_args[1]["model"] == "anthropic/claude-sonnet-4.6"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_openrouter_anthropic_prompt_cache_opt_out(self, mock_init, monkeypatch):
         """The opt-out flag should skip caching for OpenRouter Claude models."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
-        monkeypatch.setenv("EVOSCIENTIST_OPENROUTER_ANTHROPIC_PROMPT_CACHE", "false")
+        monkeypatch.setenv("METASCI_SCRIBE_OPENROUTER_ANTHROPIC_PROMPT_CACHE", "false")
 
         get_chat_model("claude-sonnet-5.5", provider="openrouter")
 
@@ -1232,14 +1234,14 @@ class TestThirdPartyRouting:
         assert "cache_control" not in call_kwargs
         assert "cache_control" not in call_kwargs.get("model_kwargs", {})
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_prompt_cache_default_skips_non_anthropic_openrouter(
         self, mock_init, monkeypatch
     ):
         """OpenRouter models with implicit caching should be left alone."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
-        monkeypatch.setenv("EVOSCIENTIST_OPENROUTER_ANTHROPIC_PROMPT_CACHE", "true")
+        monkeypatch.setenv("METASCI_SCRIBE_OPENROUTER_ANTHROPIC_PROMPT_CACHE", "true")
 
         get_chat_model("x-ai/grok-4.3", provider="openrouter")
 
@@ -1247,14 +1249,14 @@ class TestThirdPartyRouting:
         assert "cache_control" not in call_kwargs
         assert "cache_control" not in call_kwargs.get("model_kwargs", {})
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_openrouter_anthropic_prompt_cache_preserves_top_level_override(
         self, mock_init, monkeypatch
     ):
         """The default should not duplicate a caller's cache_control kwarg."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
-        monkeypatch.setenv("EVOSCIENTIST_OPENROUTER_ANTHROPIC_PROMPT_CACHE", "true")
+        monkeypatch.setenv("METASCI_SCRIBE_OPENROUTER_ANTHROPIC_PROMPT_CACHE", "true")
         override = {"type": "ephemeral", "ttl": "1h"}
 
         get_chat_model(
@@ -1267,14 +1269,14 @@ class TestThirdPartyRouting:
         assert call_kwargs["cache_control"] == override
         assert "cache_control" not in call_kwargs.get("model_kwargs", {})
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_openrouter_anthropic_prompt_cache_preserves_model_kwargs_override(
         self, mock_init, monkeypatch
     ):
         """The default should not duplicate model_kwargs cache_control."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
-        monkeypatch.setenv("EVOSCIENTIST_OPENROUTER_ANTHROPIC_PROMPT_CACHE", "true")
+        monkeypatch.setenv("METASCI_SCRIBE_OPENROUTER_ANTHROPIC_PROMPT_CACHE", "true")
         override = {"type": "ephemeral", "ttl": "1h"}
 
         get_chat_model(
@@ -1287,14 +1289,14 @@ class TestThirdPartyRouting:
         assert "cache_control" not in call_kwargs
         assert call_kwargs["model_kwargs"]["cache_control"] == override
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_openrouter_anthropic_prompt_cache_warns_on_invalid_model_kwargs(
         self, mock_init, monkeypatch
     ):
         """Invalid model_kwargs shape should warn and skip cache injection."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
-        monkeypatch.setenv("EVOSCIENTIST_OPENROUTER_ANTHROPIC_PROMPT_CACHE", "true")
+        monkeypatch.setenv("METASCI_SCRIBE_OPENROUTER_ANTHROPIC_PROMPT_CACHE", "true")
 
         with pytest.warns(UserWarning, match="model_kwargs` is not a dict"):
             get_chat_model(
@@ -1306,7 +1308,7 @@ class TestThirdPartyRouting:
         call_kwargs = mock_init.call_args[1]
         assert call_kwargs["model_kwargs"] == "bad"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_custom_routes_through_openai(self, mock_init, monkeypatch):
         """Custom provider should route through OpenAI with env-configured base_url."""
         mock_init.return_value = "mock_model"
@@ -1320,7 +1322,7 @@ class TestThirdPartyRouting:
         assert call_kwargs["base_url"] == "https://my-llm.example.com/v1"
         assert call_kwargs["api_key"] == "custom-key-789"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_custom_openai_forwards_explicit_reasoning_effort(
         self, mock_init, monkeypatch
     ):
@@ -1328,13 +1330,13 @@ class TestThirdPartyRouting:
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("CUSTOM_OPENAI_BASE_URL", "https://opencode.example/v1")
         monkeypatch.setenv("CUSTOM_OPENAI_API_KEY", "custom-key")
-        monkeypatch.setenv("EVOSCIENTIST_REASONING_EFFORT", "low")
+        monkeypatch.setenv("METASCI_SCRIBE_REASONING_EFFORT", "low")
 
         get_chat_model("reasoning-model", provider="custom-openai")
 
         assert mock_init.call_args[1]["reasoning_effort"] == "low"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_custom_openai_omits_unconfigured_reasoning_effort(
         self, mock_init, monkeypatch
     ):
@@ -1342,13 +1344,13 @@ class TestThirdPartyRouting:
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("CUSTOM_OPENAI_BASE_URL", "https://plain.example/v1")
         monkeypatch.setenv("CUSTOM_OPENAI_API_KEY", "custom-key")
-        monkeypatch.delenv("EVOSCIENTIST_REASONING_EFFORT", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_REASONING_EFFORT", raising=False)
 
         get_chat_model("plain-model", provider="custom-openai")
 
         assert "reasoning_effort" not in mock_init.call_args[1]
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_anthropic_base_url_override(self, mock_init, monkeypatch):
         """Anthropic provider should support base_url override (e.g. ccproxy)."""
         mock_init.return_value = "mock_model"
@@ -1364,7 +1366,7 @@ class TestThirdPartyRouting:
         # Proxy mode: thinking skipped (history round-trip causes 422)
         assert "thinking" not in call_kwargs
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_anthropic_no_base_url_when_unset(self, mock_init, monkeypatch):
         """Anthropic provider should not set base_url when env var is empty."""
         mock_init.return_value = "mock_model"
@@ -1377,7 +1379,7 @@ class TestThirdPartyRouting:
         assert call_kwargs["model_provider"] == "anthropic"
         assert "base_url" not in call_kwargs
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_third_party_no_reasoning(self, mock_init, monkeypatch):
         """Third-party providers routed through OpenAI should NOT get auto-reasoning."""
         mock_init.return_value = "mock_model"
@@ -1388,7 +1390,7 @@ class TestThirdPartyRouting:
         call_kwargs = mock_init.call_args[1]
         assert "reasoning" not in call_kwargs
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_volcengine_routes_through_openai(self, mock_init, monkeypatch):
         """Volcengine provider should route through OpenAI with correct base_url."""
         mock_init.return_value = "mock_model"
@@ -1405,7 +1407,7 @@ class TestThirdPartyRouting:
         ("configured_model", "api_model"),
         [("glm-5.2", "glm-5-2")],
     )
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_volcengine_code_routes_through_openai(
         self, mock_init, configured_model, api_model, monkeypatch
     ):
@@ -1423,7 +1425,7 @@ class TestThirdPartyRouting:
         )
         assert call_kwargs["api_key"] == "ve-code-key-123"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_dashscope_routes_through_openai(self, mock_init, monkeypatch):
         """DashScope provider should route through OpenAI with correct base_url."""
         mock_init.return_value = "mock_model"
@@ -1440,24 +1442,24 @@ class TestThirdPartyRouting:
         assert call_kwargs["api_key"] == "ds-key-456"
         assert "reasoning_effort" not in call_kwargs
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_qwen38_dashscope_uses_bounded_default(self, mock_init, monkeypatch):
         """Qwen 3.8 avoids the regular endpoint's xhigh default."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("DASHSCOPE_API_KEY", "ds-key")
-        monkeypatch.delenv("EVOSCIENTIST_REASONING_EFFORT", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_REASONING_EFFORT", raising=False)
 
         get_chat_model("qwen3.8-max", provider="dashscope")
 
         assert mock_init.call_args[1]["reasoning_effort"] == "medium"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_qwen38_dashscope_respects_configured_reasoning_effort(
         self, mock_init, monkeypatch
     ):
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("DASHSCOPE_API_KEY", "ds-key")
-        monkeypatch.setenv("EVOSCIENTIST_REASONING_EFFORT", "medium")
+        monkeypatch.setenv("METASCI_SCRIBE_REASONING_EFFORT", "medium")
 
         get_chat_model("qwen3.8-max", provider="dashscope")
 
@@ -1475,55 +1477,55 @@ class TestThirdPartyRouting:
             "max",
         ],
     )
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_qwen38_dashscope_accepts_supported_reasoning_effort(
         self, mock_init, effort, monkeypatch
     ):
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("DASHSCOPE_API_KEY", "ds-key")
-        monkeypatch.setenv("EVOSCIENTIST_REASONING_EFFORT", effort)
+        monkeypatch.setenv("METASCI_SCRIBE_REASONING_EFFORT", effort)
 
         get_chat_model("qwen3.8-max", provider="dashscope")
 
         assert mock_init.call_args[1]["reasoning_effort"] == effort
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_qwen38_dashscope_rejects_unsupported_reasoning_effort(
         self, mock_init, monkeypatch
     ):
         monkeypatch.setenv("DASHSCOPE_API_KEY", "ds-key")
-        monkeypatch.setenv("EVOSCIENTIST_REASONING_EFFORT", "invalid")
+        monkeypatch.setenv("METASCI_SCRIBE_REASONING_EFFORT", "invalid")
 
         with pytest.raises(ValueError, match="dashscope"):
             get_chat_model("qwen3.8-max", provider="dashscope")
 
         mock_init.assert_not_called()
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_qwen38_dashscope_explicit_effort_overrides_invalid_environment(
         self, mock_init, monkeypatch
     ):
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("DASHSCOPE_API_KEY", "ds-key")
-        monkeypatch.setenv("EVOSCIENTIST_REASONING_EFFORT", "invalid")
+        monkeypatch.setenv("METASCI_SCRIBE_REASONING_EFFORT", "invalid")
 
         get_chat_model("qwen3.8-max", provider="dashscope", reasoning_effort="low")
 
         assert mock_init.call_args[1]["reasoning_effort"] == "low"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_qwen38_dashscope_code_omits_undocumented_reasoning_effort(
         self, mock_init, monkeypatch
     ):
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-sp-key")
-        monkeypatch.setenv("EVOSCIENTIST_REASONING_EFFORT", "medium")
+        monkeypatch.setenv("METASCI_SCRIBE_REASONING_EFFORT", "medium")
 
         get_chat_model("qwen3.8-max", provider="dashscope-code")
 
         assert "reasoning_effort" not in mock_init.call_args[1]
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_dashscope_code_routes_through_openai(self, mock_init, monkeypatch):
         """DashScope-Code (sk-sp-* subscription keys) routes through OpenAI
         with the coding.dashscope.aliyuncs.com base URL, reusing DASHSCOPE_API_KEY.
@@ -1538,7 +1540,7 @@ class TestThirdPartyRouting:
         assert call_kwargs["base_url"] == "https://coding.dashscope.aliyuncs.com/v1"
         assert call_kwargs["api_key"] == "sk-sp-key-789"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_minimax_routes_through_anthropic(self, mock_init, monkeypatch):
         """MiniMax provider should route through Anthropic with correct base_url."""
         mock_init.return_value = "mock_model"
@@ -1551,7 +1553,7 @@ class TestThirdPartyRouting:
         assert call_kwargs["base_url"] == "https://api.minimaxi.com/anthropic"
         assert call_kwargs["api_key"] == "mm-key-123"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_xiaomi_routes_through_anthropic(self, mock_init, monkeypatch):
         """Xiaomi MiMo routes through Anthropic with thinking and a 131072 output cap."""
         mock_init.return_value = "mock_model"
@@ -1567,7 +1569,7 @@ class TestThirdPartyRouting:
         assert call_kwargs["max_tokens"] == 131072
         assert "thinking" in call_kwargs
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_xiaomi_token_plan_routes_to_region(self, mock_init, monkeypatch):
         """Token Plan uses its own key, defaults to the cn region, and honours the env override."""
         mock_init.return_value = "mock_model"
@@ -1611,7 +1613,7 @@ class TestThirdPartyRouting:
             ),
         ],
     )
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_blank_base_url_env_falls_back_to_default(
         self, mock_init, monkeypatch, provider, model, env, default
     ):
@@ -1620,7 +1622,7 @@ class TestThirdPartyRouting:
         monkeypatch.setenv(env, "  ")
         # Provide the routed provider's own key so the test isolates the
         # base_url fallback; it does not test the missing-key check.
-        from EvoScientist.llm.registry import _ANTHROPIC_ROUTED_PROVIDERS
+        from metasci_scribe.llm.registry import _ANTHROPIC_ROUTED_PROVIDERS
 
         _, api_key_env = _ANTHROPIC_ROUTED_PROVIDERS[provider]
         monkeypatch.setenv(api_key_env, "test-key")
@@ -1635,7 +1637,7 @@ class TestThirdPartyRouting:
 
     def test_xiaomi_host_maps_to_provider(self):
         """Provider error envelopes should identify Xiaomi MiMo by host."""
-        from EvoScientist.llm.errors import _lookup_host_or_compat
+        from metasci_scribe.llm.errors import _lookup_host_or_compat
 
         assert (
             _lookup_host_or_compat("https://api.xiaomimimo.com/anthropic", "anthropic")
@@ -1648,7 +1650,7 @@ class TestThirdPartyRouting:
             == "xiaomi"
         )
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_minimax_base_url_env_override(self, mock_init, monkeypatch):
         """MINIMAX_BASE_URL env var should override the default base URL."""
         mock_init.return_value = "mock_model"
@@ -1660,7 +1662,7 @@ class TestThirdPartyRouting:
         call_kwargs = mock_init.call_args[1]
         assert call_kwargs["base_url"] == "https://api.minimax.io/anthropic"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_minimax_gets_thinking(self, mock_init, monkeypatch):
         """MiniMax gets the only thinking shape its API takes and its documented
         output limit (no langchain profile, so the fallback would be 4096)."""
@@ -1674,7 +1676,7 @@ class TestThirdPartyRouting:
         assert call_kwargs["max_tokens"] == 131072
         assert "reasoning" not in call_kwargs
 
-    @patch("EvoScientist.llm.models._patch_openai_compat_content")
+    @patch("metasci_scribe.llm.models._patch_openai_compat_content")
     def test_minimax_skips_openai_compat_content_patch(self, mock_patch, monkeypatch):
         """Anthropic-routed MiniMax must preserve replay content blocks."""
         import json
@@ -1784,7 +1786,7 @@ class TestThirdPartyRouting:
         ]
         assert result.content == [{"type": "text", "text": "ok"}]
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_minimax_short_name_resolution(self, mock_init, monkeypatch):
         """MiniMax short names should resolve to correct model IDs."""
         mock_init.return_value = "mock_model"
@@ -1797,7 +1799,7 @@ class TestThirdPartyRouting:
         assert call_kwargs["model_provider"] == "anthropic"
         assert call_kwargs["base_url"] == "https://api.minimaxi.com/anthropic"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_custom_anthropic_via_routed_dict(self, mock_init, monkeypatch):
         """custom-anthropic should work via _ANTHROPIC_ROUTED_PROVIDERS dict."""
         mock_init.return_value = "mock_model"
@@ -1822,7 +1824,7 @@ class TestThirdPartyRouting:
 class TestMiniMaxProvider:
     def test_minimax_in_anthropic_routed_providers(self):
         """MiniMax should be registered in _ANTHROPIC_ROUTED_PROVIDERS."""
-        from EvoScientist.llm.models import _ANTHROPIC_ROUTED_PROVIDERS
+        from metasci_scribe.llm.models import _ANTHROPIC_ROUTED_PROVIDERS
 
         assert "minimax" in _ANTHROPIC_ROUTED_PROVIDERS
         base_url, api_key_env = _ANTHROPIC_ROUTED_PROVIDERS["minimax"]
@@ -1831,7 +1833,7 @@ class TestMiniMaxProvider:
 
     def test_minimax_not_in_openai_routed_providers(self):
         """MiniMax should NOT be in _OPENAI_ROUTED_PROVIDERS (moved to Anthropic)."""
-        from EvoScientist.llm.models import _OPENAI_ROUTED_PROVIDERS
+        from metasci_scribe.llm.models import _OPENAI_ROUTED_PROVIDERS
 
         assert "minimax" not in _OPENAI_ROUTED_PROVIDERS
 
@@ -1864,18 +1866,18 @@ class TestFlattenMessageContent:
     """Tests for the content-flattening utility used by OpenAI-compatible providers."""
 
     def test_string_passthrough(self):
-        from EvoScientist.llm.patches import _flatten_message_content
+        from metasci_scribe.llm.patches import _flatten_message_content
 
         assert _flatten_message_content("hello") == "hello"
 
     def test_non_list_passthrough(self):
-        from EvoScientist.llm.patches import _flatten_message_content
+        from metasci_scribe.llm.patches import _flatten_message_content
 
         assert _flatten_message_content(42) == 42
         assert _flatten_message_content(None) is None
 
     def test_text_blocks(self):
-        from EvoScientist.llm.patches import _flatten_message_content
+        from metasci_scribe.llm.patches import _flatten_message_content
 
         content = [
             {"type": "text", "text": "Hello"},
@@ -1884,7 +1886,7 @@ class TestFlattenMessageContent:
         assert _flatten_message_content(content) == "Hello\n\nWorld"
 
     def test_skips_thinking_blocks(self):
-        from EvoScientist.llm.patches import _flatten_message_content
+        from metasci_scribe.llm.patches import _flatten_message_content
 
         content = [
             {"type": "thinking", "text": "Let me think..."},
@@ -1895,13 +1897,13 @@ class TestFlattenMessageContent:
         assert _flatten_message_content(content) == "The answer is 42"
 
     def test_string_blocks(self):
-        from EvoScientist.llm.patches import _flatten_message_content
+        from metasci_scribe.llm.patches import _flatten_message_content
 
         content = ["hello", "world"]
         assert _flatten_message_content(content) == "hello\n\nworld"
 
     def test_mixed_blocks(self):
-        from EvoScientist.llm.patches import _flatten_message_content
+        from metasci_scribe.llm.patches import _flatten_message_content
 
         content = [
             {"type": "thinking", "text": "skip me"},
@@ -1911,31 +1913,31 @@ class TestFlattenMessageContent:
         assert _flatten_message_content(content) == "plain string\n\ndict text"
 
     def test_empty_list(self):
-        from EvoScientist.llm.patches import _flatten_message_content
+        from metasci_scribe.llm.patches import _flatten_message_content
 
         assert _flatten_message_content([]) == ""
 
     def test_only_thinking_blocks(self):
-        from EvoScientist.llm.patches import _flatten_message_content
+        from metasci_scribe.llm.patches import _flatten_message_content
 
         content = [{"type": "thinking", "text": "thought"}]
         assert _flatten_message_content(content) == ""
 
     def test_preserves_image_block(self):
-        from EvoScientist.llm.patches import _flatten_message_content
+        from metasci_scribe.llm.patches import _flatten_message_content
 
         img = {"type": "image", "base64": "AAA", "mime_type": "image/png"}
         assert _flatten_message_content([img]) == [img]
 
     def test_preserves_image_url_block(self):
-        from EvoScientist.llm.patches import _flatten_message_content
+        from metasci_scribe.llm.patches import _flatten_message_content
 
         img = {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAA"}}
         assert _flatten_message_content([img]) == [img]
 
     def test_preserves_file_block(self):
         # PDF/document files are preserved (capable models read them).
-        from EvoScientist.llm.patches import _flatten_message_content
+        from metasci_scribe.llm.patches import _flatten_message_content
 
         f = {"type": "file", "base64": "FFF", "mime_type": "application/pdf"}
         assert _flatten_message_content([f]) == [f]
@@ -1943,7 +1945,7 @@ class TestFlattenMessageContent:
     def test_unsupported_media_dropped(self):
         # video/audio are NOT in the allowlist -> dropped, not crashing
         # (langchain-openai raises ValueError on `video`).
-        from EvoScientist.llm.patches import _flatten_message_content
+        from metasci_scribe.llm.patches import _flatten_message_content
 
         for block in (
             {"type": "video", "base64": "VVV", "mime_type": "video/mp4"},
@@ -1952,7 +1954,7 @@ class TestFlattenMessageContent:
             assert _flatten_message_content([block]) == ""
 
     def test_non_image_media_dropped_keeps_text(self):
-        from EvoScientist.llm.patches import _flatten_message_content
+        from metasci_scribe.llm.patches import _flatten_message_content
 
         content = [
             {"type": "text", "text": "hi"},
@@ -1962,7 +1964,7 @@ class TestFlattenMessageContent:
         assert _flatten_message_content(content) == "hi"
 
     def test_consolidates_text_and_image(self):
-        from EvoScientist.llm.patches import _flatten_message_content
+        from metasci_scribe.llm.patches import _flatten_message_content
 
         img = {"type": "image", "base64": "AAA", "mime_type": "image/png"}
         content = [{"type": "text", "text": "a photo"}, img]
@@ -1972,7 +1974,7 @@ class TestFlattenMessageContent:
         ]
 
     def test_multiple_text_blocks_with_image(self):
-        from EvoScientist.llm.patches import _flatten_message_content
+        from metasci_scribe.llm.patches import _flatten_message_content
 
         img = {"type": "image", "base64": "AAA", "mime_type": "image/png"}
         content = [
@@ -1987,7 +1989,7 @@ class TestFlattenMessageContent:
 
     def test_preserves_text_media_ordering(self):
         # Text after an image must stay AFTER it (not consolidated to the front).
-        from EvoScientist.llm.patches import _flatten_message_content
+        from metasci_scribe.llm.patches import _flatten_message_content
 
         img = {"type": "image", "base64": "AAA", "mime_type": "image/png"}
         content = [
@@ -2002,14 +2004,14 @@ class TestFlattenMessageContent:
         ]
 
     def test_thinking_dropped_image_kept(self):
-        from EvoScientist.llm.patches import _flatten_message_content
+        from metasci_scribe.llm.patches import _flatten_message_content
 
         img = {"type": "image", "base64": "AAA", "mime_type": "image/png"}
         content = [{"type": "thinking", "text": "hmm"}, img]
         assert _flatten_message_content(content) == [img]
 
     def test_pure_text_still_returns_string(self):
-        from EvoScientist.llm.patches import _flatten_message_content
+        from metasci_scribe.llm.patches import _flatten_message_content
 
         content = [{"type": "text", "text": "x"}, {"type": "text", "text": "y"}]
         result = _flatten_message_content(content)
@@ -2017,7 +2019,7 @@ class TestFlattenMessageContent:
         assert isinstance(result, str)
 
     def test_unknown_nontext_block_still_dropped(self):
-        from EvoScientist.llm.patches import _flatten_message_content
+        from metasci_scribe.llm.patches import _flatten_message_content
 
         content = [{"type": "tool_use", "id": "1", "name": "foo"}]
         assert _flatten_message_content(content) == ""
@@ -2045,7 +2047,7 @@ class TestPatchOpenAICompatContent:
     def test_generate_flattened(self):
         from langchain_core.messages import HumanMessage
 
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         orig = model._generate
@@ -2060,7 +2062,7 @@ class TestPatchOpenAICompatContent:
     async def test_agenerate_flattened(self):
         from langchain_core.messages import HumanMessage
 
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         orig = model._agenerate
@@ -2075,7 +2077,7 @@ class TestPatchOpenAICompatContent:
     def test_stream_flattened(self):
         from langchain_core.messages import HumanMessage
 
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         orig = model._stream
@@ -2090,7 +2092,7 @@ class TestPatchOpenAICompatContent:
     async def test_astream_flattened(self):
         from langchain_core.messages import HumanMessage
 
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         received_msgs = []
@@ -2114,7 +2116,7 @@ class TestPatchOpenAICompatContent:
     def test_generate_preserves_media(self):
         from langchain_core.messages import HumanMessage
 
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         orig = model._generate
@@ -2130,7 +2132,7 @@ class TestPatchOpenAICompatContent:
     async def test_agenerate_preserves_media(self):
         from langchain_core.messages import HumanMessage
 
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         orig = model._agenerate
@@ -2146,7 +2148,7 @@ class TestPatchOpenAICompatContent:
     def test_stream_preserves_media(self):
         from langchain_core.messages import HumanMessage
 
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         orig = model._stream
@@ -2162,7 +2164,7 @@ class TestPatchOpenAICompatContent:
     async def test_astream_preserves_media(self):
         from langchain_core.messages import HumanMessage
 
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         received_msgs = []
@@ -2187,7 +2189,7 @@ class TestPatchOpenAICompatContent:
     def test_toolmessage_image_hoisted_to_human(self):
         from langchain_core.messages import ToolMessage
 
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         orig = model._generate
@@ -2217,7 +2219,7 @@ class TestPatchOpenAICompatContent:
     def test_toolmessage_image_kept_inline_when_no_hoist(self):
         from langchain_core.messages import ToolMessage
 
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         orig = model._generate
@@ -2242,7 +2244,7 @@ class TestPatchOpenAICompatContent:
     def test_parallel_tool_images_hoisted_after_tools(self):
         from langchain_core.messages import AIMessage, ToolMessage
 
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         orig = model._generate
@@ -2282,7 +2284,7 @@ class TestPatchOpenAICompatContent:
     def test_assistant_text_still_flattened_to_string(self):
         from langchain_core.messages import AIMessage
 
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         orig = model._generate
@@ -2302,7 +2304,7 @@ class TestPatchOpenAICompatContent:
     def test_tool_media_flushed_before_next_human(self):
         from langchain_core.messages import HumanMessage, ToolMessage
 
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         orig = model._generate
@@ -2328,7 +2330,7 @@ class TestPatchOpenAICompatContent:
     def test_tool_message_text_and_image_split(self):
         from langchain_core.messages import ToolMessage
 
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         orig = model._generate
@@ -2354,7 +2356,7 @@ class TestPatchOpenAICompatContent:
         # survive the hoisting split (not just the first).
         from langchain_core.messages import ToolMessage
 
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         orig = model._generate
@@ -2407,7 +2409,7 @@ class TestNoVisionFallback:
         return model
 
     def test_media_error_types(self):
-        from EvoScientist.llm.patches import (
+        from metasci_scribe.llm.patches import (
             _FILE_CONTENT_TYPES,
             _IMAGE_CONTENT_TYPES,
             _is_http_400,
@@ -2452,7 +2454,7 @@ class TestNoVisionFallback:
     def test_media_types_in(self):
         from langchain_core.messages import HumanMessage
 
-        from EvoScientist.llm.patches import _media_types_in
+        from metasci_scribe.llm.patches import _media_types_in
 
         img = {"type": "image", "base64": "A", "mime_type": "image/png"}
         f = {"type": "file", "base64": "F", "mime_type": "application/pdf"}
@@ -2462,7 +2464,7 @@ class TestNoVisionFallback:
     def test_strip_media_types_replaces_only_given(self):
         from langchain_core.messages import HumanMessage
 
-        from EvoScientist.llm.patches import _strip_media_types
+        from metasci_scribe.llm.patches import _strip_media_types
 
         img = {"type": "image", "base64": "AAA", "mime_type": "image/png"}
         f = {"type": "file", "base64": "FFF", "mime_type": "application/pdf"}
@@ -2482,7 +2484,7 @@ class TestNoVisionFallback:
         # their order (placeholder where the image was, file stays last).
         from langchain_core.messages import HumanMessage
 
-        from EvoScientist.llm.patches import _strip_media_types
+        from metasci_scribe.llm.patches import _strip_media_types
 
         img = {"type": "image", "base64": "A", "mime_type": "image/png"}
         f = {"type": "file", "base64": "F", "mime_type": "application/pdf"}
@@ -2507,7 +2509,7 @@ class TestNoVisionFallback:
     def test_strip_media_types_dedups_consecutive(self):
         from langchain_core.messages import HumanMessage
 
-        from EvoScientist.llm.patches import _strip_media_types
+        from metasci_scribe.llm.patches import _strip_media_types
 
         a = {"type": "image", "base64": "A", "mime_type": "image/png"}
         b = {"type": "image", "base64": "B", "mime_type": "image/png"}
@@ -2520,7 +2522,7 @@ class TestNoVisionFallback:
     def test_profile_no_vision_strips_upfront(self):
         # Proactive: profile says image_inputs is False -> strip from the start,
         # no failing first request.
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         model.profile = {"image_inputs": False}
@@ -2540,7 +2542,7 @@ class TestNoVisionFallback:
 
     def test_profile_with_vision_does_not_strip(self):
         # Profile says image_inputs is True -> normal preserve path (no upfront strip).
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         model.profile = {"image_inputs": True}
@@ -2562,7 +2564,7 @@ class TestNoVisionFallback:
         )
 
     def test_generate_falls_back_and_caches(self):
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         calls = []
@@ -2593,7 +2595,7 @@ class TestNoVisionFallback:
         assert all(isinstance(m.content, str) for m in calls[0])
 
     def test_non_image_error_not_retried(self):
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         calls = []
@@ -2612,7 +2614,7 @@ class TestNoVisionFallback:
     def test_stream_falls_back(self):
         from unittest.mock import MagicMock
 
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         model._generate = MagicMock(return_value="g")
@@ -2634,7 +2636,7 @@ class TestNoVisionFallback:
     async def test_astream_falls_back(self):
         from unittest.mock import MagicMock
 
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         model._generate = MagicMock(return_value="g")
@@ -2657,7 +2659,7 @@ class TestNoVisionFallback:
     def test_unrelated_400_retry_fails_not_cached(self):
         # A non-media 400 (e.g. tool schema) whose stripped retry ALSO fails must
         # surface the original error and must NOT permanently flip to no-media.
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         class _E(Exception):
             status_code = 400
@@ -2688,7 +2690,7 @@ class TestNoVisionFallback:
         # image must still be preserved (not stripped).
         from langchain_core.messages import HumanMessage, ToolMessage
 
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         calls = []
@@ -2736,7 +2738,7 @@ class TestNoVisionFallback:
     def test_bare_400_recovers_but_not_cached(self):
         # A bare 400 with NO media marker recovers this request (stripped retry)
         # but must NOT cache (no permanent degradation) — High #1.
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         class _E(Exception):
             status_code = 400
@@ -2774,7 +2776,7 @@ class TestNoVisionFallback:
         # images stay preserved on later turns — High #2.
         from langchain_core.messages import HumanMessage
 
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         calls = []
@@ -2816,7 +2818,7 @@ class TestNoVisionFallback:
         # original error instead of silently returning an empty stream.
         from unittest.mock import MagicMock
 
-        from EvoScientist.llm.patches import _patch_openai_compat_content
+        from metasci_scribe.llm.patches import _patch_openai_compat_content
 
         model = self._make_model()
         model._generate = MagicMock(return_value="g")
@@ -2910,7 +2912,7 @@ class TestDeepseekReasoningPassback:
     def test_request_payload_preserves_reasoning_for_tool_history(self, monkeypatch):
         from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-        from EvoScientist.llm.deepseek import EvoChatDeepSeek
+        from metasci_scribe.llm.deepseek import EvoChatDeepSeek
 
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
         model = EvoChatDeepSeek(model="deepseek-v4-flash")
@@ -2939,8 +2941,8 @@ class TestDeepseekReasoningPassback:
     def test_thinking_disabled_copy_omits_reasoning_passback(self, monkeypatch):
         from langchain_core.messages import AIMessage, HumanMessage
 
-        from EvoScientist.llm.deepseek import EvoChatDeepSeek
-        from EvoScientist.middleware.utils import disable_thinking
+        from metasci_scribe.llm.deepseek import EvoChatDeepSeek
+        from metasci_scribe.middleware.utils import disable_thinking
 
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
         model = disable_thinking(EvoChatDeepSeek(model="deepseek-v4-flash"))
@@ -3070,7 +3072,7 @@ class TestAnthropicStripForeignReasoning:
         """reasoning_content blocks are dropped; text and thinking survive."""
         from langchain_core.messages import AIMessage, HumanMessage
 
-        from EvoScientist.llm.patches import _normalize_anthropic_replay_messages
+        from metasci_scribe.llm.patches import _normalize_anthropic_replay_messages
 
         messages = [
             HumanMessage("hello"),
@@ -3092,7 +3094,7 @@ class TestAnthropicStripForeignReasoning:
         """Streamed thinking blocks without a signature key get signature ''."""
         from langchain_core.messages import AIMessage
 
-        from EvoScientist.llm.patches import _normalize_anthropic_replay_messages
+        from metasci_scribe.llm.patches import _normalize_anthropic_replay_messages
 
         messages = [
             AIMessage(
@@ -3112,7 +3114,7 @@ class TestAnthropicStripForeignReasoning:
         """Clean histories pass through without copying."""
         from langchain_core.messages import AIMessage, HumanMessage
 
-        from EvoScientist.llm.patches import _normalize_anthropic_replay_messages
+        from metasci_scribe.llm.patches import _normalize_anthropic_replay_messages
 
         messages = [
             HumanMessage("hello"),
@@ -3215,7 +3217,7 @@ class TestSummaryKeepsNonClaudeThinking:
         from deepagents.backends import FilesystemBackend
         from langchain_core.language_models import FakeListChatModel
 
-        from EvoScientist.middleware import create_per_run_summarization_middleware
+        from metasci_scribe.middleware import create_per_run_summarization_middleware
 
         # Building the agent's summarization middleware installs the patch.
         create_per_run_summarization_middleware(
@@ -3441,9 +3443,9 @@ class TestAutoConfig:
     @pytest.fixture(autouse=True)
     def _clear_reasoning_effort_env(self, monkeypatch):
         """Keep auto-config tests independent of the developer environment."""
-        monkeypatch.delenv("EVOSCIENTIST_REASONING_EFFORT", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_REASONING_EFFORT", raising=False)
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_anthropic_4_5_thinking(self, mock_init, monkeypatch):
         """Anthropic 4-5 models get enabled thinking with budget."""
         mock_init.return_value = "mock_model"
@@ -3454,7 +3456,7 @@ class TestAutoConfig:
         call_kwargs = mock_init.call_args[1]
         assert call_kwargs["thinking"] == {"type": "enabled", "budget_tokens": 10000}
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_anthropic_4_6_adaptive_thinking(self, mock_init, monkeypatch):
         """Anthropic 4-6 models get adaptive thinking with max effort."""
         mock_init.return_value = "mock_model"
@@ -3466,7 +3468,7 @@ class TestAutoConfig:
         assert call_kwargs["thinking"] == {"type": "adaptive", "display": "summarized"}
         assert call_kwargs["effort"] == "max"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_anthropic_4_8_adaptive_thinking(self, mock_init, monkeypatch):
         """Anthropic 4-8 models get adaptive thinking with max effort."""
         mock_init.return_value = "mock_model"
@@ -3488,7 +3490,7 @@ class TestAutoConfig:
             ("claude-opus-6", 128000),  # unregistered: new ids need no code change
         ],
     )
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_anthropic_5_series_adaptive_thinking(
         self, mock_init, model, max_tokens, monkeypatch
     ):
@@ -3507,7 +3509,7 @@ class TestAutoConfig:
         ("kwargs", "base_url"),
         [({"thinking": {"type": "adaptive"}}, None), ({}, "http://localhost:8000")],
     )
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_opus_5_5_max_tokens_outside_thinking_branch(
         self, mock_init, kwargs, base_url, monkeypatch
     ):
@@ -3539,7 +3541,7 @@ class TestAutoConfig:
         assert "structured_output" not in other
 
     @pytest.mark.parametrize("model", ["moonshotai/kimi-k3", "kimi-k3"])
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_custom_anthropic_kimi_k3_declares_thinking(
         self, mock_init, model, monkeypatch
     ):
@@ -3554,7 +3556,7 @@ class TestAutoConfig:
         assert call_kwargs["thinking"] == {"type": "enabled", "budget_tokens": 10000}
         assert call_kwargs["max_tokens"] == 16000
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_kimi_coding_declares_thinking(self, mock_init, monkeypatch):
         """Kimi For Coding plan models declare thinking on the kimi-coding provider."""
         mock_init.return_value = "mock_model"
@@ -3568,7 +3570,7 @@ class TestAutoConfig:
         assert call_kwargs["thinking"] == {"type": "enabled", "budget_tokens": 10000}
         assert call_kwargs["max_tokens"] == 16000
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_custom_anthropic_non_kimi_no_thinking(self, mock_init, monkeypatch):
         """Non-Kimi models on custom-anthropic still skip thinking injection."""
         mock_init.return_value = "mock_model"
@@ -3580,7 +3582,7 @@ class TestAutoConfig:
         call_kwargs = mock_init.call_args[1]
         assert "thinking" not in call_kwargs
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_anthropic_4_6_proxy_no_thinking(self, mock_init, monkeypatch):
         """Anthropic 4-6 models via proxy skip thinking (history round-trip 422)."""
         mock_init.return_value = "mock_model"
@@ -3593,7 +3595,7 @@ class TestAutoConfig:
         assert "thinking" not in call_kwargs
         assert "effort" not in call_kwargs
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_anthropic_4_5_proxy_no_thinking(self, mock_init, monkeypatch):
         """Anthropic 4-5 models via proxy also skip thinking (history round-trip 422)."""
         mock_init.return_value = "mock_model"
@@ -3605,7 +3607,7 @@ class TestAutoConfig:
         call_kwargs = mock_init.call_args[1]
         assert "thinking" not in call_kwargs
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_anthropic_4_6_no_proxy_no_downgrade(self, mock_init, monkeypatch):
         """Anthropic 4-6 models without proxy still get adaptive thinking."""
         mock_init.return_value = "mock_model"
@@ -3618,7 +3620,7 @@ class TestAutoConfig:
         assert call_kwargs["thinking"] == {"type": "adaptive", "display": "summarized"}
         assert call_kwargs["effort"] == "max"
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_anthropic_thinking_not_overridden(self, mock_init):
         """User-supplied thinking config should not be overridden."""
         mock_init.return_value = "mock_model"
@@ -3629,12 +3631,12 @@ class TestAutoConfig:
         call_kwargs = mock_init.call_args[1]
         assert call_kwargs["thinking"] == custom_thinking
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_openai_reasoning_xhigh(self, mock_init, monkeypatch):
         """gpt-5.4+ and codex models get xhigh reasoning."""
         mock_init.return_value = "mock_model"
         monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
-        monkeypatch.delenv("EVOSCIENTIST_REASONING_EFFORT", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_REASONING_EFFORT", raising=False)
 
         get_chat_model("gpt-5.4", provider="openai")
         assert mock_init.call_args[1]["reasoning"] == {
@@ -3660,12 +3662,12 @@ class TestAutoConfig:
             "summary": "auto",
         }
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_openai_reasoning_effort_from_env(self, mock_init, monkeypatch):
         """Native OpenAI reasoning effort should be configurable via env var."""
         mock_init.return_value = "mock_model"
         monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
-        monkeypatch.setenv("EVOSCIENTIST_REASONING_EFFORT", "high")
+        monkeypatch.setenv("METASCI_SCRIBE_REASONING_EFFORT", "high")
 
         get_chat_model("gpt-5.5", provider="openai")
 
@@ -3674,7 +3676,7 @@ class TestAutoConfig:
             "summary": "auto",
         }
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_openai_reasoning_high_fallback(self, mock_init, monkeypatch):
         """Other OpenAI models get high reasoning effort."""
         mock_init.return_value = "mock_model"
@@ -3692,7 +3694,7 @@ class TestAutoConfig:
             "summary": "auto",
         }
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_openai_base_url_override(self, mock_init, monkeypatch):
         """A user-set OPENAI_BASE_URL (vLLM, etc.) passes through with the usual defaults."""
         mock_init.return_value = "mock_model"
@@ -3710,7 +3712,7 @@ class TestAutoConfig:
         assert "use_responses_api" not in call_kwargs
         assert "streaming" not in call_kwargs
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_openai_no_base_url_when_unset(self, mock_init, monkeypatch):
         """OpenAI provider should not set base_url when env var is empty."""
         mock_init.return_value = "mock_model"
@@ -3723,7 +3725,7 @@ class TestAutoConfig:
         assert call_kwargs["model_provider"] == "openai"
         assert "base_url" not in call_kwargs
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_google_thoughts(self, mock_init):
         """Google GenAI models get include_thoughts=True by default."""
         mock_init.return_value = "mock_model"
@@ -3733,12 +3735,12 @@ class TestAutoConfig:
         call_kwargs = mock_init.call_args[1]
         assert call_kwargs["include_thoughts"] is True
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_use_responses_api_false(self, mock_init, monkeypatch):
         """use_responses_api=false forces Chat Completions and drops reasoning."""
         mock_init.return_value = "mock_model"
         monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
-        monkeypatch.setenv("EVOSCIENTIST_USE_RESPONSES_API", "false")
+        monkeypatch.setenv("METASCI_SCRIBE_USE_RESPONSES_API", "false")
 
         get_chat_model("gpt-5-nano", provider="openai")
 
@@ -3746,12 +3748,12 @@ class TestAutoConfig:
         assert call_kwargs["use_responses_api"] is False
         assert "reasoning" not in call_kwargs
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_use_responses_api_true(self, mock_init, monkeypatch):
         """use_responses_api=true explicitly enables the Responses API."""
         mock_init.return_value = "mock_model"
         monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
-        monkeypatch.setenv("EVOSCIENTIST_USE_RESPONSES_API", "true")
+        monkeypatch.setenv("METASCI_SCRIBE_USE_RESPONSES_API", "true")
 
         get_chat_model("gpt-5-nano", provider="openai")
 
@@ -3759,12 +3761,12 @@ class TestAutoConfig:
         assert call_kwargs["use_responses_api"] is True
         assert call_kwargs["reasoning"] == {"effort": "high", "summary": "auto"}
 
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_use_responses_api_default_unchanged(self, mock_init, monkeypatch):
         """Empty use_responses_api preserves default behavior (no kwarg set)."""
         mock_init.return_value = "mock_model"
         monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
-        monkeypatch.delenv("EVOSCIENTIST_USE_RESPONSES_API", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_USE_RESPONSES_API", raising=False)
 
         get_chat_model("gpt-5-nano", provider="openai")
 
@@ -3775,11 +3777,11 @@ class TestAutoConfig:
     def test_responses_api_env_ignored_for_host_routed_deepseek(self, monkeypatch):
         from langchain_core.messages import HumanMessage
 
-        from EvoScientist.llm.deepseek import EvoChatDeepSeek
+        from metasci_scribe.llm.deepseek import EvoChatDeepSeek
 
         monkeypatch.setenv("CUSTOM_OPENAI_API_KEY", "sk-test")
         monkeypatch.setenv("CUSTOM_OPENAI_BASE_URL", "https://api.deepseek.com")
-        monkeypatch.setenv("EVOSCIENTIST_USE_RESPONSES_API", "true")
+        monkeypatch.setenv("METASCI_SCRIBE_USE_RESPONSES_API", "true")
 
         model = get_chat_model("deepseek-chat", provider="custom-openai")
 
@@ -3803,14 +3805,14 @@ class TestAutoConfig:
             )
 
     @pytest.mark.parametrize("env_value", ["FALSE", " false ", "False"])
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_use_responses_api_false_normalization(
         self, mock_init, monkeypatch, env_value
     ):
         """Case/whitespace variants of 'false' are normalized correctly."""
         mock_init.return_value = "mock_model"
         monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
-        monkeypatch.setenv("EVOSCIENTIST_USE_RESPONSES_API", env_value)
+        monkeypatch.setenv("METASCI_SCRIBE_USE_RESPONSES_API", env_value)
 
         get_chat_model("gpt-5-nano", provider="openai")
 
@@ -3819,14 +3821,14 @@ class TestAutoConfig:
         assert "reasoning" not in call_kwargs
 
     @pytest.mark.parametrize("env_value", ["TRUE", " true ", "True"])
-    @patch("EvoScientist.llm.models.init_chat_model")
+    @patch("metasci_scribe.llm.models.init_chat_model")
     def test_use_responses_api_true_normalization(
         self, mock_init, monkeypatch, env_value
     ):
         """Case/whitespace variants of 'true' are normalized correctly."""
         mock_init.return_value = "mock_model"
         monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
-        monkeypatch.setenv("EVOSCIENTIST_USE_RESPONSES_API", env_value)
+        monkeypatch.setenv("METASCI_SCRIBE_USE_RESPONSES_API", env_value)
 
         get_chat_model("gpt-5-nano", provider="openai")
 
@@ -3851,7 +3853,7 @@ class TestValidateRequestyKey:
 
     def test_empty_key_skipped(self):
         """No key provided is skipped, not an error."""
-        from EvoScientist.config.onboard.validators import validate_requesty_key
+        from metasci_scribe.config.onboard.validators import validate_requesty_key
 
         is_valid, msg = validate_requesty_key("")
         assert is_valid is True
@@ -3859,7 +3861,7 @@ class TestValidateRequestyKey:
 
     def test_uses_sentinel_model_not_a_real_one(self):
         """The probe targets a nonexistent sentinel model, not a real model."""
-        from EvoScientist.config.onboard.validators import validate_requesty_key
+        from metasci_scribe.config.onboard.validators import validate_requesty_key
 
         with patch("httpx.post") as mock_post:
             mock_post.return_value.status_code = 404
@@ -3871,7 +3873,7 @@ class TestValidateRequestyKey:
 
     def test_model_not_found_means_auth_passed(self):
         """404 (model not found) means auth was accepted → key is valid."""
-        from EvoScientist.config.onboard.validators import validate_requesty_key
+        from metasci_scribe.config.onboard.validators import validate_requesty_key
 
         with patch("httpx.post") as mock_post:
             mock_post.return_value.status_code = 404
@@ -3882,7 +3884,7 @@ class TestValidateRequestyKey:
 
     def test_success_means_valid(self):
         """200 (accepted) also means the key is valid."""
-        from EvoScientist.config.onboard.validators import validate_requesty_key
+        from metasci_scribe.config.onboard.validators import validate_requesty_key
 
         with patch("httpx.post") as mock_post:
             mock_post.return_value.status_code = 200
@@ -3894,7 +3896,7 @@ class TestValidateRequestyKey:
     @pytest.mark.parametrize("status", [401, 403])
     def test_auth_rejected_means_invalid(self, status):
         """401/403 mean the key was rejected by the auth layer."""
-        from EvoScientist.config.onboard.validators import validate_requesty_key
+        from metasci_scribe.config.onboard.validators import validate_requesty_key
 
         with patch("httpx.post") as mock_post:
             mock_post.return_value.status_code = status
@@ -3906,7 +3908,7 @@ class TestValidateRequestyKey:
     @pytest.mark.parametrize("status", [429, 500, 502, 503])
     def test_transient_status_is_inconclusive(self, status):
         """Rate-limit / 5xx leave key validity unknown, not rejected."""
-        from EvoScientist.config.onboard.validators import validate_requesty_key
+        from metasci_scribe.config.onboard.validators import validate_requesty_key
 
         with patch("httpx.post") as mock_post:
             mock_post.return_value.status_code = status
@@ -3922,7 +3924,7 @@ class TestResolveProvider:
 
     @pytest.fixture(autouse=True)
     def _registry(self, monkeypatch):
-        from EvoScientist.llm import registry
+        from metasci_scribe.llm import registry
 
         entries = [
             ("m", "m-plan", "vendor-plan"),
@@ -3933,18 +3935,18 @@ class TestResolveProvider:
         monkeypatch.setattr(registry, "MODELS", {n: (mid, p) for n, mid, p in entries})
 
     def test_keeps_preferred_provider_that_serves_the_name(self):
-        from EvoScientist.llm.registry import resolve_provider
+        from metasci_scribe.llm.registry import resolve_provider
 
         assert resolve_provider("m", "vendor-plan") == "vendor-plan"
 
     def test_falls_back_to_last_entry_otherwise(self):
-        from EvoScientist.llm.registry import resolve_provider
+        from metasci_scribe.llm.registry import resolve_provider
 
         assert resolve_provider("m") == "vendor"
         assert resolve_provider("solo", "vendor-plan") == "vendor"
 
     def test_unknown_name(self):
-        from EvoScientist.llm.registry import resolve_provider
+        from metasci_scribe.llm.registry import resolve_provider
 
         assert resolve_provider("nope", "vendor") is None
 
@@ -4070,7 +4072,7 @@ class TestValidateOpperKey:
 
     def test_empty_key_skipped(self):
         """No key provided is skipped, not an error."""
-        from EvoScientist.config.onboard.validators import validate_opper_key
+        from metasci_scribe.config.onboard.validators import validate_opper_key
 
         is_valid, msg = validate_opper_key("")
         assert is_valid is True
@@ -4078,7 +4080,7 @@ class TestValidateOpperKey:
 
     def test_probes_the_authenticated_model_catalog(self):
         """The probe is a bearer-authenticated GET against /v3/compat/models."""
-        from EvoScientist.config.onboard.validators import validate_opper_key
+        from metasci_scribe.config.onboard.validators import validate_opper_key
 
         with patch("httpx.get") as mock_get:
             mock_get.return_value.status_code = 200
@@ -4090,7 +4092,7 @@ class TestValidateOpperKey:
 
     def test_success_means_valid(self):
         """200 (catalog returned) means the key is valid."""
-        from EvoScientist.config.onboard.validators import validate_opper_key
+        from metasci_scribe.config.onboard.validators import validate_opper_key
 
         with patch("httpx.get") as mock_get:
             mock_get.return_value.status_code = 200
@@ -4102,7 +4104,7 @@ class TestValidateOpperKey:
     @pytest.mark.parametrize("status", [401, 403])
     def test_auth_rejected_means_invalid(self, status):
         """401/403 mean the key was rejected by the auth layer."""
-        from EvoScientist.config.onboard.validators import validate_opper_key
+        from metasci_scribe.config.onboard.validators import validate_opper_key
 
         with patch("httpx.get") as mock_get:
             mock_get.return_value.status_code = status
@@ -4114,7 +4116,7 @@ class TestValidateOpperKey:
     @pytest.mark.parametrize("status", [429, 500, 502, 503])
     def test_transient_status_is_inconclusive(self, status):
         """Rate-limit / 5xx leave key validity unknown, not rejected."""
-        from EvoScientist.config.onboard.validators import validate_opper_key
+        from metasci_scribe.config.onboard.validators import validate_opper_key
 
         with patch("httpx.get") as mock_get:
             mock_get.return_value.status_code = status
@@ -4136,20 +4138,20 @@ class TestChatGPTSignIn:
             calls.append((model_id, kwargs))
             return MagicMock(name="chatgpt_model")
 
-        monkeypatch.setattr("EvoScientist.llm.chatgpt_oauth.build_model", _fake_build)
+        monkeypatch.setattr("metasci_scribe.llm.chatgpt_oauth.build_model", _fake_build)
         monkeypatch.setattr(
-            "EvoScientist.llm.models.apply_known_context_window", lambda model: None
+            "metasci_scribe.llm.models.apply_known_context_window", lambda model: None
         )
-        monkeypatch.delenv("EVOSCIENTIST_REASONING_EFFORT", raising=False)
-        monkeypatch.delenv("EVOSCIENTIST_USE_RESPONSES_API", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_REASONING_EFFORT", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_USE_RESPONSES_API", raising=False)
         return calls
 
     def test_oauth_mode_builds_the_sign_in_model(self, built, monkeypatch):
-        monkeypatch.setenv("EVOSCIENTIST_OPENAI_AUTH_MODE", "oauth")
+        monkeypatch.setenv("METASCI_SCRIBE_OPENAI_AUTH_MODE", "oauth")
         monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
         monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:9/v1")
 
-        with patch("EvoScientist.llm.models.init_chat_model") as mock_init:
+        with patch("metasci_scribe.llm.models.init_chat_model") as mock_init:
             get_chat_model("gpt-6-sol", provider="openai")
 
         mock_init.assert_not_called()
@@ -4166,7 +4168,7 @@ class TestChatGPTSignIn:
         assert "default_headers" not in kwargs
 
     def test_caller_reasoning_context_wins(self, built, monkeypatch):
-        monkeypatch.setenv("EVOSCIENTIST_OPENAI_AUTH_MODE", "oauth")
+        monkeypatch.setenv("METASCI_SCRIBE_OPENAI_AUTH_MODE", "oauth")
         reasoning = {"effort": "low", "context": "current_turn"}
 
         get_chat_model("gpt-6-sol", provider="openai", reasoning=reasoning)
@@ -4175,8 +4177,8 @@ class TestChatGPTSignIn:
         assert reasoning == {"effort": "low", "context": "current_turn"}
 
     def test_use_responses_api_false_does_not_apply(self, built, monkeypatch):
-        monkeypatch.setenv("EVOSCIENTIST_OPENAI_AUTH_MODE", "oauth")
-        monkeypatch.setenv("EVOSCIENTIST_USE_RESPONSES_API", "false")
+        monkeypatch.setenv("METASCI_SCRIBE_OPENAI_AUTH_MODE", "oauth")
+        monkeypatch.setenv("METASCI_SCRIBE_USE_RESPONSES_API", "false")
 
         get_chat_model("gpt-6-sol", provider="openai")
 
@@ -4185,11 +4187,11 @@ class TestChatGPTSignIn:
         assert kwargs["reasoning"]["context"] == "all_turns"
 
     def test_api_key_mode_is_unchanged(self, built, monkeypatch):
-        monkeypatch.setenv("EVOSCIENTIST_OPENAI_AUTH_MODE", "api_key")
+        monkeypatch.setenv("METASCI_SCRIBE_OPENAI_AUTH_MODE", "api_key")
         monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
         monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
 
-        with patch("EvoScientist.llm.models.init_chat_model") as mock_init:
+        with patch("metasci_scribe.llm.models.init_chat_model") as mock_init:
             mock_init.return_value = MagicMock()
             get_chat_model("gpt-6-sol", provider="openai")
 
@@ -4199,11 +4201,11 @@ class TestChatGPTSignIn:
         assert call_kwargs["reasoning"] == {"effort": "high", "summary": "auto"}
 
     def test_other_openai_sdk_providers_are_untouched(self, built, monkeypatch):
-        monkeypatch.setenv("EVOSCIENTIST_OPENAI_AUTH_MODE", "oauth")
+        monkeypatch.setenv("METASCI_SCRIBE_OPENAI_AUTH_MODE", "oauth")
         monkeypatch.setenv("CUSTOM_OPENAI_BASE_URL", "https://example.test/v1")
         monkeypatch.setenv("CUSTOM_OPENAI_API_KEY", "sk-custom")
 
-        with patch("EvoScientist.llm.models.init_chat_model") as mock_init:
+        with patch("metasci_scribe.llm.models.init_chat_model") as mock_init:
             mock_init.return_value = MagicMock()
             get_chat_model("gpt-5.3-codex", provider="custom-openai")
 
@@ -4219,19 +4221,19 @@ class TestChatGPTSignIn:
             "_convert_responses_chunk_to_generation_chunk",
             getattr(current, "__wrapped__", current),
         )
-        monkeypatch.setenv("EVOSCIENTIST_OPENAI_AUTH_MODE", "oauth")
+        monkeypatch.setenv("METASCI_SCRIBE_OPENAI_AUTH_MODE", "oauth")
 
         get_chat_model("gpt-6-sol", provider="openai")
 
         assert hasattr(
-            base._convert_responses_chunk_to_generation_chunk, "_evosci_whole_tool_args"
+            base._convert_responses_chunk_to_generation_chunk, "_scribe_whole_tool_args"
         )
 
     def test_not_signed_in_reaches_the_caller(self, tmp_path, monkeypatch):
-        from EvoScientist.llm.chatgpt_oauth import SIGN_IN_HINT, NotSignedInError
+        from metasci_scribe.llm.chatgpt_oauth import SIGN_IN_HINT, NotSignedInError
 
-        monkeypatch.setattr("EvoScientist.paths.DATA_DIR", tmp_path)
-        monkeypatch.setenv("EVOSCIENTIST_OPENAI_AUTH_MODE", "oauth")
+        monkeypatch.setattr("metasci_scribe.paths.DATA_DIR", tmp_path)
+        monkeypatch.setenv("METASCI_SCRIBE_OPENAI_AUTH_MODE", "oauth")
 
         with pytest.raises(NotSignedInError) as exc_info:
             get_chat_model("gpt-6-sol", provider="openai")
@@ -4248,7 +4250,7 @@ class TestReasoningEffortAcrossProviders:
         monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
         monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
-        monkeypatch.delenv("EVOSCIENTIST_USE_RESPONSES_API", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_USE_RESPONSES_API", raising=False)
 
     @pytest.mark.parametrize(
         ("provider", "model", "stored", "sent"),
@@ -4267,9 +4269,9 @@ class TestReasoningEffortAcrossProviders:
     def test_api_key_routes_get_the_stored_level(
         self, monkeypatch, provider, model, stored, sent
     ):
-        monkeypatch.setenv("EVOSCIENTIST_REASONING_EFFORT", stored)
+        monkeypatch.setenv("METASCI_SCRIBE_REASONING_EFFORT", stored)
 
-        with patch("EvoScientist.llm.models.init_chat_model") as mock_init:
+        with patch("metasci_scribe.llm.models.init_chat_model") as mock_init:
             mock_init.return_value = MagicMock()
             get_chat_model(model, provider=provider)
 
@@ -4277,9 +4279,9 @@ class TestReasoningEffortAcrossProviders:
 
     def test_openai_base_url_override_gets_the_stored_level(self, monkeypatch):
         monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:9000/v1")
-        monkeypatch.setenv("EVOSCIENTIST_REASONING_EFFORT", "minimal")
+        monkeypatch.setenv("METASCI_SCRIBE_REASONING_EFFORT", "minimal")
 
-        with patch("EvoScientist.llm.models.init_chat_model") as mock_init:
+        with patch("metasci_scribe.llm.models.init_chat_model") as mock_init:
             mock_init.return_value = MagicMock()
             get_chat_model("gpt-6-sol", provider="openai")
 
@@ -4302,23 +4304,23 @@ class TestReasoningEffortAcrossProviders:
     ):
         built = []
         monkeypatch.setattr(
-            "EvoScientist.llm.chatgpt_oauth.build_model",
+            "metasci_scribe.llm.chatgpt_oauth.build_model",
             lambda model_id, **kwargs: built.append(kwargs) or MagicMock(),
         )
         monkeypatch.setattr(
-            "EvoScientist.llm.models.apply_known_context_window", lambda model: None
+            "metasci_scribe.llm.models.apply_known_context_window", lambda model: None
         )
-        monkeypatch.setenv("EVOSCIENTIST_OPENAI_AUTH_MODE", "oauth")
-        monkeypatch.setenv("EVOSCIENTIST_REASONING_EFFORT", stored)
+        monkeypatch.setenv("METASCI_SCRIBE_OPENAI_AUTH_MODE", "oauth")
+        monkeypatch.setenv("METASCI_SCRIBE_REASONING_EFFORT", stored)
 
         get_chat_model("gpt-6.1-sol", provider="openai")
 
         assert built[0]["reasoning"]["effort"] == sent
 
     def test_caller_supplied_reasoning_is_left_alone(self, monkeypatch):
-        monkeypatch.setenv("EVOSCIENTIST_REASONING_EFFORT", "max")
+        monkeypatch.setenv("METASCI_SCRIBE_REASONING_EFFORT", "max")
 
-        with patch("EvoScientist.llm.models.init_chat_model") as mock_init:
+        with patch("metasci_scribe.llm.models.init_chat_model") as mock_init:
             mock_init.return_value = MagicMock()
             get_chat_model(
                 "gpt-6-sol", provider="openai", reasoning={"effort": "minimal"}

@@ -12,7 +12,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import Field
 
-from EvoScientist.middleware.goal import (
+from metasci_scribe.middleware.goal import (
     GOAL_CRITERIA_LIMIT,
     GoalDrafter,
     GoalTextError,
@@ -276,12 +276,12 @@ class TestDraft:
         self, monkeypatch
     ):
         """Drafting is as resilient as a turn: the chain takes over."""
-        from EvoScientist.middleware import model_fallback
+        from metasci_scribe.middleware import model_fallback
 
         drafter, main = _drafter(RuntimeError("503 upstream"))
         fallback = _Scripted(replies=["- drafted by the fallback"], seen=[])
         monkeypatch.setattr(
-            "EvoScientist.llm.models.get_chat_model",
+            "metasci_scribe.llm.models.get_chat_model",
             lambda model, provider=None, **kwargs: fallback,
         )
         model_fallback.set_fallback_chain([("fallback-model", "openai")])

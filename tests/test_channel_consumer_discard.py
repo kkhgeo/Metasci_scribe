@@ -1,6 +1,6 @@
 """The channel consumer drops a failed attempt's text from its reply buffers."""
 
-from EvoScientist.channels.consumer import trim_buffer, trim_text
+from metasci_scribe.channels.consumer import trim_buffer, trim_text
 
 
 def test_trim_text_drops_the_tail_and_never_goes_negative():
@@ -32,7 +32,7 @@ def _event(instance_id="", text_chars=0, thinking_chars=0):
 
 
 def test_main_discard_trims_the_reply_and_the_unsent_thinking():
-    from EvoScientist.channels.consumer import apply_model_discard
+    from metasci_scribe.channels.consumer import apply_model_discard
 
     thinking = ["plan ", "failed thought"]
     buffers = {"sa": ("research", ["kept"])}
@@ -48,7 +48,7 @@ def test_main_discard_trims_the_reply_and_the_unsent_thinking():
 
 
 def test_subagent_discard_trims_only_its_own_buffer():
-    from EvoScientist.channels.consumer import apply_model_discard
+    from metasci_scribe.channels.consumer import apply_model_discard
 
     thinking = ["main thought"]
     buffers = {"sa": ("research", ["done ", "half"]), "other": ("code", ["x"])}
@@ -65,7 +65,7 @@ def test_subagent_discard_trims_only_its_own_buffer():
 
 
 def test_discard_for_an_unknown_subagent_is_ignored():
-    from EvoScientist.channels.consumer import apply_model_discard
+    from metasci_scribe.channels.consumer import apply_model_discard
 
     assert (
         apply_model_discard(_event(instance_id="gone", text_chars=9), "Main.", {}, [])

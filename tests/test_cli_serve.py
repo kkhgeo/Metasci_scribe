@@ -5,8 +5,8 @@ from __future__ import annotations
 import os
 import signal
 
-from EvoScientist.cli import commands
-from EvoScientist.paths import SessionDirs, Workspace
+from metasci_scribe.cli import commands
+from metasci_scribe.paths import SessionDirs, Workspace
 from tests.fakes.serve import run_serve_once, serve_config
 
 
@@ -86,16 +86,16 @@ def test_serve_debug_sets_log_level_and_channel_trace(monkeypatch, tmp_path):
     ws = str((tmp_path / "ws").resolve())
     config = serve_config(default_workdir=ws, channel_send_thinking=True)
     configure_calls: list[tuple[str | None, str | None]] = []
-    monkeypatch.delenv("EVOSCIENTIST_LOG_LEVEL", raising=False)
-    monkeypatch.delenv("EVOSCIENTIST_CHANNEL_DEBUG_TRACING", raising=False)
+    monkeypatch.delenv("METASCI_SCRIBE_LOG_LEVEL", raising=False)
+    monkeypatch.delenv("METASCI_SCRIBE_CHANNEL_DEBUG_TRACING", raising=False)
 
     monkeypatch.setattr(
         commands,
         "_configure_logging",
         lambda: configure_calls.append(
             (
-                os.environ.get("EVOSCIENTIST_LOG_LEVEL"),
-                os.environ.get("EVOSCIENTIST_CHANNEL_DEBUG_TRACING"),
+                os.environ.get("METASCI_SCRIBE_LOG_LEVEL"),
+                os.environ.get("METASCI_SCRIBE_CHANNEL_DEBUG_TRACING"),
             )
         ),
     )
@@ -115,7 +115,7 @@ def test_serve_debug_sets_log_level_and_channel_trace(monkeypatch, tmp_path):
 
 
 def test_serve_host_flag_narrows_or_widens_backend_bind(monkeypatch, tmp_path):
-    """`EvoSci serve --host` must reach langgraph_dev_host — the flag was
+    """`metasci-scribe serve --host` must reach langgraph_dev_host — the flag was
     silently dropped before, leaving the backend bind config-only."""
     ws = str((tmp_path / "ws").resolve())
     config = serve_config(default_workdir=ws)
@@ -225,7 +225,7 @@ def test_serve_sigterm_cancels_active_message_scope_before_shutdown(
 
     monkeypatch.setattr(signal, "signal", _fake_signal)
     monkeypatch.setattr(
-        "EvoScientist.stream.display.request_stream_cancel",
+        "metasci_scribe.stream.display.request_stream_cancel",
         cancelled_scopes.append,
     )
 
@@ -267,7 +267,7 @@ def test_serve_sigint_cancels_active_message_scope_before_interrupt(
 
     monkeypatch.setattr(signal, "signal", _fake_signal)
     monkeypatch.setattr(
-        "EvoScientist.stream.display.request_stream_cancel",
+        "metasci_scribe.stream.display.request_stream_cancel",
         cancelled_scopes.append,
     )
 

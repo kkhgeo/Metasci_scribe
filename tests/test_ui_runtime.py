@@ -7,14 +7,14 @@ from dataclasses import dataclass
 
 import pytest
 
-from EvoScientist.cli.tui_runtime import (
+from metasci_scribe.cli.tui_runtime import (
     StreamCancellationTimeout,
     normalize_ui_backend,
     resolve_ui_backend,
     run_streaming,
     run_streaming_async,
 )
-from EvoScientist.runtime import AsyncRuntimeError
+from metasci_scribe.runtime import AsyncRuntimeError
 from tests.fakes.common import FakeGraphGateway
 
 
@@ -42,14 +42,14 @@ def test_normalize_ui_backend_unknown_falls_back_to_cli():
 
 def test_resolve_ui_backend_falls_back_when_textual_unavailable(monkeypatch):
     monkeypatch.setattr(
-        "EvoScientist.cli.tui_runtime._has_textual_support", lambda: False
+        "metasci_scribe.cli.tui_runtime._has_textual_support", lambda: False
     )
     assert resolve_ui_backend("tui") == "cli"
 
 
 def test_resolve_ui_backend_keeps_tui_when_available(monkeypatch):
     monkeypatch.setattr(
-        "EvoScientist.cli.tui_runtime._has_textual_support", lambda: True
+        "metasci_scribe.cli.tui_runtime._has_textual_support", lambda: True
     )
     assert resolve_ui_backend("tui") == "tui"
 
@@ -64,7 +64,7 @@ class _BrokenBackend:
 
 def test_run_streaming_falls_back_to_cli_on_runtime_error(monkeypatch):
     monkeypatch.setattr(
-        "EvoScientist.cli.tui_runtime.get_backend", lambda *a, **k: _BrokenBackend()
+        "metasci_scribe.cli.tui_runtime.get_backend", lambda *a, **k: _BrokenBackend()
     )
 
     class _RichStub:
@@ -72,7 +72,7 @@ def test_run_streaming_falls_back_to_cli_on_runtime_error(monkeypatch):
             return "fallback-ok"
 
     monkeypatch.setattr(
-        "EvoScientist.cli.tui_runtime.RichStreamingBackend", lambda: _RichStub()
+        "metasci_scribe.cli.tui_runtime.RichStreamingBackend", lambda: _RichStub()
     )
 
     result = run_streaming(
@@ -96,10 +96,11 @@ def test_run_streaming_passes_the_starting_grant_to_the_loop(monkeypatch, broken
         seen.update(kwargs)
         return "ok"
 
-    monkeypatch.setattr("EvoScientist.cli.tui_backends._run_streaming", _loop)
+    monkeypatch.setattr("metasci_scribe.cli.tui_backends._run_streaming", _loop)
     if broken_first:
         monkeypatch.setattr(
-            "EvoScientist.cli.tui_runtime.get_backend", lambda *a, **k: _BrokenBackend()
+            "metasci_scribe.cli.tui_runtime.get_backend",
+            lambda *a, **k: _BrokenBackend(),
         )
     result = run_streaming(
         ui_backend="tui" if broken_first else "cli",
@@ -125,11 +126,11 @@ def test_run_streaming_does_not_retry_on_owned_runtime_error(monkeypatch):
             raise AsyncRuntimeError("owned runtime failed")
 
     monkeypatch.setattr(
-        "EvoScientist.cli.tui_runtime.get_backend",
+        "metasci_scribe.cli.tui_runtime.get_backend",
         lambda *a, **k: _RuntimeFailureBackend(),
     )
     monkeypatch.setattr(
-        "EvoScientist.cli.tui_runtime.RichStreamingBackend",
+        "metasci_scribe.cli.tui_runtime.RichStreamingBackend",
         lambda: _RuntimeFailureBackend(),
     )
 
@@ -148,7 +149,7 @@ def test_run_streaming_does_not_retry_on_owned_runtime_error(monkeypatch):
 
 
 async def test_async_streaming_cancellation_stops_and_joins_worker(monkeypatch):
-    from EvoScientist.stream.display import (
+    from metasci_scribe.stream.display import (
         discard_stream_cancel,
         is_stream_cancel_requested,
     )
@@ -166,7 +167,7 @@ async def test_async_streaming_cancellation_stops_and_joins_worker(monkeypatch):
         return "stopped"
 
     monkeypatch.setattr(
-        "EvoScientist.cli.tui_runtime.run_streaming", fake_run_streaming
+        "metasci_scribe.cli.tui_runtime.run_streaming", fake_run_streaming
     )
 
     task = asyncio.create_task(run_streaming_async(cancel_scope=scope))
@@ -181,7 +182,7 @@ async def test_async_streaming_cancellation_stops_and_joins_worker(monkeypatch):
 
 
 async def test_async_streaming_can_recover_foreground_task_after_cancel(monkeypatch):
-    from EvoScientist.stream.display import (
+    from metasci_scribe.stream.display import (
         discard_stream_cancel,
         is_stream_cancel_requested,
     )
@@ -202,10 +203,10 @@ async def test_async_streaming_can_recover_foreground_task_after_cancel(monkeypa
         cleanup_called = True
 
     monkeypatch.setattr(
-        "EvoScientist.cli.tui_runtime.run_streaming", fake_run_streaming
+        "metasci_scribe.cli.tui_runtime.run_streaming", fake_run_streaming
     )
     monkeypatch.setattr(
-        "EvoScientist.middleware.code_interpreter.aclose_code_interpreters",
+        "metasci_scribe.middleware.code_interpreter.aclose_code_interpreters",
         fake_cleanup,
     )
 
@@ -223,8 +224,8 @@ async def test_async_streaming_can_recover_foreground_task_after_cancel(monkeypa
 
 async def test_noncooperative_worker_reports_settlement_timeout(monkeypatch):
     """Cancellation timeout is an ordinary lifecycle error, not BaseException."""
-    from EvoScientist.cli import tui_runtime
-    from EvoScientist.stream.display import discard_stream_cancel
+    from metasci_scribe.cli import tui_runtime
+    from metasci_scribe.stream.display import discard_stream_cancel
 
     scope = "test:async-renderer-timeout"
     started = threading.Event()
@@ -243,7 +244,7 @@ async def test_noncooperative_worker_reports_settlement_timeout(monkeypatch):
     monkeypatch.setattr(tui_runtime, "run_streaming", fake_run_streaming)
     monkeypatch.setattr(tui_runtime, "STREAM_CANCEL_SETTLE_TIMEOUT", 0.05)
     monkeypatch.setattr(
-        "EvoScientist.middleware.code_interpreter.aclose_code_interpreters",
+        "metasci_scribe.middleware.code_interpreter.aclose_code_interpreters",
         fake_cleanup,
     )
 

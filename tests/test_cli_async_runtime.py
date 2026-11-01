@@ -6,9 +6,9 @@ import threading
 import pytest
 from typer.testing import CliRunner
 
-import EvoScientist.cli.commands  # noqa: F401 - registers commands on app
-from EvoScientist.cli import commands
-from EvoScientist.cli._app import app
+import metasci_scribe.cli.commands  # noqa: F401 - registers commands on app
+from metasci_scribe.cli import commands
+from metasci_scribe.cli._app import app
 
 
 @pytest.mark.parametrize("args", [["sessions"], ["sessions", "stats"]])
@@ -27,15 +27,15 @@ def test_sessions_stats_uses_and_closes_cli_owned_runtime(monkeypatch, args):
             "top_threads": [],
         }
 
-    monkeypatch.setattr("EvoScientist.sessions.db_stats", fake_db_stats)
+    monkeypatch.setattr("metasci_scribe.sessions.db_stats", fake_db_stats)
 
     result = CliRunner().invoke(app, args)
 
     assert result.exit_code == 0, result.exception
-    assert execution["thread"] == "evosci-async-runtime"
+    assert execution["thread"] == "metasci-scribe-async-runtime"
     assert isinstance(execution["loop"], asyncio.AbstractEventLoop)
     assert not any(
-        thread.name == "evosci-async-runtime" and thread.is_alive()
+        thread.name == "metasci-scribe-async-runtime" and thread.is_alive()
         for thread in threading.enumerate()
     )
 
@@ -43,8 +43,8 @@ def test_sessions_stats_uses_and_closes_cli_owned_runtime(monkeypatch, args):
 @pytest.mark.parametrize(
     ("args", "patch_target"),
     [
-        (["onboard"], "EvoScientist.config.onboard.run_onboard"),
-        (["configure", "channels"], "EvoScientist.cli.commands._run_onboard_cli"),
+        (["onboard"], "metasci_scribe.config.onboard.run_onboard"),
+        (["configure", "channels"], "metasci_scribe.cli.commands._run_onboard_cli"),
     ],
 )
 def test_onboarding_commands_share_and_close_cli_runtime(
@@ -67,10 +67,10 @@ def test_onboarding_commands_share_and_close_cli_runtime(
     result = CliRunner().invoke(app, args)
 
     assert result.exit_code == 0, result.exception
-    assert execution["thread"] == "evosci-async-runtime"
+    assert execution["thread"] == "metasci-scribe-async-runtime"
     assert isinstance(execution["loop"], asyncio.AbstractEventLoop)
     assert not any(
-        thread.name == "evosci-async-runtime" and thread.is_alive()
+        thread.name == "metasci-scribe-async-runtime" and thread.is_alive()
         for thread in threading.enumerate()
     )
 
@@ -86,18 +86,18 @@ def test_channel_setup_shares_and_closes_cli_runtime(monkeypatch):
         runtime.run_sync(record_execution)
         return {}
 
-    monkeypatch.setattr("EvoScientist.config.load_config", object)
+    monkeypatch.setattr("metasci_scribe.config.load_config", object)
     monkeypatch.setattr(
-        "EvoScientist.config.onboard.channels._step_channels", fake_step_channels
+        "metasci_scribe.config.onboard.channels._step_channels", fake_step_channels
     )
 
     result = CliRunner().invoke(app, ["channel", "setup"])
 
     assert result.exit_code == 0, result.exception
-    assert execution["thread"] == "evosci-async-runtime"
+    assert execution["thread"] == "metasci-scribe-async-runtime"
     assert isinstance(execution["loop"], asyncio.AbstractEventLoop)
     assert not any(
-        thread.name == "evosci-async-runtime" and thread.is_alive()
+        thread.name == "metasci-scribe-async-runtime" and thread.is_alive()
         for thread in threading.enumerate()
     )
 
@@ -121,7 +121,7 @@ def test_cli_reports_runtime_close_timeout_without_raw_exception(monkeypatch):
         }
 
     monkeypatch.setattr(commands, "AsyncRuntime", _TimeoutRuntime)
-    monkeypatch.setattr("EvoScientist.sessions.db_stats", fake_db_stats)
+    monkeypatch.setattr("metasci_scribe.sessions.db_stats", fake_db_stats)
 
     result = CliRunner().invoke(app, ["sessions", "stats"])
 

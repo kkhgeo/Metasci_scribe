@@ -40,8 +40,8 @@ async def test_discarded_calls_leave_the_box_bookkeeping():
     from textual.app import App
     from textual.widgets import Static
 
-    from EvoScientist.cli.widgets.subagent_widget import SubAgentWidget
-    from EvoScientist.cli.widgets.tool_call_widget import ToolCallWidget
+    from metasci_scribe.cli.widgets.subagent_widget import SubAgentWidget
+    from metasci_scribe.cli.widgets.tool_call_widget import ToolCallWidget
 
     class _Host(App):
         def compose(self):
@@ -96,7 +96,7 @@ async def test_retry_removes_the_failed_attempt_and_mounts_the_notice(
         prepare_app(app, workspace, rubric_gateway(events=events))
         await submit(app, "go")
         await finish_turns(app, pilot)
-        from EvoScientist.cli.widgets.tool_call_widget import ToolCallWidget
+        from metasci_scribe.cli.widgets.tool_call_widget import ToolCallWidget
 
         assert not [
             w for w in app.query_one("#chat").children if isinstance(w, ToolCallWidget)
@@ -128,7 +128,7 @@ async def test_retry_trims_thinking_instead_of_removing_it(monkeypatch, workspac
         prepare_app(app, workspace, rubric_gateway(events=events))
         await submit(app, "go")
         await finish_turns(app, pilot)
-        from EvoScientist.cli.widgets.thinking_widget import ThinkingWidget
+        from metasci_scribe.cli.widgets.thinking_widget import ThinkingWidget
 
         thinking = [
             w for w in app.query_one("#chat").children if isinstance(w, ThinkingWidget)
@@ -166,7 +166,7 @@ async def test_discard_without_retry_mounts_no_line(monkeypatch, workspace):
 async def test_a_retry_before_any_content_keeps_the_spinner_last(
     monkeypatch, workspace
 ):
-    from EvoScientist.cli.widgets.loading_widget import LoadingWidget
+    from metasci_scribe.cli.widgets.loading_widget import LoadingWidget
 
     app = await capture_app(monkeypatch, workspace)
     async with app.run_test() as pilot:
@@ -188,8 +188,8 @@ async def test_a_retry_before_any_content_keeps_the_spinner_last(
 
 
 async def test_a_subagent_retry_notice_follows_its_box(monkeypatch, workspace):
-    from EvoScientist.cli.widgets.loading_widget import LoadingWidget
-    from EvoScientist.cli.widgets.subagent_widget import SubAgentWidget
+    from metasci_scribe.cli.widgets.loading_widget import LoadingWidget
+    from metasci_scribe.cli.widgets.subagent_widget import SubAgentWidget
 
     app = await capture_app(monkeypatch, workspace)
     async with app.run_test() as pilot:
@@ -221,8 +221,8 @@ async def test_a_subagent_retry_notice_follows_its_box(monkeypatch, workspace):
 
 
 async def test_a_retry_notice_follows_the_tool_selection_line(monkeypatch, workspace):
-    from EvoScientist.cli.widgets.loading_widget import LoadingWidget
-    from EvoScientist.cli.widgets.tool_selection_widget import ToolSelectionWidget
+    from metasci_scribe.cli.widgets.loading_widget import LoadingWidget
+    from metasci_scribe.cli.widgets.tool_selection_widget import ToolSelectionWidget
 
     app = await capture_app(monkeypatch, workspace)
     async with app.run_test() as pilot:

@@ -1,4 +1,4 @@
-"""Tests for ``EvoSci deploy --json`` (``EvoScientist.deploy.json_mode``).
+"""Tests for ``metasci-scribe deploy --json`` (``metasci_scribe.deploy.json_mode``).
 
 ``start_langgraph_dev``, the health check and the port probes are faked; the
 backend decision (``_resolve_backend``) runs for real on top of them.
@@ -19,9 +19,9 @@ from typing import Any
 import pytest
 import typer
 
-from EvoScientist import paths
-from EvoScientist.deploy import json_mode
-from EvoScientist.deploy import server as deploy_server
+from metasci_scribe import paths
+from metasci_scribe.deploy import json_mode
+from metasci_scribe.deploy import server as deploy_server
 from tests.fakes.langgraph_dev import LockHolder
 
 
@@ -55,11 +55,11 @@ class Harness:
     what happened, in order, in :attr:`log`."""
 
     def __init__(self, monkeypatch, tmp_path) -> None:
-        import EvoScientist.config as config_mod
-        from EvoScientist import agent_shell, ccproxy_manager
-        from EvoScientist.deploy import backend_job
-        from EvoScientist.langgraph_dev import manager as lgm
-        from EvoScientist.stream.console import console
+        import metasci_scribe.config as config_mod
+        from metasci_scribe import agent_shell, ccproxy_manager
+        from metasci_scribe.deploy import backend_job
+        from metasci_scribe.langgraph_dev import manager as lgm
+        from metasci_scribe.stream.console import console
 
         self.mp = monkeypatch
         self.tmp_path = tmp_path
@@ -89,7 +89,7 @@ class Harness:
         )
         monkeypatch.setattr(config_mod, "apply_config_to_env", lambda _c: None)
         monkeypatch.setattr(paths, "DATA_DIR", tmp_path / "data")
-        monkeypatch.setattr(paths, "CONFIG_DIR", tmp_path / "config" / "evoscientist")
+        monkeypatch.setattr(paths, "CONFIG_DIR", tmp_path / "config" / "metasci-scribe")
 
         monkeypatch.setattr(lgm, "_is_port_occupied", self._occupied)
         monkeypatch.setattr(lgm, "is_langgraph_dev_running", self._running)
@@ -232,7 +232,7 @@ def test_owned_run_prints_starting_ready_stopped(h, capsys):
     assert ready["url"] == "http://127.0.0.1:6174"
     assert ready["owned"] is True
     assert ready["workspace"] == h.workspace
-    assert ready["assistant_id"] == "EvoScientist"
+    assert ready["assistant_id"] == "metasci-scribe"
     assert ready["warnings"] == []
     assert "mode" not in ready
     assert "public_url" not in ready
@@ -242,7 +242,7 @@ def test_ready_carries_this_process_folders(h, capsys):
     _, lines = h.run(capsys)
     ready = _by_event(lines, "ready")
     assert ready["data_dir"] == str(h.tmp_path / "data")
-    assert ready["config_dir"] == str(h.tmp_path / "config" / "evoscientist")
+    assert ready["config_dir"] == str(h.tmp_path / "config" / "metasci-scribe")
     assert os.path.isabs(ready["data_dir"])
     assert os.path.isabs(ready["config_dir"])
 
@@ -255,8 +255,8 @@ def test_end_of_stdin_stops_the_owned_backend_before_stopped(h, capsys):
 
 def test_stdout_carries_only_json(h, capsys, monkeypatch):
     """Rich output printed while the command runs goes to stderr."""
-    from EvoScientist.langgraph_dev import manager as lgm
-    from EvoScientist.stream.console import console
+    from metasci_scribe.langgraph_dev import manager as lgm
+    from metasci_scribe.stream.console import console
 
     def _start(**kwargs):
         console.print("a Rich line")
@@ -264,7 +264,7 @@ def test_stdout_carries_only_json(h, capsys, monkeypatch):
 
     monkeypatch.setattr(lgm, "start_langgraph_dev", _start)
     monkeypatch.setattr(
-        "EvoScientist.agent_shell.setup_hint", lambda: "Run `EvoSci setup`."
+        "metasci_scribe.agent_shell.setup_hint", lambda: "Run `metasci-scribe setup`."
     )
     h._set_stdin()
     code = json_mode.run_json(
@@ -274,7 +274,7 @@ def test_stdout_carries_only_json(h, capsys, monkeypatch):
     lines = [json.loads(line) for line in captured.out.splitlines()]
     assert code == 0
     assert "a Rich line" in captured.err
-    assert "Run `EvoSci setup`." in _by_event(lines, "ready")["warnings"]
+    assert "Run `metasci-scribe setup`." in _by_event(lines, "ready")["warnings"]
 
 
 def test_non_ascii_paths_are_escaped(h, capsys):
@@ -306,7 +306,7 @@ def test_tunnel_adds_public_url(h, capsys):
 def test_a_stop_during_the_tunnel_wait_ends_it(h, capsys, monkeypatch):
     """The app stops while cloudflared has not reported a URL yet: no
     ``ready``, and no wait for the rest of the 35 s."""
-    from EvoScientist.langgraph_dev import manager as lgm
+    from metasci_scribe.langgraph_dev import manager as lgm
 
     reads: list[float] = []
 
@@ -326,7 +326,7 @@ def test_a_stop_during_the_tunnel_wait_ends_it(h, capsys, monkeypatch):
 
 
 def test_tunnel_url_is_read_in_short_waits(h, capsys, monkeypatch):
-    from EvoScientist.langgraph_dev import manager as lgm
+    from metasci_scribe.langgraph_dev import manager as lgm
 
     answers = iter([None, None, "https://late.trycloudflare.com"])
     monkeypatch.setattr(
@@ -386,7 +386,7 @@ def test_a_ccproxy_this_run_started_joins_the_job(h, capsys):
 
 
 def test_a_reused_ccproxy_is_left_out_of_the_job(h, capsys, monkeypatch):
-    from EvoScientist import ccproxy_manager
+    from metasci_scribe import ccproxy_manager
 
     monkeypatch.setattr(ccproxy_manager, "maybe_start_ccproxy", lambda _c: None)
     h.job = _FakeJob(h.log)
@@ -418,7 +418,7 @@ def test_a_failed_backend_stop_still_stops_ccproxy_and_closes_the_job(
     later steps still run and the run ends with ``internal_error``."""
     import psutil
 
-    from EvoScientist.langgraph_dev import manager as lgm
+    from metasci_scribe.langgraph_dev import manager as lgm
 
     def _stop(proc=None):
         h.log.append(("backend stop", proc))
@@ -439,7 +439,7 @@ def test_job_is_closed_after_a_failed_start(h, capsys):
         raise RuntimeError("boom")
 
     h.job = _FakeJob(h.log)
-    h.mp.setattr("EvoScientist.langgraph_dev.manager.start_langgraph_dev", _fail)
+    h.mp.setattr("metasci_scribe.langgraph_dev.manager.start_langgraph_dev", _fail)
     code, _ = h.run(capsys)
     assert code == 1
     assert "job close" in h.log
@@ -457,7 +457,7 @@ def test_attached_run_reports_the_running_backend_and_leaves_it(h, capsys):
     _attach(
         h,
         data_dir="/other/data",
-        config_dir="/other/config/evoscientist",
+        config_dir="/other/config/metasci-scribe",
         config_fingerprint="fp-now",
     )
     code, lines = h.run(capsys)
@@ -466,7 +466,7 @@ def test_attached_run_reports_the_running_backend_and_leaves_it(h, capsys):
     ready = _by_event(lines, "ready")
     assert ready["owned"] is False
     assert ready["data_dir"] == "/other/data"
-    assert ready["config_dir"] == "/other/config/evoscientist"
+    assert ready["config_dir"] == "/other/config/metasci-scribe"
     assert h.started is None
     assert not any(isinstance(e, tuple) and e[0] == "backend stop" for e in h.log)
 
@@ -484,7 +484,7 @@ def test_attached_record_without_folders_falls_back_to_own(h, capsys):
     _, lines = h.run(capsys)
     ready = _by_event(lines, "ready")
     assert ready["data_dir"] == str(h.tmp_path / "data")
-    assert ready["config_dir"] == str(h.tmp_path / "config" / "evoscientist")
+    assert ready["config_dir"] == str(h.tmp_path / "config" / "metasci-scribe")
 
 
 def test_attached_legacy_stripped_backend_gets_the_drift_warning(h, capsys):
@@ -495,7 +495,7 @@ def test_attached_legacy_stripped_backend_gets_the_drift_warning(h, capsys):
     assert code == 0
     ready = _by_event(lines, "ready")
     assert ready["owned"] is False
-    assert any("EvoSci server stop" in w for w in ready["warnings"])
+    assert any("metasci-scribe server stop" in w for w in ready["warnings"])
 
 
 @pytest.mark.parametrize(
@@ -550,8 +550,8 @@ def test_invalid_port(h, capsys, bad_port):
 
 def test_bind_flags_are_config_overrides(h, capsys, monkeypatch):
     """The fingerprint compared with a running server's sees ``--host`` and
-    ``--port`` as ``EvoSci --host`` does."""
-    import EvoScientist.config as config_mod
+    ``--port`` as ``metasci-scribe --host`` does."""
+    import metasci_scribe.config as config_mod
 
     seen: list[dict[str, Any]] = []
     monkeypatch.setattr(
@@ -614,8 +614,8 @@ def test_run_folder_session_is_workspace_conflict_with_run_dir(h, capsys):
 def test_missing_chatgpt_sign_in_is_reported_before_starting(
     h, capsys, monkeypatch, problem
 ):
-    from EvoScientist.llm import chatgpt_oauth
-    from EvoScientist.llm.chatgpt_oauth import ChatGPTLogin
+    from metasci_scribe.llm import chatgpt_oauth
+    from metasci_scribe.llm.chatgpt_oauth import ChatGPTLogin
 
     monkeypatch.setattr(
         chatgpt_oauth,
@@ -636,7 +636,7 @@ def test_missing_chatgpt_sign_in_is_reported_before_starting(
 
 
 def test_ccproxy_failure(h, capsys, monkeypatch):
-    from EvoScientist import ccproxy_manager
+    from metasci_scribe import ccproxy_manager
 
     def _fail(_c):
         raise RuntimeError("no ccproxy")
@@ -651,7 +651,7 @@ def test_ccproxy_failure(h, capsys, monkeypatch):
 
 
 def test_start_failure_is_backend_start_failed_with_the_log(h, capsys, monkeypatch):
-    from EvoScientist.langgraph_dev import manager as lgm
+    from metasci_scribe.langgraph_dev import manager as lgm
 
     def _fail(**_kw):
         raise RuntimeError("langgraph dev exited immediately with code 1.")
@@ -665,7 +665,7 @@ def test_start_failure_is_backend_start_failed_with_the_log(h, capsys, monkeypat
 
 
 def test_unexpected_exception_is_internal_error_with_traceback(h, capsys, monkeypatch):
-    import EvoScientist.config as config_mod
+    import metasci_scribe.config as config_mod
 
     def _broken(_o=None):
         raise ValueError("config.yaml: bad indentation")
@@ -688,7 +688,7 @@ def test_internal_error_after_start_stops_the_backend_first(h, capsys, monkeypat
     def _broken():
         raise OSError("hint failed")
 
-    monkeypatch.setattr("EvoScientist.agent_shell.setup_hint", _broken)
+    monkeypatch.setattr("metasci_scribe.agent_shell.setup_hint", _broken)
     code, lines = h.run(capsys)
     assert code == 1
     assert lines[-1]["code"] == "internal_error"
@@ -806,7 +806,7 @@ def test_a_start_cut_after_the_spawn_stops_the_backend(
     h, capsys, monkeypatch, raised, terminal
 ):
     """No handle came back, so the stop uses the one the manager recorded."""
-    from EvoScientist.langgraph_dev import manager as lgm
+    from metasci_scribe.langgraph_dev import manager as lgm
 
     def _spawned_then_cut(**kwargs):
         h._start(**kwargs)
@@ -822,7 +822,7 @@ def test_a_start_cut_after_the_spawn_stops_the_backend(
 def test_stdin_closed_during_the_ccproxy_start_starts_no_backend(
     h, capsys, monkeypatch
 ):
-    from EvoScientist import ccproxy_manager
+    from metasci_scribe import ccproxy_manager
 
     def _start_ccproxy(_c):
         h.log.append("ccproxy start")
@@ -842,7 +842,7 @@ def test_stdin_closed_during_the_ccproxy_start_starts_no_backend(
 def test_stdin_closed_during_the_start_stops_without_ready(h, capsys, monkeypatch):
     """The app went away while the backend started: it is stopped as soon as
     the start returns, without the tunnel wait or ``ready``."""
-    from EvoScientist.langgraph_dev import manager as lgm
+    from metasci_scribe.langgraph_dev import manager as lgm
 
     def _start(**kwargs):
         proc = h._start(**kwargs)
@@ -861,7 +861,7 @@ def test_stdin_closed_during_the_start_stops_without_ready(h, capsys, monkeypatc
 
 
 def test_stdin_closed_before_the_decision_starts_nothing(h, capsys, monkeypatch):
-    from EvoScientist.langgraph_dev import manager as lgm
+    from metasci_scribe.langgraph_dev import manager as lgm
 
     def _occupied(*_a, **_k):
         _wait_for_stdin_watcher()
@@ -891,7 +891,7 @@ def test_a_long_stdin_line_without_newline_is_dropped(h, capsys, monkeypatch):
 def test_a_pipe_stdin_is_not_handed_on(h, capsys):
     """While the run watches the pipe, stdin itself is the null device, so a
     child the run starts does not inherit the pipe."""
-    from EvoScientist.setup.protocol import stdin_is_pipe
+    from metasci_scribe.setup.protocol import stdin_is_pipe
 
     code, _ = h.run(capsys)
     assert code == 0
@@ -900,7 +900,7 @@ def test_a_pipe_stdin_is_not_handed_on(h, capsys):
 
 def test_a_second_start_waits_for_the_lock(h, capsys, monkeypatch):
     """Decision and start wait until another start released the lock."""
-    from EvoScientist.langgraph_dev import manager as lgm
+    from metasci_scribe.langgraph_dev import manager as lgm
 
     holder = LockHolder()
     decided: list[bool] = []
@@ -932,7 +932,7 @@ def test_a_stop_while_waiting_for_the_lock_starts_nothing(h, capsys):
 
 
 def test_a_lock_held_too_long_is_backend_start_failed(h, capsys, monkeypatch):
-    from EvoScientist.langgraph_dev import manager as lgm
+    from metasci_scribe.langgraph_dev import manager as lgm
 
     monkeypatch.setattr(lgm, "_FILE_LOCK_TIMEOUT", 0.2)
     holder = LockHolder()
@@ -949,7 +949,7 @@ def test_a_lock_held_too_long_is_backend_start_failed(h, capsys, monkeypatch):
 def test_the_lock_is_released_after_the_start(h, capsys):
     from filelock import FileLock
 
-    from EvoScientist.langgraph_dev import manager as lgm
+    from metasci_scribe.langgraph_dev import manager as lgm
 
     h.run(capsys)
     lock = FileLock(str(lgm.RUNTIME.lock_file))
@@ -1032,7 +1032,7 @@ def test_end_of_a_socket_stdin_stops(h, capsys):
 
 
 def test_stdin_kinds(tmp_path, monkeypatch):
-    from EvoScientist.setup.protocol import stdin_is_pipe
+    from metasci_scribe.setup.protocol import stdin_is_pipe
 
     read, write = os.pipe()
     regular = tmp_path / "input.txt"
@@ -1091,9 +1091,9 @@ def _spawn_child(tmp_path, *, grandchild: bool = False):
     script.write_text(
         "import sys\n"
         "from types import SimpleNamespace\n"
-        "import EvoScientist.config as c\n"
-        "from EvoScientist import agent_shell\n"
-        "from EvoScientist.langgraph_dev import manager as m\n"
+        "import metasci_scribe.config as c\n"
+        "from metasci_scribe import agent_shell\n"
+        "from metasci_scribe.langgraph_dev import manager as m\n"
         "from pathlib import Path\n"
         "m.RUNTIME = m.LanggraphRuntimePaths.for_directory(Path(sys.argv[1]).parent / 'rt')\n"
         "cfg = SimpleNamespace(default_workdir=sys.argv[1], langgraph_dev_port=6174,\n"
@@ -1113,7 +1113,7 @@ def _spawn_child(tmp_path, *, grandchild: bool = False):
         "m.start_langgraph_dev = lambda **k: P()\n"
         "m.stop_langgraph_dev = lambda p=None: print('stopped backend', file=sys.stderr)\n"
         + (_GRANDCHILD if grandchild else "")
-        + "from EvoScientist.deploy import json_mode\n"
+        + "from metasci_scribe.deploy import json_mode\n"
         "sys.exit(json_mode.run_json(workdir=None, port=None, host=None,\n"
         "    tunnel=False, debug=False))\n"
     )

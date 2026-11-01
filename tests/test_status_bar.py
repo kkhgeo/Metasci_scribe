@@ -8,7 +8,7 @@ from typing import ClassVar
 import pytest
 from langchain_core.messages import HumanMessage
 
-from EvoScientist.cli.status_bar import (
+from metasci_scribe.cli.status_bar import (
     SessionStatusSnapshot,
     apply_assistant_text_to_snapshot,
     apply_user_text_to_snapshot,
@@ -20,7 +20,7 @@ from EvoScientist.cli.status_bar import (
     status_style_name,
     trim_status_text,
 )
-from EvoScientist.memory import worker_activity
+from metasci_scribe.memory import worker_activity
 from tests.fakes.common import FakeGraphGateway, FakeThreadStore, status_snapshot
 
 
@@ -253,11 +253,11 @@ async def test_build_session_status_snapshot_uses_fallback_window(monkeypatch):
         return 42_000
 
     monkeypatch.setattr(
-        "EvoScientist.cli.status_bar._get_default_chat_model",
+        "metasci_scribe.cli.status_bar._get_default_chat_model",
         lambda: _FakeModel(),
     )
     monkeypatch.setattr(
-        "EvoScientist.cli.status_bar.count_tokens_approximately",
+        "metasci_scribe.cli.status_bar.count_tokens_approximately",
         _fake_count,
     )
 
@@ -286,7 +286,7 @@ def test_apply_assistant_text_to_snapshot_updates_context(monkeypatch):
     )
 
     monkeypatch.setattr(
-        "EvoScientist.cli.status_bar.estimate_message_tokens",
+        "metasci_scribe.cli.status_bar.estimate_message_tokens",
         lambda text, message_type="ai": 550,
     )
 
@@ -307,7 +307,7 @@ def test_apply_user_text_to_snapshot_updates_context(monkeypatch):
     )
 
     monkeypatch.setattr(
-        "EvoScientist.cli.status_bar.estimate_message_tokens",
+        "metasci_scribe.cli.status_bar.estimate_message_tokens",
         lambda text, message_type="human": 320,
     )
 
@@ -324,7 +324,7 @@ def test_make_usage_status_snapshot_marks_usage_source(monkeypatch):
         profile: ClassVar[dict[str, object]] = {"max_input_tokens": 128_000}
 
     monkeypatch.setattr(
-        "EvoScientist.cli.status_bar._get_default_chat_model",
+        "metasci_scribe.cli.status_bar._get_default_chat_model",
         lambda: _FakeModel(),
     )
 
@@ -342,7 +342,7 @@ class TestRubricBadge:
     def test_badge_is_a_strong_fragment_on_wide_bars(self):
         from datetime import datetime
 
-        from EvoScientist.cli.status_bar import build_status_fragments
+        from metasci_scribe.cli.status_bar import build_status_fragments
 
         frags = build_status_fragments(
             status_snapshot(), datetime.now(), 120, rubric_badge="on+next"
@@ -354,7 +354,7 @@ class TestRubricBadge:
     def test_badge_is_left_out_of_narrow_bars(self):
         from datetime import datetime
 
-        from EvoScientist.cli.status_bar import build_status_fragments
+        from metasci_scribe.cli.status_bar import build_status_fragments
 
         narrow = build_status_fragments(
             status_snapshot(), datetime.now(), 60, rubric_badge="on"
@@ -364,7 +364,7 @@ class TestRubricBadge:
     def test_rich_text_carries_the_badge(self):
         from datetime import datetime
 
-        from EvoScientist.cli.status_bar import build_status_text
+        from metasci_scribe.cli.status_bar import build_status_text
 
         text = build_status_text(
             status_snapshot(), datetime.now(), 120, rubric_badge="next"

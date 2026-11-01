@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from EvoScientist.commands.channel_ui import ChannelCommandUI
-from EvoScientist.gateway import ThreadStore
+from metasci_scribe.commands.channel_ui import ChannelCommandUI
+from metasci_scribe.gateway import ThreadStore
 from tests.fakes.common import FakeGraphGateway, FakeThreadStore
 
 
@@ -39,9 +39,9 @@ async def _run_resume(ui, thread_id: str, workspace_dir: str):
         return task
 
     with (
-        patch("EvoScientist.cli.channel._bus_loop", new=loop),
+        patch("metasci_scribe.cli.channel._bus_loop", new=loop),
         patch(
-            "EvoScientist.commands.channel_ui.asyncio.run_coroutine_threadsafe",
+            "metasci_scribe.commands.channel_ui.asyncio.run_coroutine_threadsafe",
             side_effect=_schedule,
         ),
     ):
@@ -80,7 +80,7 @@ async def test_handle_session_resume_sends_history_back_to_channel_without_local
     assert "Resumed session: thread-42" in text
     assert "Conversation history:" in text
     assert "User: How does this work?" in text
-    assert "EvoScientist: Here is the saved answer." in text
+    assert "Metasci Scribe: Here is the saved answer." in text
 
 
 async def test_handle_session_resume_propagates_callback_abort_without_history():
@@ -148,7 +148,7 @@ class TestSentToChannelFlag:
     async def test_flush_of_empty_buffer_keeps_flag_false(self, monkeypatch):
         ui, _ = _make_ui(thread_store=FakeThreadStore())
         loop = asyncio.get_running_loop()
-        monkeypatch.setattr("EvoScientist.cli.channel._bus_loop", loop)
+        monkeypatch.setattr("metasci_scribe.cli.channel._bus_loop", loop)
         await ui.flush()
         assert ui.sent_to_channel is False
 
@@ -156,7 +156,7 @@ class TestSentToChannelFlag:
         bus = SimpleNamespace(publish_outbound=AsyncMock())
         ui, _ = _make_ui(thread_store=FakeThreadStore(), bus_ref=bus)
         loop = asyncio.get_running_loop()
-        monkeypatch.setattr("EvoScientist.cli.channel._bus_loop", loop)
+        monkeypatch.setattr("metasci_scribe.cli.channel._bus_loop", loop)
         ui.append_system("hello")
         await ui.flush()
         await asyncio.sleep(0)

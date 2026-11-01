@@ -9,19 +9,17 @@ from unittest.mock import patch
 
 from starlette.testclient import TestClient
 
-from EvoScientist.config import EvoScientistConfig
-from EvoScientist.langgraph_dev.http import app
-from EvoScientist.paths import Workspace
+from metasci_scribe.config import ScribeConfig
+from metasci_scribe.langgraph_dev.http import app
+from metasci_scribe.paths import Workspace
 
 client = TestClient(app, base_url="http://localhost")
 
 
 def test_get_models_returns_entries_and_default():
-    mock_cfg = EvoScientistConfig(
-        model="claude-sonnet-4-6", provider="custom-anthropic"
-    )
+    mock_cfg = ScribeConfig(model="claude-sonnet-4-6", provider="custom-anthropic")
     with patch(
-        "EvoScientist.langgraph_dev.http.get_effective_config", return_value=mock_cfg
+        "metasci_scribe.langgraph_dev.http.get_effective_config", return_value=mock_cfg
     ):
         resp = client.get("/api/models")
     assert resp.status_code == 200
@@ -53,15 +51,15 @@ def test_entries_preserve_registry_order():
     registry order rather than implicitly depending on the ambient
     deploy config.
     """
-    from EvoScientist.llm.models import list_models_by_provider
+    from metasci_scribe.llm.models import list_models_by_provider
 
     expected = [
         {"name": n, "model_id": m, "provider": p}
         for n, m, p in list_models_by_provider()
     ]
-    mock_cfg = EvoScientistConfig()
+    mock_cfg = ScribeConfig()
     with patch(
-        "EvoScientist.langgraph_dev.http.get_effective_config", return_value=mock_cfg
+        "metasci_scribe.langgraph_dev.http.get_effective_config", return_value=mock_cfg
     ):
         resp = client.get("/api/models")
     assert resp.json()["entries"] == expected
@@ -72,9 +70,9 @@ def test_default_passes_through_arbitrary_config_pair():
     registry (typo, retired model), still report it as default — the
     picker labels it as the active selection regardless.
     """
-    mock_cfg = EvoScientistConfig(model="some-retired-name", provider="some-provider")
+    mock_cfg = ScribeConfig(model="some-retired-name", provider="some-provider")
     with patch(
-        "EvoScientist.langgraph_dev.http.get_effective_config", return_value=mock_cfg
+        "metasci_scribe.langgraph_dev.http.get_effective_config", return_value=mock_cfg
     ):
         resp = client.get("/api/models")
     assert resp.json()["default"] == {
@@ -88,7 +86,7 @@ def test_ollama_models_appended_when_base_url_configured():
     locally-pulled Ollama models are appended after the static registry
     as ``provider: "ollama"`` entries.
     """
-    mock_cfg = EvoScientistConfig(
+    mock_cfg = ScribeConfig(
         model="claude-sonnet-4-6",
         provider="custom-anthropic",
         ollama_base_url="http://localhost:11434",
@@ -99,11 +97,11 @@ def test_ollama_models_appended_when_base_url_configured():
 
     with (
         patch(
-            "EvoScientist.langgraph_dev.http.get_effective_config",
+            "metasci_scribe.langgraph_dev.http.get_effective_config",
             return_value=mock_cfg,
         ),
         patch(
-            "EvoScientist.llm.ollama_discovery.discover_ollama_models",
+            "metasci_scribe.llm.ollama_discovery.discover_ollama_models",
             new=fake_discover,
         ),
     ):
@@ -111,7 +109,7 @@ def test_ollama_models_appended_when_base_url_configured():
 
     # Assert the response is the static registry followed by the discovered
     # Ollama suffix — robust to future static Ollama entries in the registry.
-    from EvoScientist.llm.models import list_models_by_provider
+    from metasci_scribe.llm.models import list_models_by_provider
 
     static_entries = [
         {"name": n, "model_id": m, "provider": p}
@@ -133,9 +131,7 @@ def test_ollama_discovery_skipped_when_base_url_absent():
     matches the ``/model`` picker's gating. The probe function should never
     be called in that case.
     """
-    mock_cfg = EvoScientistConfig(
-        model="claude-sonnet-4-6", provider="custom-anthropic"
-    )
+    mock_cfg = ScribeConfig(model="claude-sonnet-4-6", provider="custom-anthropic")
     calls: list[str | None] = []
 
     async def spy_discover(base_url, *, timeout):
@@ -144,11 +140,11 @@ def test_ollama_discovery_skipped_when_base_url_absent():
 
     with (
         patch(
-            "EvoScientist.langgraph_dev.http.get_effective_config",
+            "metasci_scribe.langgraph_dev.http.get_effective_config",
             return_value=mock_cfg,
         ),
         patch(
-            "EvoScientist.llm.ollama_discovery.discover_ollama_models",
+            "metasci_scribe.llm.ollama_discovery.discover_ollama_models",
             new=spy_discover,
         ),
     ):
@@ -156,7 +152,7 @@ def test_ollama_discovery_skipped_when_base_url_absent():
 
     assert calls == []
     # Response is exactly the static registry — no Ollama additions whatsoever.
-    from EvoScientist.llm.models import list_models_by_provider
+    from metasci_scribe.llm.models import list_models_by_provider
 
     assert body["entries"] == [
         {"name": n, "model_id": m, "provider": p}
@@ -178,7 +174,7 @@ def _expert_info(
     """Build a SkillInfo for an expert skill (agent-teams v1)."""
     from pathlib import Path
 
-    from EvoScientist.tools.skills_manager import SkillInfo
+    from metasci_scribe.tools.skills_manager import SkillInfo
 
     return SkillInfo(
         name=name,
@@ -198,7 +194,7 @@ def test_get_teams_returns_installed_expert_skills():
         _expert_info("expert-b", description="Second expert"),
     ]
     with patch(
-        "EvoScientist.tools.skills_manager.list_expert_skills",
+        "metasci_scribe.tools.skills_manager.list_expert_skills",
         return_value=experts,
     ):
         resp = client.get("/api/teams")
@@ -214,7 +210,7 @@ def test_get_teams_omits_backend_implementation_fields():
     onto the gallery endpoint — those are backend-only."""
     experts = [_expert_info("expert-a")]
     with patch(
-        "EvoScientist.tools.skills_manager.list_expert_skills",
+        "metasci_scribe.tools.skills_manager.list_expert_skills",
         return_value=experts,
     ):
         body = client.get("/api/teams").json()
@@ -247,7 +243,7 @@ def test_get_teams_projects_optional_gallery_metadata_when_present():
         ),
     ]
     with patch(
-        "EvoScientist.tools.skills_manager.list_expert_skills",
+        "metasci_scribe.tools.skills_manager.list_expert_skills",
         return_value=experts,
     ):
         body = client.get("/api/teams").json()
@@ -264,7 +260,7 @@ def test_get_teams_omits_optional_fields_when_absent():
     only the minimum (name, description, type: expert)."""
     experts = [_expert_info("minimal-expert")]  # no byline / tags / avatar
     with patch(
-        "EvoScientist.tools.skills_manager.list_expert_skills",
+        "metasci_scribe.tools.skills_manager.list_expert_skills",
         return_value=experts,
     ):
         body = client.get("/api/teams").json()
@@ -274,7 +270,7 @@ def test_get_teams_omits_optional_fields_when_absent():
 
 def test_get_teams_returns_empty_list_when_no_experts_installed():
     with patch(
-        "EvoScientist.tools.skills_manager.list_expert_skills",
+        "metasci_scribe.tools.skills_manager.list_expert_skills",
         return_value=[],
     ):
         body = client.get("/api/teams").json()
@@ -286,7 +282,7 @@ def test_get_teams_calls_loader_with_include_system_true(monkeypatch, tmp_path):
     include the builtin tier or the gallery will be empty on a fresh
     workspace with no user-installed experts, and it must look in the
     server's workspace."""
-    monkeypatch.setenv("EVOSCIENTIST_WORKSPACE_DIR", str(tmp_path))
+    monkeypatch.setenv("METASCI_SCRIBE_WORKSPACE_DIR", str(tmp_path))
     calls = []
 
     def spy(include_system=False, *, workspace):
@@ -294,7 +290,7 @@ def test_get_teams_calls_loader_with_include_system_true(monkeypatch, tmp_path):
         return []
 
     with patch(
-        "EvoScientist.tools.skills_manager.list_expert_skills",
+        "metasci_scribe.tools.skills_manager.list_expert_skills",
         new=spy,
     ):
         client.get("/api/teams")
@@ -309,8 +305,8 @@ def test_get_teams_calls_loader_with_include_system_true(monkeypatch, tmp_path):
 def test_get_workspace_returns_the_served_folder_key(monkeypatch, tmp_path):
     (tmp_path / "real").mkdir()
     (tmp_path / "link").symlink_to(tmp_path / "real")
-    monkeypatch.setenv("EVOSCIENTIST_WORKSPACE_DIR", str(tmp_path / "link"))
-    monkeypatch.delenv("EVOSCIENTIST_RUN_DIR", raising=False)
+    monkeypatch.setenv("METASCI_SCRIBE_WORKSPACE_DIR", str(tmp_path / "link"))
+    monkeypatch.delenv("METASCI_SCRIBE_RUN_DIR", raising=False)
 
     resp = client.get("/api/workspace")
 
@@ -325,8 +321,8 @@ def test_get_workspace_returns_the_run_folder_of_a_run_mode_server(
 ):
     run_dir = tmp_path / "runs" / "r1"
     run_dir.mkdir(parents=True)
-    monkeypatch.setenv("EVOSCIENTIST_WORKSPACE_DIR", str(tmp_path))
-    monkeypatch.setenv("EVOSCIENTIST_RUN_DIR", str(run_dir))
+    monkeypatch.setenv("METASCI_SCRIBE_WORKSPACE_DIR", str(tmp_path))
+    monkeypatch.setenv("METASCI_SCRIBE_RUN_DIR", str(run_dir))
 
     resp = client.get("/api/workspace")
 
@@ -349,7 +345,7 @@ def test_get_workspace_refuses_a_foreign_origin():
 
 def test_get_bg_process_status_returns_registry_status(monkeypatch):
     monkeypatch.setattr(
-        "EvoScientist.background.poll_status", lambda process_id: "success"
+        "metasci_scribe.background.poll_status", lambda process_id: "success"
     )
     resp = client.get("/api/bg_process_status", params={"process_id": "p1"})
     assert resp.status_code == 200
@@ -370,7 +366,7 @@ def test_get_bg_process_status_unknown_for_missing_process():
 
 def test_get_bg_processes_running_returns_id_and_name(monkeypatch):
     monkeypatch.setattr(
-        "EvoScientist.background.running_records",
+        "metasci_scribe.background.running_records",
         lambda: [
             {"process_id": "p1", "name": "train", "status": "running", "pid": 10},
             {"process_id": "p2", "name": "eval", "status": "running", "pid": 11},
@@ -387,7 +383,7 @@ def test_get_bg_processes_running_returns_id_and_name(monkeypatch):
 
 
 def test_get_bg_processes_running_empty_when_none(monkeypatch):
-    monkeypatch.setattr("EvoScientist.background.running_records", lambda: [])
+    monkeypatch.setattr("metasci_scribe.background.running_records", lambda: [])
     resp = client.get("/api/bg_processes/running")
     assert resp.status_code == 200
     assert resp.json() == {"running": []}
@@ -408,12 +404,12 @@ def _shell_req(command: str) -> dict:
 def test_post_policy_prompts_ordinary_command_when_attended(monkeypatch):
     # Pin the session-effective config so the route does not answer against
     # whatever the running machine happens to have (e.g. auto_approve: true).
-    import EvoScientist.EvoScientist as evo_mod
+    import metasci_scribe.agent as evo_mod
 
     monkeypatch.setattr(
         evo_mod,
         "_ensure_config",
-        lambda config=None: EvoScientistConfig(
+        lambda config=None: ScribeConfig(
             auto_approve=False, dangerous_mode=False, shell_allow_list=""
         ),
     )
@@ -436,7 +432,7 @@ def test_post_policy_approves_non_shell_tool():
 def test_post_policy_rejects_dangerous_under_server_auto_approve(monkeypatch):
     from types import SimpleNamespace
 
-    import EvoScientist.EvoScientist as evo_mod
+    import metasci_scribe.agent as evo_mod
 
     monkeypatch.setattr(
         evo_mod,
@@ -471,7 +467,7 @@ def test_post_policy_resolves_off_the_event_loop(monkeypatch):
     runs with no running loop."""
     import asyncio
 
-    import EvoScientist.channels.interaction as interaction_mod
+    import metasci_scribe.channels.interaction as interaction_mod
 
     on_loop_thread = []
 

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from EvoScientist.cli import channel as channel_cli
+from metasci_scribe.cli import channel as channel_cli
 
 
 @pytest.fixture(autouse=True)
@@ -24,7 +24,7 @@ def _restore_channel_globals():
 
 
 def test_auto_start_channel_passes_send_thinking(monkeypatch, tmp_path):
-    from EvoScientist.commands.base import ChannelRuntime
+    from metasci_scribe.commands.base import ChannelRuntime
 
     captured = {}
 
@@ -59,7 +59,7 @@ def test_auto_start_channel_passes_send_thinking(monkeypatch, tmp_path):
 
 
 def test_auto_start_channel_reports_startup_failure(monkeypatch, tmp_path):
-    from EvoScientist.commands.base import ChannelRuntime
+    from metasci_scribe.commands.base import ChannelRuntime
 
     rows = [("telegram", False, "failed: dependency missing")]
     rendered = []
@@ -86,8 +86,8 @@ def test_auto_start_channel_reports_startup_failure(monkeypatch, tmp_path):
 
 
 def test_auto_start_channel_binds_runtime_while_starting(monkeypatch, tmp_path):
-    from EvoScientist.channels.channel_manager import CHANNEL_STARTUP_PENDING_DETAIL
-    from EvoScientist.commands.base import ChannelRuntime
+    from metasci_scribe.channels.channel_manager import CHANNEL_STARTUP_PENDING_DETAIL
+    from metasci_scribe.commands.base import ChannelRuntime
 
     rows = [("telegram", False, CHANNEL_STARTUP_PENDING_DETAIL)]
     monkeypatch.setattr(

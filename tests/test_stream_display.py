@@ -5,12 +5,12 @@ from typing import Any, cast
 from rich.console import Console
 from rich.markdown import Markdown
 
-from EvoScientist.stream.display import (
+from metasci_scribe.stream.display import (
     _fix_markdown_heading_spacing,
     create_streaming_display,
     resolve_final_status_footer,
 )
-from EvoScientist.stream.state import SubAgentState
+from metasci_scribe.stream.state import SubAgentState
 
 
 def _render_text(renderable) -> str:
@@ -579,7 +579,7 @@ class TestAssistantMessageBufferContract:
     def _make_widget(self, initial: str = ""):
         from unittest.mock import MagicMock
 
-        from EvoScientist.cli.widgets.assistant_message import AssistantMessage
+        from metasci_scribe.cli.widgets.assistant_message import AssistantMessage
 
         msg = AssistantMessage(initial_content=initial)
         fake_md = MagicMock()

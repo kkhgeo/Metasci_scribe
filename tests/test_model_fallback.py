@@ -16,8 +16,8 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.exceptions import ContextOverflowError
 from langchain_core.messages import AIMessage, HumanMessage
 
-from EvoScientist.middleware.events import NoOpSink
-from EvoScientist.middleware.model_fallback import (
+from metasci_scribe.middleware.events import NoOpSink
+from metasci_scribe.middleware.model_fallback import (
     _guard_and_fallback,
     _guard_and_fallback_sync,
     _is_non_fallbackable,
@@ -27,7 +27,7 @@ from EvoScientist.middleware.model_fallback import (
     add_fallback,
     clear_fallbacks,
 )
-from EvoScientist.stream.sink import SessionEventSink
+from metasci_scribe.stream.sink import SessionEventSink
 
 # ── Helpers ──────────────────────────────────────────────────────
 
@@ -182,7 +182,7 @@ class TestTryFallbacks:
         req = _fake_request()
         invoke = AsyncMock(return_value=AI_RESPONSE)
 
-        with patch("EvoScientist.llm.models.get_chat_model") as mock_gcm:
+        with patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm:
             mock_gcm.return_value = MagicMock()
             result = await _try_fallbacks(req, invoke, Exception("503 boom"), _SINK)
 
@@ -205,7 +205,7 @@ class TestTryFallbacks:
                 raise Exception("429 rate limited")
             return AI_RESPONSE
 
-        with patch("EvoScientist.llm.models.get_chat_model") as mock_gcm:
+        with patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm:
             mock_gcm.return_value = MagicMock()
             result = await _try_fallbacks(req, _invoke, Exception("503 boom"), _SINK)
 
@@ -229,7 +229,7 @@ class TestTryFallbacks:
                 raise Exception("500 from fb-a")
             raise last_error
 
-        with patch("EvoScientist.llm.models.get_chat_model") as mock_gcm:
+        with patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm:
             mock_gcm.return_value = MagicMock()
             with pytest.raises(Exception, match="429 from fb-b") as exc_info:
                 await _try_fallbacks(req, _invoke, Exception("503 primary"), _SINK)
@@ -238,7 +238,7 @@ class TestTryFallbacks:
 
     async def test_an_exhausted_chain_lists_every_models_failure(self):
         """The error that ends the chain carries each model's failure, primary first."""
-        from EvoScientist.middleware.model_fallback import chain_failures
+        from metasci_scribe.middleware.model_fallback import chain_failures
 
         add_fallback("fb-a", "prov-a")
         add_fallback("fb-b", "prov-b")
@@ -248,7 +248,7 @@ class TestTryFallbacks:
         async def _invoke(r):
             raise next(errors)
 
-        with patch("EvoScientist.llm.models.get_chat_model") as mock_gcm:
+        with patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm:
             mock_gcm.return_value = MagicMock()
             with pytest.raises(Exception, match="502 boom") as exc_info:
                 await _try_fallbacks(_fake_request(), _invoke, primary, _SINK)
@@ -263,7 +263,7 @@ class TestTryFallbacks:
         """A fallback entry whose model cannot be constructed (a missing base
         URL, say) fails as itself: not as an unbound name, and not as the
         model of the entry before it."""
-        from EvoScientist.middleware.model_fallback import chain_failures
+        from metasci_scribe.middleware.model_fallback import chain_failures
 
         for index in range(built_before):
             add_fallback(f"fb-{index}", "prov")
@@ -300,9 +300,9 @@ class TestTryFallbacks:
             return None
 
         with (
-            patch("EvoScientist.llm.models.get_chat_model", side_effect=_build),
+            patch("metasci_scribe.llm.models.get_chat_model", side_effect=_build),
             patch(
-                "EvoScientist.middleware.error_normalization._normalize",
+                "metasci_scribe.middleware.error_normalization._normalize",
                 side_effect=_normalize,
             ),
             pytest.raises(ValueError, match="base URL") as exc_info,
@@ -325,7 +325,7 @@ class TestTryFallbacks:
     async def test_an_aborted_chain_lists_the_failures_so_far(self, stopping, listed):
         """A fallback that stops the chain ends it, and the primary's failure
         still travels with it; an overflow goes out alone, to be compacted."""
-        from EvoScientist.middleware.model_fallback import chain_failures
+        from metasci_scribe.middleware.model_fallback import chain_failures
 
         add_fallback("fb-a", "prov-a")
         add_fallback("fb-b", "prov-b")
@@ -335,7 +335,7 @@ class TestTryFallbacks:
         async def _invoke(r):
             raise stopped
 
-        with patch("EvoScientist.llm.models.get_chat_model") as mock_gcm:
+        with patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm:
             mock_gcm.return_value = MagicMock()
             with pytest.raises(Exception, match="400") as exc_info:
                 await _try_fallbacks(_fake_request(), _invoke, primary, _SINK)
@@ -345,7 +345,7 @@ class TestTryFallbacks:
     def test_the_list_is_read_through_explicit_wrappers_only(self):
         """An outer layer that re-raises ``from`` the chain's error keeps the
         list; an error merely raised while handling it has none."""
-        from EvoScientist.middleware.model_fallback import chain_failures
+        from metasci_scribe.middleware.model_fallback import chain_failures
 
         listed = RuntimeError("chain exhausted")
         listed.chain_failures = (RuntimeError("primary"), RuntimeError("fallback"))
@@ -384,7 +384,7 @@ class TestTryFallbacks:
         async def _invoke(r):
             raise Exception("400: context_length_exceeded")
 
-        with patch("EvoScientist.llm.models.get_chat_model") as mock_gcm:
+        with patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm:
             mock_gcm.return_value = MagicMock()
             with pytest.raises(Exception, match="context_length_exceeded"):
                 await _try_fallbacks(req, _invoke, Exception("503 primary"), _SINK)
@@ -400,7 +400,7 @@ class TestTryFallbacks:
         Prevents a ``deepseek → moonshot`` chain from surfacing as
         ``provider: deepseek`` after moonshot exhausts its quota.
         """
-        from EvoScientist.llm.errors import ProviderStreamError
+        from metasci_scribe.llm.errors import ProviderStreamError
 
         add_fallback("moonshot-model", "moonshot")
         # Original request's model is openai-shape. Fallback's model
@@ -430,7 +430,7 @@ class TestTryFallbacks:
         async def _invoke(_r):
             raise Exception("429 quota exceeded")
 
-        with patch("EvoScientist.llm.models.get_chat_model") as mock_gcm:
+        with patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm:
             mock_gcm.return_value = fallback_model
             with pytest.raises(ProviderStreamError) as exc_info:
                 await _try_fallbacks(
@@ -475,7 +475,7 @@ class TestTryFallbacks:
         async def _invoke(_r):
             raise raised
 
-        with patch("EvoScientist.llm.models.get_chat_model") as mock_gcm:
+        with patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm:
             mock_gcm.return_value = model
             with pytest.raises(InvalidUpdateError) as exc_info:
                 await _try_fallbacks(
@@ -552,7 +552,7 @@ class TestGuardAndFallback:
         req = _fake_request()
         invoke = AsyncMock(return_value=AI_RESPONSE)
 
-        with patch("EvoScientist.llm.models.get_chat_model") as mock_gcm:
+        with patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm:
             mock_gcm.return_value = MagicMock()
             result = await _guard_and_fallback(
                 Exception("503 overloaded"), req, invoke, _SINK
@@ -567,7 +567,7 @@ class TestGuardAndFallback:
         req = _fake_request()
         invoke = AsyncMock(return_value=AI_RESPONSE)
 
-        with patch("EvoScientist.llm.models.get_chat_model") as mock_gcm:
+        with patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm:
             mock_gcm.return_value = MagicMock()
             result = await _guard_and_fallback(
                 Exception("400 Bad Request: invalid_api_key"), req, invoke, _SINK
@@ -585,7 +585,7 @@ class TestSynchronousFallback:
         req = _fake_request()
         invoke = MagicMock(return_value=AI_RESPONSE)
 
-        with patch("EvoScientist.llm.models.get_chat_model") as mock_gcm:
+        with patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm:
             mock_gcm.return_value = MagicMock()
             result = _try_fallbacks_sync(req, invoke, Exception("503 boom"), _SINK)
 
@@ -593,13 +593,13 @@ class TestSynchronousFallback:
         invoke.assert_called_once()
 
     def test_an_exhausted_chain_lists_every_models_failure(self):
-        from EvoScientist.middleware.model_fallback import chain_failures
+        from metasci_scribe.middleware.model_fallback import chain_failures
 
         add_fallback("fb", "prov")
         primary, last = Exception("503 boom"), Exception("401 no")
         invoke = MagicMock(side_effect=last)
 
-        with patch("EvoScientist.llm.models.get_chat_model") as mock_gcm:
+        with patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm:
             mock_gcm.return_value = MagicMock()
             with pytest.raises(Exception, match="401 no") as exc_info:
                 _try_fallbacks_sync(_fake_request(), invoke, primary, _SINK)
@@ -608,7 +608,7 @@ class TestSynchronousFallback:
 
     @pytest.mark.parametrize("built_before", [0, 1])
     def test_an_entry_that_cannot_be_built_is_a_failure_of_its_own(self, built_before):
-        from EvoScientist.middleware.model_fallback import chain_failures
+        from metasci_scribe.middleware.model_fallback import chain_failures
 
         for index in range(built_before):
             add_fallback(f"fb-{index}", "prov")
@@ -628,9 +628,9 @@ class TestSynchronousFallback:
             return None
 
         with (
-            patch("EvoScientist.llm.models.get_chat_model", side_effect=_build),
+            patch("metasci_scribe.llm.models.get_chat_model", side_effect=_build),
             patch(
-                "EvoScientist.middleware.error_normalization._normalize",
+                "metasci_scribe.middleware.error_normalization._normalize",
                 side_effect=_normalize,
             ),
             pytest.raises(ValueError, match="base URL") as exc_info,
@@ -652,7 +652,7 @@ class TestSynchronousFallback:
         ids=["a rejected request", "a context overflow"],
     )
     def test_an_aborted_chain_lists_the_failures_so_far(self, stopping, listed):
-        from EvoScientist.middleware.model_fallback import chain_failures
+        from metasci_scribe.middleware.model_fallback import chain_failures
 
         add_fallback("fb-a", "prov-a")
         add_fallback("fb-b", "prov-b")
@@ -660,7 +660,7 @@ class TestSynchronousFallback:
         stopped = Exception(stopping)
         invoke = MagicMock(side_effect=stopped)
 
-        with patch("EvoScientist.llm.models.get_chat_model") as mock_gcm:
+        with patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm:
             mock_gcm.return_value = MagicMock()
             with pytest.raises(Exception, match="400") as exc_info:
                 _try_fallbacks_sync(_fake_request(), invoke, primary, _SINK)
@@ -681,14 +681,14 @@ class TestSynchronousFallback:
         invoke.assert_not_called()
 
     def test_middleware_sync_entrypoint_uses_native_traversal(self):
-        from EvoScientist.middleware.model_fallback import ModelFallbackMiddleware
+        from metasci_scribe.middleware.model_fallback import ModelFallbackMiddleware
 
         add_fallback("fb", "prov")
         req = _fake_request()
         response = AI_RESPONSE
         handler = MagicMock(side_effect=[Exception("503 primary"), response])
 
-        with patch("EvoScientist.llm.models.get_chat_model") as mock_gcm:
+        with patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm:
             mock_gcm.return_value = MagicMock()
             result = ModelFallbackMiddleware().wrap_model_call(req, handler)
 
@@ -696,14 +696,14 @@ class TestSynchronousFallback:
         assert handler.call_count == 2
 
     def test_truncated_primary_response_uses_fallback(self):
-        from EvoScientist.middleware.model_fallback import ModelFallbackMiddleware
+        from metasci_scribe.middleware.model_fallback import ModelFallbackMiddleware
 
         add_fallback("fb", "prov")
         req = _fake_request()
         response = _successful_response()
         handler = MagicMock(side_effect=[_truncated_response(), response])
 
-        with patch("EvoScientist.llm.models.get_chat_model") as mock_gcm:
+        with patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm:
             mock_gcm.return_value = MagicMock()
             result = ModelFallbackMiddleware().wrap_model_call(req, handler)
 
@@ -715,14 +715,14 @@ class TestTruncatedResponseFallback:
     """Empty truncated model results must participate in the fallback chain."""
 
     async def test_truncated_primary_response_uses_fallback(self):
-        from EvoScientist.middleware.model_fallback import ModelFallbackMiddleware
+        from metasci_scribe.middleware.model_fallback import ModelFallbackMiddleware
 
         add_fallback("fb", "prov")
         req = _fake_request()
         response = _successful_response()
         handler = AsyncMock(side_effect=[_truncated_response(), response])
 
-        with patch("EvoScientist.llm.models.get_chat_model") as mock_gcm:
+        with patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm:
             mock_gcm.return_value = MagicMock()
             result = await ModelFallbackMiddleware().awrap_model_call(req, handler)
 
@@ -730,7 +730,7 @@ class TestTruncatedResponseFallback:
         assert handler.await_count == 2
 
     async def test_truncated_fallback_continues_to_next_model(self):
-        from EvoScientist.middleware.model_fallback import ModelFallbackMiddleware
+        from metasci_scribe.middleware.model_fallback import ModelFallbackMiddleware
 
         add_fallback("fb-a", "prov-a")
         add_fallback("fb-b", "prov-b")
@@ -740,7 +740,7 @@ class TestTruncatedResponseFallback:
             side_effect=[_truncated_response(), _truncated_response(), response]
         )
 
-        with patch("EvoScientist.llm.models.get_chat_model") as mock_gcm:
+        with patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm:
             mock_gcm.return_value = MagicMock()
             result = await ModelFallbackMiddleware().awrap_model_call(req, handler)
 
@@ -749,11 +749,11 @@ class TestTruncatedResponseFallback:
         assert mock_gcm.call_count == 2
 
     async def test_exhausted_truncated_fallbacks_use_last_provider(self):
-        from EvoScientist.llm.errors import ProviderStreamError
-        from EvoScientist.middleware.error_normalization import (
+        from metasci_scribe.llm.errors import ProviderStreamError
+        from metasci_scribe.middleware.error_normalization import (
             ModelOutputTruncatedError,
         )
-        from EvoScientist.middleware.model_fallback import ModelFallbackMiddleware
+        from metasci_scribe.middleware.model_fallback import ModelFallbackMiddleware
 
         def _make_openai_model(base_url=None):
             cls = type(
@@ -774,7 +774,7 @@ class TestTruncatedResponseFallback:
         )
         handler = AsyncMock(return_value=_truncated_response())
 
-        with patch("EvoScientist.llm.models.get_chat_model") as mock_gcm:
+        with patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm:
             mock_gcm.return_value = fallback_model
             with pytest.raises(ProviderStreamError) as exc_info:
                 await ModelFallbackMiddleware().awrap_model_call(req, handler)
@@ -810,7 +810,7 @@ class TestUiEmit:
         invoke = AsyncMock(return_value=AI_RESPONSE)
         sink, messages = self._capturing_sink()
 
-        with patch("EvoScientist.llm.models.get_chat_model") as mock_gcm:
+        with patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm:
             mock_gcm.return_value = MagicMock()
             await _try_fallbacks(req, invoke, Exception("503 down"), sink)
 
@@ -826,8 +826,8 @@ class TestUiEmit:
         sink = SessionEventSink()
 
         with (
-            patch("EvoScientist.llm.models.get_chat_model") as mock_gcm,
-            patch("EvoScientist.stream.sink.console.print") as mock_print,
+            patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm,
+            patch("metasci_scribe.stream.sink.console.print") as mock_print,
         ):
             mock_gcm.return_value = MagicMock()
             await _try_fallbacks(req, invoke, Exception("503 down"), sink)
@@ -849,8 +849,8 @@ class TestUiEmit:
         )
 
         with (
-            patch("EvoScientist.llm.models.get_chat_model") as mock_gcm,
-            patch("EvoScientist.stream.sink.console.print") as mock_print,
+            patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm,
+            patch("metasci_scribe.stream.sink.console.print") as mock_print,
         ):
             mock_gcm.return_value = MagicMock()
             result = await _try_fallbacks(req, invoke, Exception("503 down"), sink)
@@ -866,7 +866,7 @@ class TestUiEmit:
     def test_noopsink_keeps_fallback_notices_silent(self):
         sink = NoOpSink()
 
-        with patch("EvoScientist.stream.sink.console.print") as mock_print:
+        with patch("metasci_scribe.stream.sink.console.print") as mock_print:
             sink.emit_fallback_notice("hidden")
 
         mock_print.assert_not_called()
@@ -900,14 +900,14 @@ class TestLazyInitialization:
     """
 
     def test_first_read_loads_from_config(self):
-        from EvoScientist.middleware.model_fallback import (
+        from metasci_scribe.middleware.model_fallback import (
             _reset_chain_initialization,
             get_fallback_chain,
         )
 
         cfg = SimpleNamespace(model_fallbacks="cfg-a:prov-a, cfg-b:prov-b")
         with patch(
-            "EvoScientist.config.settings.get_effective_config", return_value=cfg
+            "metasci_scribe.config.settings.get_effective_config", return_value=cfg
         ):
             _reset_chain_initialization()
             assert get_fallback_chain() == [
@@ -916,14 +916,14 @@ class TestLazyInitialization:
             ]
 
     def test_add_fallback_extends_config_base(self):
-        from EvoScientist.middleware.model_fallback import (
+        from metasci_scribe.middleware.model_fallback import (
             _reset_chain_initialization,
             get_fallback_chain,
         )
 
         cfg = SimpleNamespace(model_fallbacks="cfg-a:prov-a")
         with patch(
-            "EvoScientist.config.settings.get_effective_config", return_value=cfg
+            "metasci_scribe.config.settings.get_effective_config", return_value=cfg
         ):
             _reset_chain_initialization()
             assert add_fallback("session", "prov-s") is True
@@ -934,14 +934,14 @@ class TestLazyInitialization:
 
     def test_chain_seeds_at_most_once(self):
         """A later config read (e.g. a graph rebuild) must not clobber edits."""
-        from EvoScientist.middleware.model_fallback import (
+        from metasci_scribe.middleware.model_fallback import (
             _reset_chain_initialization,
             get_fallback_chain,
         )
 
         cfg_v1 = SimpleNamespace(model_fallbacks="cfg-a:prov-a")
         with patch(
-            "EvoScientist.config.settings.get_effective_config", return_value=cfg_v1
+            "metasci_scribe.config.settings.get_effective_config", return_value=cfg_v1
         ):
             _reset_chain_initialization()
             get_fallback_chain()
@@ -950,7 +950,7 @@ class TestLazyInitialization:
         # Simulate another graph build re-reading config (now different).
         cfg_v2 = SimpleNamespace(model_fallbacks="other:prov")
         with patch(
-            "EvoScientist.config.settings.get_effective_config", return_value=cfg_v2
+            "metasci_scribe.config.settings.get_effective_config", return_value=cfg_v2
         ):
             assert get_fallback_chain() == [
                 ("cfg-a", "prov-a"),
@@ -958,14 +958,14 @@ class TestLazyInitialization:
             ]
 
     def test_clear_blocks_lazy_init(self):
-        from EvoScientist.middleware.model_fallback import (
+        from metasci_scribe.middleware.model_fallback import (
             _reset_chain_initialization,
             get_fallback_chain,
         )
 
         cfg = SimpleNamespace(model_fallbacks="cfg-a:prov-a")
         with patch(
-            "EvoScientist.config.settings.get_effective_config", return_value=cfg
+            "metasci_scribe.config.settings.get_effective_config", return_value=cfg
         ):
             _reset_chain_initialization()
             clear_fallbacks()
@@ -973,20 +973,20 @@ class TestLazyInitialization:
 
     def test_middleware_presence_check_seeds_from_config(self):
         """The wrap/awrap fast-path must see the config-seeded chain."""
-        from EvoScientist.middleware.model_fallback import ModelFallbackMiddleware
+        from metasci_scribe.middleware.model_fallback import ModelFallbackMiddleware
 
         cfg = SimpleNamespace(model_fallbacks="cfg-a:prov-a")
         with patch(
-            "EvoScientist.config.settings.get_effective_config", return_value=cfg
+            "metasci_scribe.config.settings.get_effective_config", return_value=cfg
         ) as mock_cfg:
-            from EvoScientist.middleware.model_fallback import (
+            from metasci_scribe.middleware.model_fallback import (
                 _reset_chain_initialization,
             )
 
             _reset_chain_initialization()
             req = _fake_request()
             handler = MagicMock(side_effect=[Exception("503 down"), AI_RESPONSE])
-            with patch("EvoScientist.llm.models.get_chat_model") as mock_gcm:
+            with patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm:
                 mock_gcm.return_value = MagicMock()
                 result = ModelFallbackMiddleware().wrap_model_call(req, handler)
 
@@ -1010,14 +1010,14 @@ class TestExplicitSeeding:
     """
 
     def test_seed_reads_config_once_then_reads_never_do(self):
-        from EvoScientist.middleware.model_fallback import (
+        from metasci_scribe.middleware.model_fallback import (
             get_fallback_chain,
             seed_fallback_chain,
         )
 
         cfg = SimpleNamespace(model_fallbacks="cfg-a:prov-a")
         with patch(
-            "EvoScientist.config.settings.get_effective_config", return_value=cfg
+            "metasci_scribe.config.settings.get_effective_config", return_value=cfg
         ) as mock_cfg:
             _reset_chain_initialization()
             seed_fallback_chain()
@@ -1029,14 +1029,14 @@ class TestExplicitSeeding:
             mock_cfg.assert_called_once()
 
     def test_seed_is_idempotent_and_preserves_edits(self):
-        from EvoScientist.middleware.model_fallback import (
+        from metasci_scribe.middleware.model_fallback import (
             get_fallback_chain,
             seed_fallback_chain,
         )
 
         cfg_v1 = SimpleNamespace(model_fallbacks="cfg-a:prov-a")
         with patch(
-            "EvoScientist.config.settings.get_effective_config", return_value=cfg_v1
+            "metasci_scribe.config.settings.get_effective_config", return_value=cfg_v1
         ):
             _reset_chain_initialization()
             seed_fallback_chain()
@@ -1045,7 +1045,7 @@ class TestExplicitSeeding:
         # config and clobber the session edit.
         cfg_v2 = SimpleNamespace(model_fallbacks="other:prov")
         with patch(
-            "EvoScientist.config.settings.get_effective_config", return_value=cfg_v2
+            "metasci_scribe.config.settings.get_effective_config", return_value=cfg_v2
         ) as mock_cfg:
             seed_fallback_chain()
             assert get_fallback_chain() == [
@@ -1056,14 +1056,14 @@ class TestExplicitSeeding:
 
     def test_seed_from_supplied_config_does_no_config_io(self):
         """An explicit config seeds its own chain with no disk read."""
-        from EvoScientist.middleware.model_fallback import (
+        from metasci_scribe.middleware.model_fallback import (
             get_fallback_chain,
             seed_fallback_chain,
         )
 
         cfg = SimpleNamespace(model_fallbacks="cfg-a:prov-a")
         with patch(
-            "EvoScientist.config.settings.get_effective_config",
+            "metasci_scribe.config.settings.get_effective_config",
             side_effect=AssertionError("seed must not read config from disk"),
         ):
             _reset_chain_initialization()
@@ -1074,8 +1074,8 @@ class TestExplicitSeeding:
         """create_cli_agent(config=..., chat_model=...) - the pure path -
         seeds the chain from the caller's config via the middleware factory,
         never from disk."""
-        import EvoScientist.EvoScientist as es_mod
-        from EvoScientist.middleware.model_fallback import (
+        import metasci_scribe.agent as es_mod
+        from metasci_scribe.middleware.model_fallback import (
             get_fallback_chain,
             seed_fallback_chain,
         )
@@ -1110,7 +1110,7 @@ class TestExplicitSeeding:
                         return_value={"name": "x"},
                     ):
                         with patch(
-                            "EvoScientist.config.settings.get_effective_config",
+                            "metasci_scribe.config.settings.get_effective_config",
                             side_effect=AssertionError(
                                 "pure-path seeding must not read config from disk"
                             ),
@@ -1127,18 +1127,18 @@ class TestExplicitSeeding:
         """_get_default_middleware seeds the chain from its resolved cfg —
         the single seeding site that covers every graph load path (main,
         sync/async subagents) regardless of how the graph is loaded."""
-        from EvoScientist.EvoScientist import _get_default_middleware
-        from EvoScientist.middleware.model_fallback import get_fallback_chain
+        from metasci_scribe.agent import _get_default_middleware
+        from metasci_scribe.middleware.model_fallback import get_fallback_chain
 
         cfg = MagicMock()
         cfg.model_fallbacks = "factory-a:prov-a, factory-b:prov-b"
         cfg.auxiliary_model = ""
         cfg.auxiliary_provider = ""
 
-        with patch("EvoScientist.config.settings.get_effective_config") as never_disk:
+        with patch("metasci_scribe.config.settings.get_effective_config") as never_disk:
             _reset_chain_initialization()
             with patch(
-                "EvoScientist.EvoScientist._ensure_chat_model",
+                "metasci_scribe.agent._ensure_chat_model",
                 return_value=MagicMock(profile={"max_input_tokens": 200_000}),
             ):
                 _get_default_middleware(workspace=workspace, cfg=cfg)
@@ -1152,8 +1152,8 @@ class TestExplicitSeeding:
         """A later graph build through the factory (different cfg) must not
         re-seed: first-touch only, so /model-fallback session edits survive
         every rebuild."""
-        from EvoScientist.EvoScientist import _get_default_middleware
-        from EvoScientist.middleware.model_fallback import (
+        from metasci_scribe.agent import _get_default_middleware
+        from metasci_scribe.middleware.model_fallback import (
             add_fallback,
             get_fallback_chain,
         )
@@ -1168,7 +1168,7 @@ class TestExplicitSeeding:
             cfg.auxiliary_provider = ""
         _reset_chain_initialization()
         with patch(
-            "EvoScientist.EvoScientist._ensure_chat_model",
+            "metasci_scribe.agent._ensure_chat_model",
             return_value=MagicMock(profile={"max_input_tokens": 200_000}),
         ):
             _get_default_middleware(workspace=workspace, cfg=cfg_v1)
@@ -1205,7 +1205,7 @@ class TestFallbackChainConstructionError:
         async def _invoke(_r):
             return AI_RESPONSE
 
-        with patch("EvoScientist.llm.models.get_chat_model") as mock_gcm:
+        with patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm:
             # First fallback (routed provider, no key) raises during construction.
             mock_gcm.side_effect = [
                 ValueError("The 'minimax' provider requires an API key."),
@@ -1224,7 +1224,7 @@ class TestFallbackChainConstructionError:
         def _invoke(_r):
             return AI_RESPONSE
 
-        with patch("EvoScientist.llm.models.get_chat_model") as mock_gcm:
+        with patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm:
             mock_gcm.side_effect = [
                 ValueError("The 'minimax' provider requires an API key."),
                 MagicMock(),
@@ -1243,7 +1243,7 @@ class TestFallbackChainConstructionError:
         async def _invoke(_r):
             return AI_RESPONSE  # never reached
 
-        with patch("EvoScientist.llm.models.get_chat_model") as mock_gcm:
+        with patch("metasci_scribe.llm.models.get_chat_model") as mock_gcm:
             mock_gcm.side_effect = [
                 ValueError("MINIMAX_API_KEY missing"),
                 ValueError("NOVITA_API_KEY missing"),
@@ -1293,7 +1293,7 @@ def test_fallback_construction_error_keeps_original_exception(
             )
 
     with patch(
-        "EvoScientist.middleware.model_fallback.get_fallback_chain",
+        "metasci_scribe.middleware.model_fallback.get_fallback_chain",
         return_value=[("minimax-m3", "minimax")],
     ):
         with pytest.raises(ValueError, match="MINIMAX_API_KEY"):

@@ -20,7 +20,7 @@ import os
 
 import langgraph_api.serde as _serde_mod
 
-from EvoScientist.llm.errors import (
+from metasci_scribe.llm.errors import (
     _API_KEY_ENV_SUFFIXES,
     _build_env_key_redaction_re,
     _extract_error_type,
@@ -218,7 +218,7 @@ def test_provider_stream_error_survives_orjson_dataclass_option():
     """
     import orjson
 
-    from EvoScientist.llm.errors import ProviderStreamError
+    from metasci_scribe.llm.errors import ProviderStreamError
 
     err = ProviderStreamError(
         provider="openrouter",

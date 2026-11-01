@@ -29,8 +29,8 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
-from EvoScientist.middleware.tool_history_repair import ToolHistoryRepairMiddleware
-from EvoScientist.stream.events import (
+from metasci_scribe.middleware.tool_history_repair import ToolHistoryRepairMiddleware
+from metasci_scribe.stream.events import (
     _INTERRUPTED_TOOL_RESULT,
     _recover_interrupted_graph_state,
     stream_agent_events,
@@ -212,7 +212,7 @@ def _tool_call(id_: str, path: str) -> dict[str, Any]:
 
 
 def _build_agent(checkpointer: Any | None = None):
-    """Build a deep agent mirroring the real EvoScientist middleware stack."""
+    """Build a deep agent mirroring the real Metasci Scribe middleware stack."""
     return create_deep_agent(
         model=_ScriptedModel(),
         tools=[_slow_edit],
@@ -306,7 +306,7 @@ async def test_early_subagent_approval_waits_for_persisted_task_interrupt():
     from langchain_core.messages import ToolCall
     from langchain_core.tools import tool
 
-    from EvoScientist.backends import build_hitl_resume
+    from metasci_scribe.backends import build_hitl_resume
 
     class _ToolCallingFakeModel(FakeMessagesListChatModel):
         def bind_tools(self, tools, **kwargs):
@@ -404,7 +404,7 @@ async def test_early_subagent_approval_waits_for_persisted_task_interrupt():
 
 async def test_checkpointed_interrupt_wait_stops_on_state_read_error():
     """An unavailable checkpoint must not delay an emitted pause."""
-    from EvoScientist.stream.events import _wait_for_checkpointed_interrupt
+    from metasci_scribe.stream.events import _wait_for_checkpointed_interrupt
 
     class _TransientStateReadAgent:
         def __init__(self):
@@ -425,7 +425,7 @@ async def test_checkpointed_interrupt_wait_continues_after_clean_snapshot(monkey
     """A clean read must not release an interrupt before its ID is saved."""
     from types import SimpleNamespace
 
-    from EvoScientist.stream.events import _wait_for_checkpointed_interrupt
+    from metasci_scribe.stream.events import _wait_for_checkpointed_interrupt
 
     class _DelayedCheckpointAgent:
         def __init__(self):
@@ -444,10 +444,10 @@ async def test_checkpointed_interrupt_wait_continues_after_clean_snapshot(monkey
             )
 
     monkeypatch.setattr(
-        "EvoScientist.stream.events._INTERRUPT_CHECKPOINT_WAIT_SECONDS", 0.1
+        "metasci_scribe.stream.events._INTERRUPT_CHECKPOINT_WAIT_SECONDS", 0.1
     )
     monkeypatch.setattr(
-        "EvoScientist.stream.events._INTERRUPT_CHECKPOINT_POLL_SECONDS", 0.001
+        "metasci_scribe.stream.events._INTERRUPT_CHECKPOINT_POLL_SECONDS", 0.001
     )
     agent = _DelayedCheckpointAgent()
 
@@ -458,7 +458,7 @@ async def test_checkpointed_interrupt_wait_continues_after_clean_snapshot(monkey
 
 async def test_checkpointed_interrupt_wait_bounds_blocking_state_read(monkeypatch):
     """A blocked checkpoint read must not exceed the approval wait deadline."""
-    from EvoScientist.stream.events import _wait_for_checkpointed_interrupt
+    from metasci_scribe.stream.events import _wait_for_checkpointed_interrupt
 
     class _BlockingStateReadAgent:
         def __init__(self):
@@ -472,7 +472,7 @@ async def test_checkpointed_interrupt_wait_bounds_blocking_state_read(monkeypatc
                 raise
 
     monkeypatch.setattr(
-        "EvoScientist.stream.events._INTERRUPT_CHECKPOINT_WAIT_SECONDS", 0.01
+        "metasci_scribe.stream.events._INTERRUPT_CHECKPOINT_WAIT_SECONDS", 0.01
     )
     agent = _BlockingStateReadAgent()
     loop = asyncio.get_running_loop()
@@ -489,7 +489,7 @@ async def test_uncheckpointed_resume_uses_stream_error_path(initial_state):
     """Resume errors are emitted by streaming even without saved state."""
     from types import SimpleNamespace
 
-    from EvoScientist.backends import build_hitl_resume
+    from metasci_scribe.backends import build_hitl_resume
 
     class _UncheckpointedResumeAgent:
         def __init__(self):

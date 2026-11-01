@@ -1,11 +1,11 @@
-"""Tests for EvoScientist/prompts.py."""
+"""Tests for metasci_scribe/prompts.py."""
 
 import pytest
 
-from EvoScientist.prompts import (
+from metasci_scribe.prompts import (
     DELEGATION_STRATEGY,
-    EVOSCIENTIST_IDENTITY,
     EXPERIMENT_WORKFLOW,
+    METASCI_SCRIBE_IDENTITY,
     REPORT_TEMPLATE,
     SHELL_GUIDELINES,
     WRITING_GUIDELINES,
@@ -21,7 +21,7 @@ class TestGetSystemPrompt:
 
     def test_contains_identity(self):
         result = get_system_prompt()
-        assert "EvoScientist" in result
+        assert "Metasci Scribe" in result
         assert "self-evolving" in result
 
     def test_contains_workflow(self):
@@ -99,16 +99,16 @@ class TestGetSystemPrompt:
         )
 
 
-class TestEvoScientistIdentity:
+class TestScribeIdentity:
     def test_constant_not_empty(self):
-        assert len(EVOSCIENTIST_IDENTITY) > 0
+        assert len(METASCI_SCRIBE_IDENTITY) > 0
 
     def test_states_role(self):
-        assert "You are EvoScientist" in EVOSCIENTIST_IDENTITY
+        assert "You are Metasci Scribe" in METASCI_SCRIBE_IDENTITY
 
     def test_mentions_human_on_the_loop_paradigm(self):
         # Behavioral cue: agent should know it isn't asking permission for every action
-        assert "on-the-loop" in EVOSCIENTIST_IDENTITY
+        assert "on-the-loop" in METASCI_SCRIBE_IDENTITY
 
 
 class TestReportTemplate:
@@ -221,8 +221,8 @@ class TestBashOnWindowsShellGuidelines:
     def test_agent_prompt_follows_the_shell_decision(self, monkeypatch, tmp_path):
         from types import SimpleNamespace
 
-        from EvoScientist import EvoScientist as evo
-        from EvoScientist import agent_shell
+        from metasci_scribe import agent as evo
+        from metasci_scribe import agent_shell
 
         cfg = SimpleNamespace(dangerous_mode=False)
         assert "Git for Windows" not in evo._configured_system_prompt(cfg, tmp_path)

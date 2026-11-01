@@ -6,10 +6,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-import EvoScientist.commands.implementation  # noqa: F401  (registers the commands)
-from EvoScientist.commands.base import ChannelRuntime, CommandContext
-from EvoScientist.commands.manager import manager
-from EvoScientist.paths import SessionDirs, Workspace
+import metasci_scribe.commands.implementation  # noqa: F401  (registers the commands)
+from metasci_scribe.commands.base import ChannelRuntime, CommandContext
+from metasci_scribe.commands.manager import manager
+from metasci_scribe.paths import SessionDirs, Workspace
 from tests.fakes.common import FakeGraphGateway
 
 _LOADED_AGENT = object()
@@ -378,7 +378,7 @@ class TestRefusals:
         assert "terminal session" in _text(ui)
 
     async def test_when_the_session_executes_on_the_server(self, tmp_path):
-        from EvoScientist.gateway.server import LangGraphServerGateway
+        from metasci_scribe.gateway.server import LangGraphServerGateway
 
         server = MagicMock(spec=LangGraphServerGateway)
         ctx, ui, _ = _ctx(tmp_path, gateway=server)
@@ -432,13 +432,13 @@ class TestBadge:
         ],
     )
     def test_a_goal_takes_the_place_of_the_checklist_badge(self, status, badge):
-        from EvoScientist.rubric_session import rubric_badge, values_for_badge
+        from metasci_scribe.rubric_session import rubric_badge, values_for_badge
 
         assert rubric_badge(_thread(status), []) == badge
         assert rubric_badge(values_for_badge(badge), []) == badge
 
     def test_a_waiting_one_shot_is_still_shown(self):
-        from EvoScientist.rubric_session import rubric_badge, values_for_badge
+        from metasci_scribe.rubric_session import rubric_badge, values_for_badge
 
         values = _thread(_next_rubric={"text": "- once", "id": "s:1"})
         assert rubric_badge(values, []) == "goal: active+next"
@@ -449,7 +449,7 @@ class TestBadge:
         )
 
     def test_a_pending_checklist_command_shows_the_goal_as_ending(self):
-        from EvoScientist.rubric_session import rubric_badge, values_for_badge
+        from metasci_scribe.rubric_session import rubric_badge, values_for_badge
 
         pending = [{"sticky": "- mine"}]
         assert rubric_badge(_thread(), pending) == "goal: ending"
@@ -458,7 +458,7 @@ class TestBadge:
         assert rubric_badge(values_for_badge("goal: ending"), pending) == "goal: ending"
 
     def test_a_goal_without_its_checklist_is_no_goal(self):
-        from EvoScientist.rubric_session import rubric_badge
+        from metasci_scribe.rubric_session import rubric_badge
 
         values = _thread()
         values["_sticky_rubric"] = {"text": "- other", "id": "s1:1"}
@@ -467,7 +467,7 @@ class TestBadge:
     def test_the_status_bar_shows_it_under_its_own_name(self):
         from datetime import datetime
 
-        from EvoScientist.cli.status_bar import build_status_fragments
+        from metasci_scribe.cli.status_bar import build_status_fragments
         from tests.fakes.common import status_snapshot
 
         snapshot = status_snapshot()

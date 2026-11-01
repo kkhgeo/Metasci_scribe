@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from EvoScientist.llm import patches
+from metasci_scribe.llm import patches
 
 
 @pytest.mark.parametrize("is_async", [False, True])

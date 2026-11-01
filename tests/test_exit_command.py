@@ -2,14 +2,14 @@
 
 from unittest.mock import MagicMock
 
-from EvoScientist.paths import SessionDirs
+from metasci_scribe.paths import SessionDirs
 from tests.fakes.common import TEST_WORKSPACE
 
 
 class TestExitCommand:
     async def test_execute_calls_force_quit(self):
-        from EvoScientist.commands.base import CommandContext
-        from EvoScientist.commands.implementation.session import ExitCommand
+        from metasci_scribe.commands.base import CommandContext
+        from metasci_scribe.commands.implementation.session import ExitCommand
 
         ui = MagicMock()
         ctx = CommandContext(
@@ -24,7 +24,7 @@ class TestExitCommand:
 
     def test_aliases_registered(self):
         """/quit and /q resolve to the same ExitCommand as /exit."""
-        from EvoScientist.commands.manager import manager
+        from metasci_scribe.commands.manager import manager
 
         assert manager.get_command("/exit").name == "/exit"
         assert manager.get_command("/quit").name == "/exit"
