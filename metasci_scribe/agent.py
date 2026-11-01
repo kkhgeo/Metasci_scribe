@@ -62,10 +62,13 @@ DEFAULT_SKILL_SOURCES = ("/skills/",)
 
 # Tools requiring human approval on attended agents (deepagents 0.7.0 ships a
 # recursive `delete` FS tool that would otherwise bypass the execute blocklist).
+# ``skill_manager`` pauses for an install only (``policy.hitl_armed``): a skill
+# is instructions and scripts the agent will follow, so a person sees it.
 HITL_INTERRUPT_ON: dict[str, bool] = {
     "execute": True,
     "run_in_background": True,
     "delete": True,
+    "skill_manager": True,
 }
 
 # =============================================================================
@@ -1097,41 +1100,53 @@ def _hitl_when(request) -> bool:
     config = getattr(getattr(request, "runtime", None), "config", None)
     if not _hitl_when_served(request):
         return False
-    return _batch_has_shell(request) or not is_hitl_approve_all(config)
+    return _batch_needs_person(request) or not is_hitl_approve_all(config)
 
 
-def _batch_has_shell(request) -> bool:
-    """Whether this call's model message includes a shell command.
+def _batch_needs_person(request) -> bool:
+    """Whether this call's model message includes a call a person must see.
 
-    Every command is shown to the person, grant or no grant: a command runs
-    with their full rights, and nothing else stops one that text the agent
-    read asked for. The whole message counts, not just this call, because the
-    predicate runs again at resume and a resume may lose the grant: if a
-    ``delete`` beside a command paused only on the second pass, the answers
-    would no longer line up with the calls.
+    Every command and every skill install is shown to the person, grant or no
+    grant (``policy.call_needs_person``): a command runs with their full
+    rights, a skill is instructions the agent will follow, and nothing else
+    stops one that text the agent read asked for. The whole message counts,
+    not just this call, because the predicate runs again at resume and a
+    resume may lose the grant: if a ``delete`` beside a command paused only
+    on the second pass, the answers would no longer line up with the calls.
     """
     from langchain_core.messages import AIMessage
 
-    from .config.settings import HITL_SHELL_TOOLS
+    from . import policy
 
     call = getattr(request, "tool_call", None) or {}
-    if call.get("name") in HITL_SHELL_TOOLS:
+    if policy.call_needs_person(call.get("name"), call.get("args")):
         return True
     state = getattr(request, "state", None) or {}
     for message in reversed(state.get("messages") or []):
         if isinstance(message, AIMessage):
-            return any(c["name"] in HITL_SHELL_TOOLS for c in message.tool_calls)
+            return any(
+                policy.call_needs_person(c["name"], c.get("args"))
+                for c in message.tool_calls
+            )
     return False
+
+
+_batch_has_shell = _batch_needs_person  # the former name
 
 
 def _hitl_when_served(request) -> bool:
     """``_hitl_when`` for the graph a server serves: only ``hitl_suppressed`` skips.
 
     No server run has a use for the session grant (the server gateway drops
-    it), so a client that sends the key anyway is still asked.
+    it), so a client that sends the key anyway is still asked. An armed tool
+    whose call changes nothing (``skill_manager list``) never pauses.
     """
+    from . import policy
     from .backends import is_hitl_suppressed
 
+    call = getattr(request, "tool_call", None) or {}
+    if call and not policy.hitl_armed(call.get("name"), call.get("args")):
+        return False
     config = getattr(getattr(request, "runtime", None), "config", None)
     return not is_hitl_suppressed(config)
 

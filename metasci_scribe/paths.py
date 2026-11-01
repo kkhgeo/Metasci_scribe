@@ -108,18 +108,26 @@ def holds_data_dir(root: str | Path) -> bool:
 
 
 def require_workspace_root(root: str | Path) -> None:
-    """Refuse a folder that holds the app's data, such as the home folder.
+    """Refuse a folder that holds the app's data, such as the home folder, or
+    that lies inside the app's private state (the sign-in folder).
 
     The agent reads and writes throughout its workspace, so this keeps the
     sign-in and other app state out of its way before any guard is needed.
     Separate from :class:`Workspace`, which also names stored folders that
     are only compared; call it where a workspace is put to use.
     """
+    from . import policy
+
     if holds_data_dir(root):
         raise WorkspaceRootError(
             f"{root} cannot be a workspace: it contains Metasci Scribe's data "
             f"folder ({DATA_DIR}), which holds your sign-in. Open a paper "
             f"folder instead."
+        )
+    if policy.is_private_state(root):
+        raise WorkspaceRootError(
+            f"{root} cannot be a workspace: it is inside Metasci Scribe's "
+            f"private state under {DATA_DIR}. Open a paper folder instead."
         )
 
 
@@ -400,9 +408,9 @@ MEMORIES_DIR: Path = _memories_dir_from_env()
 def reload_env_dirs() -> None:
     """Re-read the memories-folder override from the environment.
 
-    ``paths`` is imported before ``get_effective_config()`` merges the
-    project ``.env`` into ``os.environ``, so entry points call this once
-    after loading their config to pick up an override set there.
+    Entry points call this once after loading their config. A workspace
+    ``.env`` cannot set it (``policy.dotenv_key_allowed``), so in practice it
+    confirms the value the process started with.
     """
     global MEMORIES_DIR
     MEMORIES_DIR = _memories_dir_from_env()

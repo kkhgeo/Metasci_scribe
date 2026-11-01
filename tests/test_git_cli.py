@@ -22,7 +22,24 @@ def _proc(returncode=0, stdout="", stderr=""):
     return SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
 
 
-_NON_INTERACTIVE = ["-c", "core.askPass="]
+# No prompts, then no hooks, no file-system monitor program and only the
+# https, ssh and file transports (``policy.GIT_SAFE_ARGS``).
+_NON_INTERACTIVE = [
+    "-c",
+    "core.askPass=",
+    "-c",
+    "core.hooksPath=/dev/null",
+    "-c",
+    "core.fsmonitor=false",
+    "-c",
+    "protocol.allow=never",
+    "-c",
+    "protocol.file.allow=always",
+    "-c",
+    "protocol.https.allow=always",
+    "-c",
+    "protocol.ssh.allow=always",
+]
 
 
 @pytest.fixture(autouse=True)
@@ -201,7 +218,7 @@ class TestRunGit:
             run_git(["ls-remote", "https://github.com/o/r.git"], timeout=5)
 
         argv = run.call_args.args[0]
-        assert argv[1:3] == _NON_INTERACTIVE
+        assert argv[1 : 1 + len(_NON_INTERACTIVE)] == _NON_INTERACTIVE
         assert "credential.helper=" not in argv
         env = run.call_args.kwargs["env"]
         assert env["GIT_TERMINAL_PROMPT"] == "0"
@@ -239,6 +256,8 @@ class TestCloneRepo:
             "-c",
             "core.eol=lf",
             "clone",
+            # No template folder: that is where a clone's hooks come from.
+            "--template=",
             "--depth",
             "1",
             "https://github.com/owner/repo.git",

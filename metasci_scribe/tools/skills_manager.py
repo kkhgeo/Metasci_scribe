@@ -38,7 +38,6 @@ import logging
 import os
 import re
 import shutil
-import stat
 import subprocess
 import tempfile
 import time
@@ -48,7 +47,7 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 
-from .. import paths
+from .. import paths, policy
 from ..git_cli import GitNotFoundError, run_git
 from ..git_cli import clone_repo as _clone_repo
 from ..paths import Workspace, resolve_virtual_path
@@ -225,6 +224,15 @@ def _read_expert_md(skill_dir: Path) -> str | None:
     expert_path = skill_dir / _EXPERT_FILENAME
     try:
         if not expert_path.is_file():
+            return None
+        if policy.leaves_folder(expert_path, skill_dir):
+            # A link out of the skill folder would read whatever it names
+            # into the expert's prompt. Not an expert, then.
+            _logger.warning(
+                "Skill %r: %s is a link out of the skill folder; ignored.",
+                skill_dir.name,
+                expert_path,
+            )
             return None
         content = expert_path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
@@ -439,6 +447,8 @@ def _parse_skill_md(skill_md_path: Path, *, source: str = "") -> SkillInfo:
     expert_body = _read_expert_md(parent)
     declares_actor = expert_body is not None
     try:
+        if policy.leaves_folder(skill_md_path, parent):
+            raise OSError("a link out of the skill folder")
         content = skill_md_path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
         # ``_parse_skill_md`` runs during agent construction (via
@@ -883,34 +893,10 @@ _REFUSED_SOURCE = {
     "success": False,
     "error": "This folder holds Metasci Scribe's saved sign-in; it cannot be installed.",
 }
-_LINK_REPARSE_TAGS = (0xA000000C, 0xA0000003)  # Windows symlink, junction
 
-
-def _is_link(path: str) -> bool:
-    """A symbolic link, or a Windows junction, which ``S_ISLNK`` does not see."""
-    info = os.lstat(path)
-    return (
-        stat.S_ISLNK(info.st_mode)
-        or getattr(info, "st_reparse_tag", 0) in _LINK_REPARSE_TAGS
-    )
-
-
-def _copy_filter(ignore_fn):
-    """``ignore_fn`` plus every link and the sign-in folder.
-
-    A skill comes from outside, and a link in it would copy whatever it names,
-    so links are dropped, not followed.
-    """
-
-    def ignore(directory: str, names: list[str]) -> set[str]:
-        skipped = set(ignore_fn(directory, names)) if ignore_fn else set()
-        for name in names:
-            entry = os.path.join(directory, name)
-            if _is_link(entry) or paths.is_auth_path(entry):
-                skipped.add(name)
-        return skipped
-
-    return ignore
+# Links and the private state are never copied into a skill (``policy``).
+_is_link = policy.is_link
+_copy_filter = policy.copy_ignore
 
 
 def _install_from_local(source: str, dest_dir: str, *, work_dir: Path) -> dict:

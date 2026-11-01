@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from . import policy
+
 
 class RubricTextError(ValueError):
     """The checklist text could not be read or is empty."""
@@ -13,8 +15,9 @@ def read_rubric_text(value: str, *, base_dir: Path | None = None) -> str:
     """Return the checklist text, reading ``@path`` from disk.
 
     A relative ``@path`` resolves against ``base_dir`` when given, else the
-    working directory. The message of a raised error starts with the reason
-    ("could not read ..." / "is empty") so callers can prefix their option name.
+    working directory. The saved sign-in is refused, links followed. The
+    message of a raised error starts with the reason ("could not read ..." /
+    "is empty") so callers can prefix their option name.
     """
     text = value
     if value.startswith("@"):
@@ -24,7 +27,12 @@ def read_rubric_text(value: str, *, base_dir: Path | None = None) -> str:
             path = Path(base_dir) / path
         try:
             # expanduser raises RuntimeError for an unknown "~user".
-            text = path.expanduser().read_text(encoding="utf-8-sig")
+            path = path.expanduser()
+            if policy.is_private_state(path):
+                raise RubricTextError(
+                    f"could not read {path}: it is Metasci Scribe's saved sign-in"
+                )
+            text = path.read_text(encoding="utf-8-sig")
         except (OSError, UnicodeDecodeError, RuntimeError) as exc:
             reason = getattr(exc, "strerror", None) or str(exc)
             raise RubricTextError(f"could not read {path}: {reason}") from exc

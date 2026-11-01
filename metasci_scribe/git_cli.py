@@ -13,6 +13,8 @@ import os
 import subprocess
 import sys
 
+from . import policy
+
 logger = logging.getLogger(__name__)
 
 CLONE_TIMEOUT = 120  # seconds
@@ -26,12 +28,18 @@ CLONE_TIMEOUT = 120  # seconds
 # else fails at once. Only our own PortableGit, whose ``etc\gitconfig`` names
 # the ``helper-selector`` picker, gets its helper list reset. This covers
 # HTTPS, the only scheme our URLs use. A user's ``url.<ssh>.insteadOf`` rule
-# turns them into SSH, whose own prompts (key passphrase, host key) these
-# settings do not reach; ``core.sshCommand`` is left alone so the user's ssh
-# setup keeps working.
-_NON_INTERACTIVE = ["-c", "core.askPass="]
+# in their own git config turns them into SSH, whose own prompts (key
+# passphrase, host key) these settings do not reach; ``core.sshCommand`` from
+# that config is left alone so the user's ssh setup keeps working.
+#
+# The environment is another matter: ``GIT_SSH_COMMAND``, ``GIT_CONFIG_*``
+# and their kin name programs and config git would run or read, and a
+# workspace could plant them. ``policy.git_env`` drops them, and
+# ``policy.GIT_SAFE_ARGS`` turns off hooks, the file-system monitor and every
+# transport but https, ssh and file. A clone gets no template folder either
+# (``policy.GIT_CLONE_ARGS``): that is where a clone's hooks come from.
+_NON_INTERACTIVE = ["-c", "core.askPass=", *policy.GIT_SAFE_ARGS]
 _PORTABLEGIT_ONLY = ["-c", "credential.helper="]
-_ASKPASS_VARS = ("GIT_ASKPASS", "SSH_ASKPASS")
 
 
 def _install_hint() -> str:
@@ -63,7 +71,7 @@ class GitNotFoundError(RuntimeError):
 
 
 def _git_env() -> dict[str, str]:
-    env = {k: v for k, v in os.environ.items() if k.upper() not in _ASKPASS_VARS}
+    env = policy.git_env(os.environ)
     env["GIT_TERMINAL_PROMPT"] = "0"
     # Git Credential Manager answers from its store or fails, never prompts
     # (``0`` / ``false`` are the current spellings, ``never`` the legacy one).
@@ -146,7 +154,16 @@ def clone_repo(repo: str, ref: str | None, dest: str) -> None:
     :class:`GitNotFoundError` without git, and ``RuntimeError`` on a timeout or
     a failed clone.
     """
-    args = ["-c", "core.autocrlf=false", "-c", "core.eol=lf", "clone", "--depth", "1"]
+    args = [
+        "-c",
+        "core.autocrlf=false",
+        "-c",
+        "core.eol=lf",
+        "clone",
+        *policy.GIT_CLONE_ARGS,
+        "--depth",
+        "1",
+    ]
     if ref:
         args += ["--branch", ref]
     args += [f"https://github.com/{repo}.git", dest]

@@ -1173,28 +1173,33 @@ class TestDotenvIsolation:
 
         assert os.environ["METASCI_SCRIBE_SERVER_PROCESS"] == "1"
 
-    def test_empty_shell_scribe_key_defers_to_dotenv(
+    def test_a_workspace_dotenv_never_sets_a_scribe_key(
         self, temp_config_dir, tmp_path, monkeypatch
     ):
-        """A set-but-empty shell export of an ``METASCI_SCRIBE_*`` key is
-        treated as "unset" for merge purposes, so a workspace ``.env`` value
-        can still populate the config. Matches the ``if env_value:`` truthy
-        check in the ``_ENV_MAPPINGS`` loop; without this coupling, an empty
-        parent export would silently regress vs main by causing the key to
-        fall through to file/defaults instead of ``.env``.
+        """``METASCI_SCRIBE_*`` settings come from the user's config and shell
+        only. A workspace ``.env`` is a file the agent can be steered to
+        write, so even with the shell key unset or empty it sets nothing:
+        it could otherwise raise the agent's own mode
+        (``policy.dotenv_key_allowed``).
         """
         env_file = tmp_path / ".env"
-        env_file.write_text("METASCI_SCRIBE_LANGGRAPH_DEV_PORT=6606\n")
+        env_file.write_text(
+            "METASCI_SCRIBE_LANGGRAPH_DEV_PORT=6606\n"
+            "METASCI_SCRIBE_DANGEROUS_MODE=true\n"
+        )
         monkeypatch.setattr(
             "metasci_scribe.config.settings.find_dotenv",
             lambda *args, **kwargs: str(env_file),
         )
         monkeypatch.setenv("METASCI_SCRIBE_LANGGRAPH_DEV_PORT", "")
+        monkeypatch.delenv("METASCI_SCRIBE_DANGEROUS_MODE", raising=False)
 
         config = get_effective_config()
 
-        assert config.langgraph_dev_port == 6606
-        assert os.environ["METASCI_SCRIBE_LANGGRAPH_DEV_PORT"] == "6606"
+        assert config.langgraph_dev_port == ScribeConfig().langgraph_dev_port
+        assert config.dangerous_mode is False
+        assert os.environ["METASCI_SCRIBE_LANGGRAPH_DEV_PORT"] == ""
+        assert "METASCI_SCRIBE_DANGEROUS_MODE" not in os.environ
 
 
 def test_backend_allowed_origins_ignores_the_environment(temp_config_dir, monkeypatch):

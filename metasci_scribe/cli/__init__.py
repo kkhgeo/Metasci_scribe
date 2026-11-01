@@ -84,6 +84,12 @@ def main():
     import os
     import warnings
 
+    # The folder we start in is the agent's workspace, which it writes to, and
+    # this app imports lazily: take it off the import path before anything
+    # else is imported (``python -m metasci_scribe`` puts it first).
+    from ..policy import harden_sys_path
+
+    harden_sys_path()
     # Keep MCP stdio subprocess spawning async on Windows (see #283). Must run
     # before any event loop is created, hence at the very top of the entrypoint.
     from .._winloop import ensure_proactor_event_loop_policy

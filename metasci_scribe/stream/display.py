@@ -1406,7 +1406,7 @@ def _resolve_hitl_approval(
     """
     global _session_auto_approve
 
-    from ..config.settings import HITL_SHELL_TOOLS
+    from .. import policy
     from .interaction import (
         config_policy_snapshot,
         decisions_after_human_approval,
@@ -1417,11 +1417,12 @@ def _resolve_hitl_approval(
         return _HitlResolution([{"type": "approve"}], human_prompted=False)
 
     # Session "approve all" is an explicit human opt-in → blanket-approve
-    # everything but shell commands, each of which a person still sees (see
-    # ``agent._batch_has_shell``). Read here, before any prompt: the prompt is
-    # where the grant gets set.
+    # everything but shell commands and skill installs, each of which a
+    # person still sees (see ``agent._batch_needs_person``). Read here,
+    # before any prompt: the prompt is where the grant gets set.
     if _session_auto_approve and not any(
-        isinstance(req, dict) and req.get("name") in HITL_SHELL_TOOLS
+        isinstance(req, dict)
+        and policy.call_needs_person(req.get("name"), req.get("args"))
         for req in action_requests
     ):
         return _HitlResolution(

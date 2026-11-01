@@ -24,6 +24,18 @@ takes three steps: flip the yaml flag, add a one-line binding in
 # ``blockbuster`` guard (see #283). This is the entrypoint where that error
 # actually surfaces; the CLI entrypoint sets the same policy for its own
 # process.
+import os as _os
+
 from .._winloop import ensure_proactor_event_loop_policy
 
 ensure_proactor_event_loop_policy()
+
+# ``langgraph dev`` also appends its working folder, the workspace, to
+# ``sys.path`` before importing the graphs. The agent writes to that folder
+# and this app imports lazily, so the server takes it off again here, the
+# first of our modules it imports. Only in the server process: a test run
+# or a plain import must keep its own path.
+if _os.environ.get("METASCI_SCRIBE_SERVER_PROCESS") == "1":
+    from ..policy import harden_sys_path as _harden_sys_path
+
+    _harden_sys_path()

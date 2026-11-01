@@ -13,6 +13,7 @@ import re
 from difflib import SequenceMatcher
 from pathlib import Path
 
+from .. import policy
 from ..paths import file_tool_path
 
 # ---------------------------------------------------------------------------
@@ -341,6 +342,14 @@ def parse_file_mentions(
 
         if resolved is None:
             warnings.append(f"@file not found: {raw}")
+            continue
+
+        # The saved sign-in never enters a prompt, however it is spelled or
+        # linked. ``_resolve_path`` follows links, so this sees the target.
+        if policy.is_private_state(resolved):
+            warnings.append(
+                f"@{raw} is Metasci Scribe's saved sign-in and was not embedded"
+            )
             continue
 
         # Deduplicate: skip paths already seen in this message.

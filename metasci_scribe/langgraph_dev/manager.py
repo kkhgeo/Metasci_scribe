@@ -29,7 +29,7 @@ import psutil
 from filelock import FileLock
 from filelock import Timeout as FileLockTimeout
 
-from metasci_scribe import paths
+from metasci_scribe import paths, policy
 from metasci_scribe.config import (
     MemoryControls,
     MemoryObservationTarget,
@@ -1081,7 +1081,9 @@ def start_langgraph_dev(
     # what the parent had inherited from its own environment.
     # The server runs in the workspace and loads its ``.env``; it gets this
     # process's data and config folders so both use the same files.
-    sub_env = paths.dir_env(os.environ)
+    # The server starts in the workspace, which the agent writes to: its
+    # working folder is not on its import path (``policy.child_python_env``).
+    sub_env = policy.child_python_env(paths.dir_env(os.environ))
     sub_env["METASCI_SCRIBE_WORKSPACE_DIR"] = str(workspace_dir)
     if run_dir is not None:
         sub_env["METASCI_SCRIBE_RUN_DIR"] = str(run_dir)

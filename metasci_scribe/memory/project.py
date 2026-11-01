@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import subprocess
 from pathlib import Path
+
+from .. import policy
 
 
 def _short_hash(text: str, *, n: int = 16) -> str:
@@ -12,14 +15,17 @@ def _short_hash(text: str, *, n: int = 16) -> str:
 
 
 def _run_git(args: list[str], cwd: Path) -> str | None:
+    """Run a read-only git query in *cwd*, the workspace: no hooks and no
+    program named by the environment (``policy``), like every other git call."""
     try:
         result = subprocess.run(
-            ["git", *args],
+            ["git", *policy.GIT_SAFE_ARGS, *args],
             cwd=str(cwd),
             check=False,
             capture_output=True,
             text=True,
             timeout=2,
+            env=policy.git_env(os.environ),
         )
     except (OSError, subprocess.SubprocessError):
         return None

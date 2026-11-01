@@ -1,15 +1,18 @@
-"""No human gate, no shell.
+"""No human gate, no shell and no skill installs.
 
 A command runs with the user's full rights, and text the agent reads can ask
 for one: a prompt-injected PDF could send the saved sign-in or an unpublished
-manuscript anywhere. The approval prompt is the only real stop, so a run
-without it does not get ``execute`` or ``run_in_background``.
+manuscript anywhere. A skill is instructions and scripts the agent will then
+follow, fetched from the network. The approval prompt is the only real stop,
+so a run without it does not get ``execute``, ``run_in_background`` or
+``skill_manager install`` (``policy.call_needs_person``).
 
 Decided per model call and per tool call, not at construction: one graph
 serves runs with and without approval (see ``agent._build_hitl_interrupt_on``),
 so a tool removed at build time would stay missing for a later attended run.
-The tools stay registered in the graph; this hides them from the model and
-refuses a call that names them anyway, as one from earlier history would.
+The tools stay registered in the graph; this hides the shell tools from the
+model and refuses a call that names them, or a skill install, anyway, as one
+from earlier history would.
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ from langchain.agents.middleware.types import AgentMiddleware, ModelRequest
 from langchain_core.messages import ToolMessage
 from langgraph.prebuilt.tool_node import ToolCallRequest
 
+from .. import policy
 from ..backends import no_human_gate
 from ..config.settings import HITL_SHELL_TOOLS
 from .utils import append_to_system_message
@@ -28,7 +32,8 @@ from .utils import append_to_system_message
 _NO_SHELL_NOTE = (
     "\n\nShell commands are off for this run because no person is approving "
     "them: `execute` and `run_in_background` do not exist here, whatever "
-    "earlier instructions say. Work with the file tools."
+    "earlier instructions say, and `skill_manager` cannot install skills. "
+    "Work with the file tools and the skills already installed."
 )
 
 
@@ -37,10 +42,10 @@ def _run_config(request: Any) -> Any:
 
 
 class ShellGateMiddleware(AgentMiddleware):
-    """Remove the shell tools from any run with no human gate.
+    """Remove the shell tools and skill installs from any run with no human gate.
 
     Args:
-        closed: Keep the shell off for every run of this graph: dangerous
+        closed: Keep the gate shut for every run of this graph: dangerous
             mode, which is fixed at assembly and approves everything, and
             async sub-agents, which have no approval path at all.
     """
@@ -70,11 +75,12 @@ class ShellGateMiddleware(AgentMiddleware):
 
     def _refusal(self, request: ToolCallRequest) -> ToolMessage | None:
         name = request.tool_call["name"]
-        if name not in HITL_SHELL_TOOLS or not self._gate_shut(request):
+        if not policy.call_needs_person(name, request.tool_call.get("args")):
+            return None
+        if not self._gate_shut(request):
             return None
         return ToolMessage(
-            content=f"Error: {name} is not available: no person is approving "
-            "commands in this run.",
+            content=policy.no_person_error(name),
             tool_call_id=request.tool_call["id"] or "",
             name=name,
             status="error",

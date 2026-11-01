@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 from collections import defaultdict
@@ -13,7 +14,7 @@ from typing import Any
 
 import yaml
 
-from ... import paths
+from ... import paths, policy
 
 AUTOSKILL_PROPOSALS_DIR = "autoskills/proposals"
 AUTOSKILL_PROCESSED_DIR = "autoskills/processed"
@@ -398,26 +399,40 @@ def _find_installed_user_skill(
     return None
 
 
+def _proposal_files(proposal_dir: Path) -> list[Path]:
+    """The regular files of a proposal, without entering or following a link."""
+    files: list[Path] = []
+    for root, dirs, names in os.walk(proposal_dir):
+        dirs[:] = [d for d in dirs if not policy.is_link(os.path.join(root, d))]
+        for name in names:
+            path = Path(root) / name
+            if not policy.is_link(path) and path.is_file():
+                files.append(path)
+    return files
+
+
 def _copy_proposed_skill(
     proposal_dir: Path,
     destination: Path,
     *,
     base_dir: Path | None = None,
 ) -> None:
+    # Links are not followed in either folder: a link would copy whatever it
+    # names, the saved sign-in included (``policy.copy_ignore``).
     if not destination.exists():
         if base_dir is not None:
-            shutil.copytree(base_dir, destination)
+            shutil.copytree(
+                base_dir, destination, symlinks=True, ignore=policy.copy_ignore()
+            )
         else:
             destination.mkdir(parents=True, exist_ok=False)
-    for source_path in proposal_dir.rglob("*"):
-        if not source_path.is_file():
-            continue
+    for source_path in _proposal_files(proposal_dir):
         relative = source_path.relative_to(proposal_dir)
         if relative.as_posix() in {"manifest.json", "RATIONALE.md"}:
             continue
         target = destination / relative
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source_path, target)
+        shutil.copy2(source_path, target, follow_symlinks=False)
 
 
 def submit_autoskill_proposal(

@@ -597,6 +597,7 @@ class TestInterruptOnWiring:
                 "execute",
                 "run_in_background",
                 "delete",
+                "skill_manager",
             }
             for entry in cfg.values():
                 assert entry["when"] is predicate

@@ -5,7 +5,15 @@ from typing import Literal
 
 from langchain_core.tools import BaseTool, tool
 
+from .. import policy
 from ..paths import Workspace
+
+
+def no_human_gate() -> bool:
+    """Whether this run has nobody to approve an install (see ``backends``)."""
+    from ..backends import no_human_gate as _no_human_gate
+
+    return _no_human_gate()
 
 
 def make_skill_manager_tool(
@@ -83,6 +91,11 @@ def make_skill_manager_tool(
                     "Provide a GitHub shorthand (e.g. source='owner/repo@skill-name'), "
                     "a GitHub URL, or a local directory path."
                 )
+            # A person approves each install (the HITL interrupt and
+            # ``ShellGateMiddleware`` enforce it on the graph); this is the
+            # tool's own check for a run that reached it some other way.
+            if no_human_gate():
+                return policy.no_person_error(policy.SKILL_TOOL)
             result = install_skill(source, workspace=workspace, work_dir=work_dir)
             if not result["success"]:
                 # ``_batch_install_local`` returns ``{"success": False, "batch":

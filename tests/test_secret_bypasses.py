@@ -101,8 +101,7 @@ def _link(link: Path, target: Path, *, folder: bool = False) -> None:
 
 
 def test_skill_tool_will_not_install_a_folder_holding_the_auth_folder(home):
-    backend = CustomSandboxBackend(root_dir=str(home), virtual_mode=True)
-    assert not backend.write("/.metasci-scribe/SKILL.md", SKILL_MD).error
+    (home / ".metasci-scribe" / "SKILL.md").write_text(SKILL_MD, encoding="utf-8")
     tool = make_skill_manager_tool(Workspace(home))
 
     answer = tool.invoke({"action": "install", "source": "/.metasci-scribe"})
@@ -558,3 +557,283 @@ def test_resume_does_not_move_into_such_a_workspace(home, project):
     assert ctx.dirs is start
     assert ctx.thread_id == "before"
     assert any(str(home) in text for text in messages)
+
+
+# ---------------------------------------------------------------- human-typed routes
+
+
+def _mention_forms(token: Path, project: Path) -> list[str]:
+    relative = os.path.relpath(token, project).replace(os.sep, "/")
+    return [
+        f"@{token}",
+        f'@"{token}"',
+        f"@{relative}",
+        "@~/.metasci-scribe/auth/chatgpt.json",
+    ]
+
+
+def test_file_mentions_refuse_the_sign_in_in_every_form(
+    home, token, project, monkeypatch
+):
+    from metasci_scribe.cli.file_mentions import (
+        parse_file_mentions,
+        resolve_file_mentions,
+    )
+
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    for form in _mention_forms(token, project):
+        files, warnings = parse_file_mentions(f"look at {form}", cwd=project)
+        assert files == [], form
+        assert any("sign-in" in w for w in warnings), (form, warnings)
+        _text, prompt, _warnings = resolve_file_mentions(
+            f"look at {form}", str(project)
+        )
+        assert SECRET not in prompt, form
+
+
+def test_file_mentions_refuse_a_link_to_the_sign_in(home, token, project):
+    from metasci_scribe.cli.file_mentions import resolve_file_mentions
+
+    _link(project / "notes.json", token)
+    _text, prompt, warnings = resolve_file_mentions("see @notes.json", str(project))
+    assert SECRET not in prompt
+    assert any("sign-in" in w for w in warnings)
+
+
+def test_rubric_text_refuses_the_sign_in(home, token, project, monkeypatch):
+    from metasci_scribe.rubric_text import RubricTextError, read_rubric_text
+
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    relative = os.path.relpath(token, project).replace(os.sep, "/")
+    for form in (f"@{token}", f"@{relative}", "@~/.metasci-scribe/auth/chatgpt.json"):
+        with pytest.raises(RubricTextError) as caught:
+            read_rubric_text(form, base_dir=project)
+        assert SECRET not in str(caught.value), form
+        assert "sign-in" in str(caught.value), form
+    _link(project / "rubric.md", token)
+    with pytest.raises(RubricTextError) as caught:
+        read_rubric_text("@rubric.md", base_dir=project)
+    assert SECRET not in str(caught.value)
+
+
+# ---------------------------------------------------------------- skill files through links
+
+
+def test_skill_md_and_expert_md_links_out_of_the_skill_are_not_read(
+    home, token, project
+):
+    from metasci_scribe.tools.skills_manager import (
+        _parse_skill_md,
+        get_skill_info,
+        list_skills,
+    )
+
+    workspace = Workspace(project)
+    skills = workspace.skills_dir
+    (skills / "linked").mkdir(parents=True)
+    _link(skills / "linked" / "SKILL.md", token)
+    (skills / "actor").mkdir()
+    (skills / "actor" / "SKILL.md").write_text(
+        "---\nname: actor\ndescription: An actor.\n---\n\nBody.\n", encoding="utf-8"
+    )
+    _link(skills / "actor" / "EXPERT.md", token)
+
+    info = _parse_skill_md(skills / "linked" / "SKILL.md", source="workspace")
+    assert SECRET not in info.body
+    assert SECRET not in info.description
+    assert SECRET not in info.expert_body
+
+    actor = _parse_skill_md(skills / "actor" / "SKILL.md", source="workspace")
+    assert actor.type == "utility"
+    assert SECRET not in actor.expert_body
+
+    for skill in list_skills(workspace=workspace):
+        assert SECRET not in repr(skill)
+    found = get_skill_info("actor", workspace=workspace)
+    assert found is not None
+    assert found.expert_body == ""
+
+
+def test_autoskill_proposal_copy_does_not_follow_links(home, token, project):
+    from metasci_scribe.memory.autoskills.proposals import _copy_proposed_skill
+
+    base = project / "installed"
+    base.mkdir()
+    (base / "SKILL.md").write_text(SKILL_MD, encoding="utf-8")
+    _link(base / "refs.json", token)
+    _link(base / "refs", token.parent, folder=True)
+    proposal = project / "proposal"
+    proposal.mkdir()
+    (proposal / "SKILL.md").write_text(SKILL_MD, encoding="utf-8")
+    _link(proposal / "notes.json", token)
+    destination = project / "dest"
+
+    _copy_proposed_skill(proposal, destination, base_dir=base)
+
+    assert (destination / "SKILL.md").is_file()
+    assert not os.path.lexists(destination / "refs.json")
+    assert not os.path.lexists(destination / "refs")
+    assert not os.path.lexists(destination / "notes.json")
+    _assert_no_copy_of_the_secret(project)
+
+
+# ---------------------------------------------------------------- skill installs need a person
+
+
+def _skill_install_agent(project: Path, calls: list[AIMessage], **config_fields):
+    model = _Scripted(script=[*calls, AIMessage("done")], offered=[])
+    agent = create_cli_agent(
+        workspace=Workspace(project),
+        config=ScribeConfig(
+            enable_async_subagents=False, memory_workers_enabled=False, **config_fields
+        ),
+        chat_model=model,
+        checkpointer=InMemorySaver(),
+    )
+    return agent, model
+
+
+def _install_call(source: str, call_id: str = "i1") -> AIMessage:
+    return AIMessage(
+        "",
+        tool_calls=[_call(call_id, "skill_manager", action="install", source=source)],
+    )
+
+
+def _installed(home: Path) -> bool:
+    return (home / ".metasci-scribe" / "skills" / "helper").exists()
+
+
+@pytest.mark.usefixtures("no_mcp")
+@pytest.mark.parametrize("granted", [False, True], ids=["armed", "session grant"])
+def test_an_agent_skill_install_waits_for_a_person(home, project, granted):
+    skill = _skill_folder(project)
+    agent, _model = _skill_install_agent(project, [_install_call(str(skill))])
+    configurable = {"thread_id": "t", "hitl_suppressed": False}
+    if granted:
+        configurable["hitl_approve_all"] = True
+
+    result = asyncio.run(
+        agent.ainvoke(
+            {"messages": [HumanMessage("go")]}, {"configurable": configurable}
+        )
+    )
+
+    (parked,) = result["__interrupt__"]
+    assert [r["name"] for r in parked.value["action_requests"]] == ["skill_manager"]
+    assert not _installed(home)
+
+
+@pytest.mark.usefixtures("no_mcp")
+def test_an_approved_skill_install_runs_and_a_rejected_one_does_not(home, project):
+    from langgraph.types import Command
+
+    skill = _skill_folder(project)
+    for decision, installed in (
+        ({"type": "reject", "message": "no"}, False),
+        ({"type": "approve"}, True),
+    ):
+        agent, _model = _skill_install_agent(project, [_install_call(str(skill))])
+        config = {"configurable": {"thread_id": "t", "hitl_suppressed": False}}
+        parked = asyncio.run(agent.ainvoke({"messages": [HumanMessage("go")]}, config))
+        (interrupt,) = parked["__interrupt__"]
+        asyncio.run(
+            agent.ainvoke(
+                Command(resume={interrupt.id: {"decisions": [decision]}}), config
+            )
+        )
+        assert _installed(home) is installed
+        shutil.rmtree(home / ".metasci-scribe" / "skills", ignore_errors=True)
+
+
+@pytest.mark.usefixtures("no_mcp")
+def test_other_skill_manager_actions_do_not_interrupt(home, project):
+    agent, _model = _skill_install_agent(
+        project,
+        [AIMessage("", tool_calls=[_call("l1", "skill_manager", action="list")])],
+    )
+    result = asyncio.run(
+        agent.ainvoke(
+            {"messages": [HumanMessage("go")]},
+            {"configurable": {"thread_id": "t", "hitl_suppressed": False}},
+        )
+    )
+    assert not result.get("__interrupt__")
+    assert [m for m in result["messages"] if m.type == "tool"]
+
+
+@pytest.mark.usefixtures("no_mcp")
+@pytest.mark.parametrize(
+    "gate", ["suppressed", "dangerous"], ids=["hitl suppressed", "dangerous mode"]
+)
+def test_a_skill_install_is_unavailable_with_no_human_gate(home, project, gate):
+    """A suppressed run never pauses; a dangerous-mode run pauses and the
+    client approves everything unseen. Neither installs."""
+    from langgraph.types import Command
+
+    skill = _skill_folder(project)
+    fields = {"dangerous_mode": True} if gate == "dangerous" else {}
+    agent, _model = _skill_install_agent(project, [_install_call(str(skill))], **fields)
+    config = {
+        "configurable": {"thread_id": "t", "hitl_suppressed": gate == "suppressed"}
+    }
+    result = asyncio.run(agent.ainvoke({"messages": [HumanMessage("go")]}, config))
+    if gate == "dangerous":
+        (interrupt,) = result["__interrupt__"]
+        result = asyncio.run(
+            agent.ainvoke(
+                Command(resume={interrupt.id: {"decisions": [{"type": "approve"}]}}),
+                config,
+            )
+        )
+    assert not result.get("__interrupt__")
+    answer = next(str(m.content) for m in result["messages"] if m.type == "tool")
+    assert "no person" in answer
+    assert not _installed(home)
+
+
+def test_the_skill_tool_itself_refuses_an_install_with_no_human_gate(
+    home, project, monkeypatch
+):
+    skill = _skill_folder(project)
+    monkeypatch.setattr(
+        "metasci_scribe.tools.skill_manager.no_human_gate", lambda: True
+    )
+    tool = make_skill_manager_tool(Workspace(project))
+    answer = tool.invoke({"action": "install", "source": str(skill)})
+    assert "no person" in answer
+    assert not _installed(home)
+    assert "Error" not in tool.invoke({"action": "list"})
+
+
+def test_the_client_prompts_for_a_skill_install_under_a_session_grant(monkeypatch):
+    from metasci_scribe.stream import display
+
+    monkeypatch.setattr(display, "_session_auto_approve", True)
+    prompted = []
+    resolution = display._resolve_hitl_approval(
+        {
+            "action_requests": [
+                {
+                    "name": "skill_manager",
+                    "args": {"action": "install", "source": "o/r"},
+                }
+            ]
+        },
+        prompt_fn=lambda requests: prompted.append(requests) or None,
+    )
+    assert prompted
+    assert resolution.decisions is None
+
+
+def test_config_policy_never_clears_a_skill_install_on_its_own():
+    from metasci_scribe.stream.interaction import resolve_config_decisions
+
+    install = [
+        {"name": "skill_manager", "args": {"action": "install", "source": "o/r"}}
+    ]
+    assert resolve_config_decisions(install) is None
+    listing = [{"name": "skill_manager", "args": {"action": "list"}}]
+    assert resolve_config_decisions(listing) == [{"type": "approve"}]

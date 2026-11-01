@@ -132,6 +132,7 @@ def _resolve_one_action_request(
     ``auto_approve``. ``None`` covers PROMPT verdicts, always-prompt tools,
     and malformed requests.
     """
+    from .. import policy
     from ..config.settings import HITL_ALWAYS_PROMPT_TOOLS, HITL_SHELL_TOOLS
 
     if not isinstance(req, dict):
@@ -145,6 +146,9 @@ def _resolve_one_action_request(
     if cfg.dangerous_mode:
         return {"type": "approve"}
     if name in HITL_ALWAYS_PROMPT_TOOLS:
+        return None
+    # A skill install is a person's decision; no config rule clears it.
+    if policy.skill_install_call(name, req.get("args")):
         return None
     if name not in HITL_SHELL_TOOLS:
         return {"type": "approve"}

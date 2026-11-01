@@ -121,18 +121,21 @@ def test_the_server_reads_and_removes_the_record():
 class TestServerRecord:
     """What start_langgraph_dev records for the workspace, port and host."""
 
-    def test_a_dotenv_port_keeps_its_source(self, tmp_path, monkeypatch):
+    def test_a_dotenv_port_is_not_taken(self, tmp_path, monkeypatch):
+        """A workspace ``.env`` sets no ``METASCI_SCRIBE_*`` key, so a port
+        there is neither used nor recorded; the port the launcher resolved is
+        recorded as its own value."""
         from metasci_scribe.langgraph_dev.manager import _server_env_origins
 
         dotenv = tmp_path / ".env"
         dotenv.write_text("METASCI_SCRIBE_LANGGRAPH_DEV_PORT=6297\n", encoding="utf-8")
         monkeypatch.setattr(settings, "find_dotenv", lambda *a, **k: str(dotenv))
-        get_effective_config()
+        monkeypatch.delenv("METASCI_SCRIBE_LANGGRAPH_DEV_PORT", raising=False)
+        config = get_effective_config()
+        assert config.langgraph_dev_port == ScribeConfig().langgraph_dev_port
+        assert env_origin("METASCI_SCRIBE_LANGGRAPH_DEV_PORT") is None
         origins = _server_env_origins(str(tmp_path), "6297", "127.0.0.1")
-        assert origins["METASCI_SCRIBE_LANGGRAPH_DEV_PORT"] == {
-            "source": "dotenv",
-            "path": str(dotenv),
-        }
+        assert origins["METASCI_SCRIBE_LANGGRAPH_DEV_PORT"] == {"source": "cli"}
 
     def test_a_symlinked_workdir_reads_file(self, config_file, tmp_path):
         from metasci_scribe.langgraph_dev.manager import _server_env_origins

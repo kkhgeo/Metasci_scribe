@@ -30,7 +30,7 @@ from deepagents.backends.protocol import (
     WriteResult,
 )
 
-from . import paths
+from . import paths, policy
 from .cancellation import current_cancel_event
 
 if TYPE_CHECKING:
@@ -1506,32 +1506,95 @@ def convert_virtual_paths_in_command(
 _DEVICE_PATH = re.compile(r"^[\\/]{2}")
 
 
-def guarded_path(resolve: Callable[[str], Path], key: str) -> Path:
+def guarded_path(
+    resolve: Callable[[str], Path], key: str, *, write: bool = False
+) -> Path:
     """Resolve ``key`` with ``resolve``, refusing what no agent may touch.
 
-    The one check every backend serving an agent goes through, in every mode.
-    ``PermissionError`` because every file operation reports an ``OSError`` as
-    a failed call, and some let a ``ValueError`` through.
+    The one check every backend serving an agent goes through, in every mode:
+    the private state (:func:`policy.is_private_state`) for any operation,
+    and with ``write`` the configuration and code the app loads
+    (:func:`policy.write_refusal`). ``PermissionError`` because every file
+    operation reports an ``OSError`` as a failed call, and some let a
+    ``ValueError`` through.
     """
     if _DEVICE_PATH.match(key):
         raise PermissionError("UNC and device paths are not available to file tools.")
     resolved = resolve(key)
-    if paths.is_auth_path(resolved):
-        raise PermissionError(
-            "Metasci Scribe's saved sign-in is not available to file tools."
-        )
+    if policy.is_private_state(resolved):
+        raise PermissionError(policy.PRIVATE_STATE_ERROR)
+    if write:
+        refusal = policy.write_refusal(resolved)
+        if refusal is not None:
+            raise PermissionError(refusal)
     return resolved
 
 
 class _GuardedFiles:
-    """File operations for agents: :func:`guarded_path` on every path, and no
-    trace of the saved sign-in in a listing or search from a parent folder."""
+    """File operations for agents: :func:`guarded_path` on every path, the
+    write check on every operation that changes a file, and no trace of the
+    private state in a listing or search from a parent folder."""
 
     def _resolve_path(self, key: str) -> Path:
         return guarded_path(self._sanitized_path, key)
 
     def _sanitized_path(self, key: str) -> Path:
         return super()._resolve_path(key)
+
+    def _write_refusal(self, key: str) -> str | None:
+        """Why ``key`` may not be written, or ``None``. A key that does not
+        resolve is left to the operation itself to report."""
+        try:
+            guarded_path(self._sanitized_path, key, write=True)
+        except PermissionError as exc:
+            return str(exc)
+        except (ValueError, OSError):
+            return None
+        return None
+
+    def write(self, file_path: str, content: str) -> WriteResult:
+        refusal = self._write_refusal(file_path)
+        if refusal is not None:
+            return WriteResult(error=refusal)
+        return super().write(file_path, content)
+
+    def edit(
+        self,
+        file_path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
+    ) -> EditResult:
+        refusal = self._write_refusal(file_path)
+        if refusal is not None:
+            return EditResult(error=refusal)
+        return super().edit(file_path, old_string, new_string, replace_all)
+
+    def delete(self, file_path: str) -> DeleteResult:
+        refusal = self._write_refusal(file_path)
+        if refusal is not None:
+            return DeleteResult(error=refusal)
+        return super().delete(file_path)
+
+    def upload_files(self, files: list[tuple[str, bytes]]) -> list[FileUploadResponse]:
+        responses: list[FileUploadResponse] = []
+        allowed: list[tuple[str, bytes]] = []
+        refused: dict[str, str] = {}
+        for file_path, content in files:
+            refusal = self._write_refusal(file_path)
+            if refusal is None:
+                allowed.append((file_path, content))
+            else:
+                refused[file_path] = refusal
+        uploaded = iter(super().upload_files(allowed) if allowed else [])
+        for file_path, _content in files:
+            if file_path in refused:
+                responses.append(
+                    FileUploadResponse(path=file_path, error=refused[file_path])
+                )
+            else:
+                responses.append(next(uploaded))
+        return responses
 
     def _tool_paths(self, items: list | None) -> list | None:
         if not items:
@@ -1543,7 +1606,7 @@ class _GuardedFiles:
             if location not in hidden:
                 # A virtual path is rooted at cwd; a real one replaces it here.
                 host = location.lstrip("/") if self.virtual_mode else location
-                hidden[location] = paths.is_auth_path(self.cwd / host)
+                hidden[location] = policy.is_private_state(self.cwd / host)
             if not hidden[location]:
                 visible.append(item)
         return visible

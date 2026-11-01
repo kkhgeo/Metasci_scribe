@@ -222,8 +222,14 @@ def _grep_result(matches):
 
 def test_neighbours_of_the_auth_folder_stay_readable(home):
     backend = _workspace_backend(home)
+    (home / ".metasci-scribe" / "auth-notes.md").write_text("x", encoding="utf-8")
     assert not backend.read("/.metasci-scribe/authors.md").error
-    assert not backend.write("/.metasci-scribe/auth-notes.md", "x").error
+    assert not backend.read("/.metasci-scribe/auth-notes.md").error
+    # Readable, but the data folder itself is not a place file tools write
+    # (``policy.write_refusal``); the refusal names the folder, not the sign-in.
+    refusal = backend.write("/.metasci-scribe/auth-notes.md", "y").error
+    assert refusal
+    assert "sign-in" not in refusal
 
 
 @pytest.mark.skipif(not Path("C:/").exists(), reason="case-insensitive file system")

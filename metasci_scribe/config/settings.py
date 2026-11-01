@@ -21,7 +21,7 @@ from typing import Any, Literal, get_args, get_origin, get_type_hints
 import yaml
 from dotenv import dotenv_values, find_dotenv
 
-from .. import paths
+from .. import paths, policy
 from . import store
 
 # Tools that run shell commands and need manual HITL approval (subject to
@@ -1021,31 +1021,27 @@ def get_effective_config(
     Priority (highest to lowest):
         1. CLI arguments (``cli_overrides``)
         2. Parent-process environment variables for any ``METASCI_SCRIBE_*`` key
-        3. ``.env`` file at (or above) the current working directory
+        3. ``.env`` file at (or above) the current working directory, for
+           provider credentials and endpoints only
         4. Parent-process environment variables for everything else
-           (third-party API keys / base URLs, plus arbitrary unmapped keys)
         5. Config file (``~/.config/metasci-scribe/config.yaml``)
         6. Dataclass defaults
 
-    Rows 2 and 4 differ because ``.env`` values need different treatment
-    for our own namespaced config knobs vs third-party credentials.
-    Third-party keys (``ANTHROPIC_API_KEY``, ``OPENAI_API_KEY``, ...)
-    follow the industry convention that ``.env`` is the per-project
-    credential store; extending shell-wins to them would silently flip
-    a workspace key back to a global ``.bashrc`` key. Our own
-    ``METASCI_SCRIBE_*`` keys are the opposite: an explicit CLI/parent-
-    process value (e.g. the bind port the CLI hands to the langgraph dev
-    subprocess) must not be shadowed by a
-    workspace ``.env``. We implement this by reading ``.env`` into a
-    dict via ``dotenv_values`` (no ``os.environ`` mutation), then
-    writing third-party keys unconditionally and ``METASCI_SCRIBE_*`` keys
-    only when the shell doesn't already have a non-empty value.
+    A workspace ``.env`` is the per-project credential store, by convention:
+    a provider key or endpoint there wins over a global one in the shell
+    (``.bashrc``). It is also a file in a folder the agent writes to and
+    that may have arrived with a cloned paper, so nothing else is taken from
+    it: no ``METASCI_SCRIBE_*`` setting (those come from the user's config
+    and shell; a ``.env`` could otherwise raise the agent's own mode), and
+    nothing that changes how git, Python, Node, a shell or an HTTP client
+    runs (``GIT_SSH_COMMAND``, ``PYTHONPATH``, proxies, ...). The allow
+    list is :func:`metasci_scribe.policy.dotenv_key_allowed`.
 
     Tradeoff: ``OPENAI_API_KEY=xxx metasci-scribe ...`` inline overrides
     still lose to a workspace ``.env`` containing ``OPENAI_API_KEY``,
-    because the merge writes third-party keys from ``.env``
-    unconditionally. Users who need to override a ``.env``-defined
-    credential inline must edit or unset the ``.env`` entry.
+    because the merge writes allowed keys from ``.env`` unconditionally.
+    Users who need to override a ``.env``-defined credential inline must
+    edit or unset the ``.env`` entry.
 
     Args:
         cli_overrides: Dictionary of CLI argument overrides.
@@ -1064,25 +1060,13 @@ def get_effective_config(
     #
     # ``dotenv_values`` returns a dict without touching ``os.environ``, so the
     # merge below is a pure write sequence and idempotent under interleaving.
-    # Third-party keys keep ``.env``-wins (industry convention).
-    # ``METASCI_SCRIBE_*`` keys are our own namespaced config knobs where
-    # CLI/parent-process intent should stay authoritative — write from ``.env``
-    # only when the shell doesn't already have a non-empty value. Treating an
-    # empty shell value as "unset" matches the ``if env_value:`` truthy check
-    # in the ``_ENV_MAPPINGS`` loop below; without this, an empty parent export
-    # would silently regress vs main by falling through to file/defaults.
+    # Only provider credentials and endpoints are taken (see the docstring);
+    # a bare ``FOO`` without ``=`` has nothing to write.
     dotenv_path = find_dotenv(usecwd=True)
     dotenv_map = dotenv_values(dotenv_path) if dotenv_path else {}
-    for env_key, env_value in dotenv_map.items():
-        if env_value is None:
-            continue  # bare ``FOO`` without ``=`` — nothing to write
-        if env_key.startswith("METASCI_SCRIBE_"):
-            if not os.environ.get(env_key):
-                os.environ[env_key] = env_value
-                record_env_origin(env_key, "dotenv", dotenv_path)
-        else:
-            os.environ[env_key] = env_value
-            record_env_origin(env_key, "dotenv", dotenv_path)
+    for env_key, env_value in policy.dotenv_values_allowed(dotenv_map).items():
+        os.environ[env_key] = env_value
+        record_env_origin(env_key, "dotenv", dotenv_path)
 
     # Start with file config (includes defaults for missing values)
     config = load_config()
