@@ -71,6 +71,12 @@ def boom(thread_id: str, prompt: str) -> None:
     raise AssertionError("the agent must not be invoked")
 
 
+def todo_ids(prompt: str) -> list[str]:
+    """The IDs listed as still to write (lines such as '- R1  Results: ...')."""
+    head = prompt.split("Rules:")[0]
+    return [line.split()[1] for line in head.splitlines() if line.startswith("- ")]
+
+
 def state_file(root: Path) -> Path:
     return root / ".metasci-scribe" / "run.json"
 
@@ -412,7 +418,7 @@ def test_resume_uses_same_thread_when_outline_same(project):
     result = run_project(project, second)
     assert result.exit == RunExit.OK
     assert second.calls[0][0] == first.calls[0][0]
-    assert "I1" not in second.calls[0][1]
+    assert todo_ids(second.calls[0][1]) == ["R1", "R2", "D1"]
 
 
 def test_comment_only_change_keeps_thread(project):
@@ -441,8 +447,7 @@ def test_outline_change_new_thread_keeps_done(project):
     state = RunState.load(project)
     assert list(state.paragraphs) == ["I1", "R1", "R3", "D1"]
     assert "R2" not in state.paragraphs
-    assert "I1" not in second.calls[0][1]  # done stays done
-    assert "R3" in second.calls[0][1]
+    assert todo_ids(second.calls[0][1]) == ["R3", "D1"]  # done stays done
 
 
 def test_changed_done_paragraph_stays_done(project):
@@ -680,3 +685,129 @@ def test_a_chat_session_never_gets_the_tool():
 
     assert tools.make_mark_paragraph_tool is make_mark_paragraph_tool
     assert tools.__all__.count("make_mark_paragraph_tool") == 1
+
+
+# ------------------------------------------------------- fix round 1
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        NotSignedIn("refresh_token=rt-abcdef Bearer eyJhbGciOiJSUzI1NiJ9.payload.sig"),
+        ValueError("Authorization: Bearer eyJhbGciOiJSUzI1NiJ9.payload.sig"),
+    ],
+)
+def test_exception_details_stay_out_of_the_result(project, exc):
+    def failing(thread_id, prompt):
+        raise exc
+
+    result = run_project(project, failing)
+    assert result.exit == RunExit.FAILED
+    assert type(exc).__name__ in result.message
+    assert "eyJ" not in result.message
+    assert "rt-abcdef" not in result.message
+    assert str(exc) not in result.message
+
+
+def test_model_not_configured_message_is_fixed(project):
+    def failing(thread_id, prompt):
+        raise ModelNotConfigured("openai")
+
+    result = run_project(project, failing)
+    assert "ModelNotConfigured" in result.message
+    assert "/login" in result.message
+
+
+def test_ok_message_does_not_claim_the_draft_is_checked(project):
+    result = run_project(project, all_done(project))
+    assert "marked 4 of 4 paragraphs done" in result.message
+    assert "Done:" not in result.message
+    assert "written" not in result.message
+    assert "check" in result.message
+
+
+def test_saved_state_is_read_after_the_lock_is_held(project, monkeypatch):
+    """A run that finished while we waited for the lock is the state to build on."""
+    real = run_mod.FileLock
+
+    class Racing(real):
+        def acquire(self, *args, **kwargs):
+            out = super().acquire(*args, **kwargs)
+            digest = outline_digest(OUTLINE)
+            states = dict.fromkeys(IDS, "pending") | {"I1": "done"}
+            RunState("t-other", digest, states, {}).save(project)
+            return out
+
+    monkeypatch.setattr(run_mod, "FileLock", Racing)
+    agent = Agent(project, [[(i, "done", "") for i in ("R1", "R2", "D1")]])
+    assert run_project(project, agent).exit == RunExit.OK
+    assert agent.calls[0][0] == "t-other"
+    assert todo_ids(agent.calls[0][1]) == ["R1", "R2", "D1"]
+
+
+def test_first_prompt_after_outline_change_says_done_paragraphs_are_in_the_manuscript(
+    project,
+):
+    run_project(
+        project, Agent(project, [[("I1", "done", ""), ("R1", "done", "")], [], []])
+    )
+    changed = OUTLINE.replace("R2 · ② Second result", "R3 · ② Third result")
+    (project / "outline.md").write_text(changed, encoding="utf-8")
+    agent = Agent(project, [[("R3", "done", ""), ("D1", "done", "")]])
+    run_project(project, agent)
+    prompt = agent.calls[0][1]
+    assert "manuscript.md already holds" in prompt
+    assert "I1, R1" in prompt
+    assert "Keep them" in prompt
+
+
+def test_first_prompt_of_a_fresh_run_has_no_kept_note(project):
+    agent = all_done(project)
+    run_project(project, agent)
+    assert "already holds" not in agent.calls[0][1]
+
+
+def test_tool_rejects_text_the_file_cannot_hold(started, monkeypatch):
+    def cannot_encode(self, root):
+        raise UnicodeEncodeError("utf-8", "\ud800", 0, 1, "surrogates not allowed")
+
+    monkeypatch.setattr(RunState, "save", cannot_encode)
+    assert "Rejected" in mark(started, "R1")
+
+
+def test_tool_with_only_a_lone_surrogate_reason_is_rejected(started):
+    assert "Rejected" in mark(started, "R1", "blocked", "\ud800")
+    assert RunState.load(started).paragraphs["R1"] == "pending"
+
+
+def test_tool_strips_control_characters_from_the_reason(started):
+    mark(started, "R1", "blocked", "\x1b[31mno data\x07")
+    assert RunState.load(started).reasons["R1"] == "[31mno data"
+
+
+def test_blocked_reason_is_cleaned_and_cut_in_the_result(project):
+    def hostile(thread_id, prompt):
+        RunState(
+            thread_id,
+            outline_digest(OUTLINE),
+            dict.fromkeys(IDS, "pending") | {"R1": "blocked"},
+            {"R1": "\x1b]0;owned\x07\x1b[31m" + "x" * 2000},
+        ).save(project)
+
+    result = run_project(project, hostile)
+    assert result.exit == RunExit.NEEDS_DECISION
+    assert "\x1b" not in result.message
+    assert "\x07" not in result.message
+    assert len(result.message) < 900
+
+
+def test_stale_temp_files_are_removed_at_start(project):
+    folder = project / ".metasci-scribe"
+    folder.mkdir()
+    stale = folder / ".run.json.abc123.tmp"
+    stale.write_text("{half", encoding="utf-8")
+    other = folder / "keep.tmp"
+    other.write_text("x", encoding="utf-8")
+    assert run_project(project, all_done(project)).exit == RunExit.OK
+    assert not stale.exists()
+    assert other.exists()

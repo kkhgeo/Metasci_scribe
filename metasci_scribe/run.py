@@ -35,6 +35,7 @@ import re
 import tempfile
 import threading
 import time
+import unicodedata
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -349,8 +350,8 @@ def make_mark_paragraph_tool(root: Path) -> BaseTool:
             status: "done" when the paragraph is in manuscript.md, "blocked" when you cannot write it.
             reason: Required with "blocked": one sentence on what is missing or must be decided.
         """
-        pid = paragraph_id.strip()
-        why = " ".join(reason.split())[:_MAX_REASON]
+        pid = _clean(paragraph_id)
+        why = _clean(reason)[:_MAX_REASON]
         with _MARK_LOCK:
             try:
                 state = RunState.load(root)
@@ -377,7 +378,7 @@ def make_mark_paragraph_tool(root: Path) -> BaseTool:
                 state.reasons.pop(pid, None)
             try:
                 state.save(root)
-            except OSError as exc:
+            except (OSError, UnicodeError) as exc:
                 return f"Rejected: could not save ({type(exc).__name__})."
             return f"{pid} marked {status} ({state.count(DONE)}/{len(state.paragraphs)} done)."
 
@@ -418,7 +419,7 @@ outline's order, and save it in manuscript.md. Read program.md and outline.md fi
 Paragraphs still to write, in order:
 {todo}
 
-Rules:
+{kept}Rules:
 - Use only this project's own material (Knowledge/, .metasci-scribe/extracted/, Figures/, Tables/). Never invent a number or a citation.
 - Where the material gives no evidence, write [evidence needed] in the text and keep going. This is not a failure.
 - After each paragraph is in manuscript.md, call mark_paragraph(paragraph_id, "done").
@@ -436,13 +437,25 @@ the project's material, call mark_paragraph(paragraph_id, "blocked", reason) and
 """
 
 
+_KEPT = """\
+manuscript.md already holds these finished paragraphs: {ids}.
+Keep them exactly as they are; do not rewrite or reorder them. Add each pending
+paragraph where the outline puts it.
+
+"""
+
+
 def _prompt(first: bool, state: RunState, titles: dict[str, Paragraph]) -> str:
     todo = "\n".join(
         f"- {i}  {titles[i].section}: {titles[i].title}".rstrip(": ")
         for i, s in state.paragraphs.items()
         if s == PENDING and i in titles
     )
-    return (_FIRST_PROMPT if first else _NEXT_PROMPT).format(todo=todo)
+    if not first:
+        return _NEXT_PROMPT.format(todo=todo)
+    done = [i for i, s in state.paragraphs.items() if s == DONE]
+    kept = _KEPT.format(ids=", ".join(done)) if done else ""
+    return _FIRST_PROMPT.format(todo=todo, kept=kept)
 
 
 def _read_manuscript(root: Path) -> str:
@@ -452,9 +465,17 @@ def _read_manuscript(root: Path) -> str:
         return ""
 
 
-def _short(exc: BaseException) -> str:
-    text = _redact_api_keys(" ".join(str(exc).split()))
-    return text[:_MAX_ERROR_TEXT]
+def _clean(text: str) -> str:
+    """*text* on one line without control, format or surrogate characters, so
+    nothing the model wrote can steer a terminal or break a file write."""
+    one_line = " ".join(text.split())
+    return "".join(c for c in one_line if unicodedata.category(c)[0] != "C")
+
+
+def _short(value: object) -> str:
+    """Text that came from outside (an error, the model), safe to print:
+    cleaned, scrubbed of deployed API keys, and cut short."""
+    return _redact_api_keys(_clean(str(value)))[:_MAX_ERROR_TEXT]
 
 
 def _plan_stop_message(exc: PlanStop, progress: str) -> str:
@@ -538,26 +559,36 @@ def run_project(root: Path, invoke: AgentInvoke) -> RunResult:
     state_dir = Workspace(root).state_dir
     try:
         state_dir.mkdir(parents=True, exist_ok=True)
-        saved = RunState.load(root)
-    except RunStateError as exc:
-        return result(
-            RunExit.FAILED,
-            f"{exc}. Fix or delete .metasci-scribe/run.json; delete it to start the run over.",
-        )
     except OSError as exc:
-        return result(RunExit.FAILED, f"{state_dir} cannot be used: {exc}")
-
+        return result(RunExit.FAILED, f"{state_dir} cannot be used: {_short(exc)}")
     lock = FileLock(str(state_dir / "run.lock"))
     try:
         lock.acquire(timeout=0)
     except Timeout:
         return result(RunExit.FAILED, "Another run is already working on this folder.")
     except OSError as exc:
-        return result(RunExit.FAILED, f"{state_dir} cannot be used: {exc}")
+        return result(RunExit.FAILED, f"{state_dir} cannot be used: {_short(exc)}")
     try:
+        # Only now, holding the lock, is the saved state the one to build on.
+        _remove_stale_temps(state_dir)
+        try:
+            saved = RunState.load(root)
+        except RunStateError as exc:
+            return result(
+                RunExit.FAILED,
+                f"{exc}. Fix or delete .metasci-scribe/run.json; delete it to start the run over.",
+            )
         return _run_locked(root, invoke, paragraphs, titles, digest, saved, result)
     finally:
         lock.release()
+
+
+def _remove_stale_temps(state_dir: Path) -> None:
+    """Delete ``.run.json.*.tmp`` files that a killed save left behind. Called
+    holding the run lock, so no save of this folder is in progress."""
+    for stale in state_dir.glob(".run.json.*.tmp"):
+        with contextlib.suppress(OSError):
+            stale.unlink()
 
 
 def _run_locked(root, invoke, paragraphs, titles, digest, saved, result) -> RunResult:
@@ -592,7 +623,7 @@ def _run_locked(root, invoke, paragraphs, titles, digest, saved, result) -> RunR
             invoke(state.thread_id, _prompt(attempt == 0, state, titles))
         except PlanStop as exc:
             state = _reload_quietly(root, state)
-            progress = f"Progress is saved ({state.count(DONE)}/{len(state.paragraphs)} paragraphs done)."
+            progress = f"Progress is saved ({state.count(DONE)}/{len(state.paragraphs)} paragraphs marked done)."
             if exc.action is PlanAction.STOP_USAGE:
                 return result(
                     RunExit.USAGE_LIMIT,
@@ -609,8 +640,8 @@ def _run_locked(root, invoke, paragraphs, titles, digest, saved, result) -> RunR
             state = _reload_quietly(root, state)
             return result(
                 RunExit.FAILED,
-                f"The model is not available: {_short(exc)} Run /login, then run again. "
-                f"Progress is saved ({state.count(DONE)}/{len(state.paragraphs)} done).",
+                f"The model is not available ({type(exc).__name__}). Run /login, then run again. "
+                f"Progress is saved ({state.count(DONE)}/{len(state.paragraphs)} marked done).",
                 state,
                 notes,
             )
@@ -618,8 +649,8 @@ def _run_locked(root, invoke, paragraphs, titles, digest, saved, result) -> RunR
             state = _reload_quietly(root, state)
             return result(
                 RunExit.FAILED,
-                f"The agent stopped with {type(exc).__name__}: {_short(exc)} "
-                f"Progress is saved ({state.count(DONE)}/{len(state.paragraphs)} done); "
+                f"The agent stopped with an unexpected error ({type(exc).__name__}). "
+                f"Progress is saved ({state.count(DONE)}/{len(state.paragraphs)} marked done); "
                 "run again to continue.",
                 state,
                 notes,
@@ -638,11 +669,11 @@ def _run_locked(root, invoke, paragraphs, titles, digest, saved, result) -> RunR
     blocked = [i for i, s in state.paragraphs.items() if s == BLOCKED]
     pending = [i for i, s in state.paragraphs.items() if s == PENDING]
     if blocked:
-        lines = [f"- {i}: {state.reasons.get(i, '')}" for i in blocked]
+        lines = [f"- {i}: {_short(state.reasons.get(i, ''))}" for i in blocked]
         return result(
             RunExit.NEEDS_DECISION,
             f"{len(blocked)} paragraph(s) need your decision "
-            f"({state.count(DONE)}/{total} done):\n"
+            f"({state.count(DONE)}/{total} marked done):\n"
             + "\n".join(lines)
             + "\nResolve them (the sources, program.md, or the outline in a chat session), "
             "then run again.",
@@ -656,7 +687,7 @@ def _run_locked(root, invoke, paragraphs, titles, digest, saved, result) -> RunR
         return result(
             RunExit.FAILED,
             f"The agent did not finish after {MAX_PASSES} passes "
-            f"({state.count(DONE)}/{total} done). Still pending: {shown}. "
+            f"({state.count(DONE)}/{total} marked done). Still pending: {shown}. "
             "Run again to continue.",
             state,
             notes,
@@ -676,7 +707,12 @@ def _run_locked(root, invoke, paragraphs, titles, digest, saved, result) -> RunR
         else ""
     )
     return result(
-        RunExit.OK, f"Done: {total}/{total} paragraphs written.{tail}", state, notes
+        RunExit.OK,
+        f"The agent marked {total} of {total} paragraphs done.{tail}\n"
+        "Nobody has checked the draft yet: read manuscript.md, and check its "
+        "claims and citations against your sources, before you use it.",
+        state,
+        notes,
     )
 
 
