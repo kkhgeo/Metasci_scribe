@@ -181,9 +181,12 @@ def _hard_exclusion(exc: BaseException) -> bool:
     from langchain_core.exceptions import ContextOverflowError
     from langgraph.errors import GraphBubbleUp
 
-    from ..llm.errors import ProviderStreamError
+    from ..llm.errors import PlanAction, PlanStop, ProviderStreamError
     from .error_normalization import ModelOutputTruncatedError
 
+    # The action alone decides for the ChatGPT plan: a 429 can be a usage limit.
+    if isinstance(exc, PlanStop):
+        return exc.action is not PlanAction.RETRY
     if isinstance(
         exc, GraphBubbleUp | ContextOverflowError | ModelOutputTruncatedError
     ):
@@ -206,6 +209,10 @@ def _hard_exclusion(exc: BaseException) -> bool:
 def _signal(exc: BaseException) -> bool | None:
     from langchain_core.exceptions import ModelError
 
+    from ..llm.errors import PlanStop
+
+    if isinstance(exc, PlanStop):
+        return True  # ``_hard_exclusion`` has already turned away the rest
     if _error_finished(exc) is not None:
         return True
     if isinstance(exc, ModelError):

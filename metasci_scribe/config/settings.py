@@ -165,8 +165,8 @@ class ScribeConfig:
     anthropic_api_key: str = ""
     anthropic_base_url: str = ""
     openai_api_key: str = ""
-    # "api_key" is the only route that works today. "chatgpt_plan" is reserved
-    # for the ChatGPT plan connector and is refused until that connector exists.
+    # "api_key" bills the key above. "chatgpt_plan" uses the signed-in ChatGPT
+    # plan, on the public Responses API only (see llm/chatgpt_plan.py).
     openai_auth_mode: Literal["api_key", "chatgpt_plan"] = "api_key"
 
     # LLM Settings

@@ -66,7 +66,14 @@ class ContextOverflowMapperMiddleware(AgentMiddleware):
         """Detect if an exception is a context length/limit error.
 
         It triggers when there's an error 400 raised and one of specified patterns exists in the error message.
+        A ChatGPT plan failure is judged by its code in ``llm/chatgpt_plan.py``:
+        its text quotes the server, and a usage limit must keep its type.
         """
+        from ..llm.errors import PlanStop
+
+        if isinstance(exc, PlanStop):
+            return False
+
         err_msg = str(exc).lower()
 
         patterns = [

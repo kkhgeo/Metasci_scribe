@@ -132,8 +132,6 @@ def get_chat_model(
 
     Raises:
         UnknownModelError: The provider is not supported.
-        ValueError: ``openai_auth_mode`` asks for a sign-in route that is not
-            available yet.
 
     Examples:
         >>> model = get_chat_model()  # Uses default (gpt-6.1-sol)
@@ -183,11 +181,14 @@ def get_chat_model(
     else:
         auth_mode = os.environ.get("METASCI_SCRIBE_OPENAI_AUTH_MODE", "api_key")
         if auth_mode == "chatgpt_plan":
-            raise ValueError(
-                'openai_auth_mode "chatgpt_plan" (ChatGPT plan sign-in) is not '
-                "available yet. Use an API key: metasci-scribe config set "
-                "openai_auth_mode api_key"
-            )
+            # Returned from here: the key route's base URL, API key and
+            # Chat Completions override below must not reach this route.
+            from .chatgpt_plan import build_model
+
+            _apply_auto_config(provider, model_id, kwargs)
+            chat_model = build_model(model_id, **kwargs)
+            apply_known_context_window(chat_model)
+            return chat_model
         # Optional base_url override (e.g. a local OpenAI-compatible server)
         base_url = os.environ.get("OPENAI_BASE_URL", "")
         if base_url:

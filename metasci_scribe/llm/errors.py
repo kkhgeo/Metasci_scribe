@@ -25,7 +25,60 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Mapping
+from enum import Enum
 from typing import Any
+
+# ---------------------------------------------------------------------------
+# ChatGPT plan failures
+# ---------------------------------------------------------------------------
+
+
+class PlanAction(Enum):
+    """What a ChatGPT plan failure asks of the caller."""
+
+    STOP_USAGE = "stop_usage"
+    STOP_INELIGIBLE = "stop_ineligible"
+    STOP_BAD_REQUEST = "stop_bad_request"
+    RETRY = "retry"
+    RELOGIN = "relogin"
+
+
+class PlanStop(RuntimeError):
+    """A ChatGPT plan request ended without ``response.completed``.
+
+    Inference stops here: nothing switches to another model or billing path.
+    Only :attr:`PlanAction.RETRY` is worth another attempt, and ``model_retry``
+    bounds those. The type is kept all the way to the caller, which tells a
+    usage limit from other failures by ``action``.
+
+    ``headers`` holds only what sets the retry wait. No attribute may hold a
+    token or a raw response body.
+    """
+
+    def __init__(
+        self,
+        action: PlanAction,
+        message: str = "",
+        *,
+        code: str | None = None,
+        request_id: str | None = None,
+        param: str | None = None,
+        status_code: int | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> None:
+        super().__init__(action, message)
+        self.action = action
+        self.message = message or action.name
+        self.code = code
+        self.request_id = request_id
+        self.param = param
+        self.status_code = status_code
+        self.headers = dict(headers or {})
+
+    def __str__(self) -> str:
+        return self.message
+
 
 # ---------------------------------------------------------------------------
 # ProviderStreamError

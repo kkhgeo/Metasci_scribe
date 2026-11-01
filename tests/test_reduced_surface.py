@@ -148,7 +148,7 @@ def test_other_providers_are_rejected_by_config_validation():
 
 
 def test_openai_auth_mode_seam():
-    """``api_key`` is the default; ``chatgpt_plan`` is reserved for a later task."""
+    """``api_key`` is the default; ``chatgpt_plan`` must be chosen."""
     assert ScribeConfig().openai_auth_mode == "api_key"
     assert ScribeConfig(openai_auth_mode="chatgpt_plan").openai_auth_mode == (
         "chatgpt_plan"
@@ -160,12 +160,13 @@ def test_openai_auth_mode_seam():
         validate_setting("openai_auth_mode", "oauth")
 
 
-def test_chatgpt_plan_is_not_usable_yet(monkeypatch):
+def test_chatgpt_plan_builds_without_an_api_key(monkeypatch):
+    from metasci_scribe.llm.chatgpt_plan import ChatGPTPlanModel
     from metasci_scribe.llm.models import get_chat_model
 
     monkeypatch.setenv("METASCI_SCRIBE_OPENAI_AUTH_MODE", "chatgpt_plan")
-    with pytest.raises(ValueError, match="chatgpt_plan"):
-        get_chat_model("gpt-6-sol", provider="openai")
+    model = get_chat_model("gpt-6-sol", provider="openai")
+    assert isinstance(model, ChatGPTPlanModel)
 
 
 def test_openai_model_builds_from_an_api_key(monkeypatch):

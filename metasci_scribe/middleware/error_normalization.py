@@ -250,6 +250,8 @@ def _normalize(
     Returns ``None`` (caller re-raises unchanged) for:
 
     - Already-normalized wrappers (would double-attribute).
+    - :class:`~metasci_scribe.llm.errors.PlanStop` — it already carries the
+      code and request ID, and callers branch on its type and ``action``.
     - LangGraph control-flow / structural errors — see
       ``_should_pass_through``. This gate lives here so every caller
       of ``_normalize`` (not just the wrap sites of this middleware)
@@ -264,6 +266,7 @@ def _normalize(
     from langchain_core.exceptions import ContextOverflowError
 
     from ..llm.errors import (
+        PlanStop,
         ProviderStreamError,
         _extract_error_type,
         _extract_provider_code,
@@ -273,7 +276,7 @@ def _normalize(
     )
 
     # Already normalized. Pass through — re-wrapping would double-attribute.
-    if isinstance(exc, ProviderStreamError):
+    if isinstance(exc, ProviderStreamError | PlanStop):
         return None
 
     # LangGraph control-flow / structural signals must propagate
