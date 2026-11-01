@@ -555,6 +555,64 @@ def test_autoskills_still_writes_its_proposals_and_not_the_skills(home, project)
     assert not (skills / "helper").exists()
 
 
+_ODD_FORMS = [
+    "/.metasci-scribe./skills/evil/SKILL.md",
+    "/.metasci-scribe /skills/evil/SKILL.md",
+    "/.metasci-scribe.../skills/evil/SKILL.md",
+    "/.git./config",
+    "/.git /hooks/post-checkout",
+    "/.env ",
+    "/.env.",
+    "/.gitconfig ",
+    "/.bashrc ",
+    "/pip.ini ",
+    "/.vscode /tasks.json",
+    "/notes/paper.tex ",
+    "/notes /paper.tex",
+    "/NUL",
+    "/nul.txt",
+    "/figures/CON",
+    "/figures/com1.py",
+    "/figures/LPT1 .py",
+    "/paper.tex:stream",
+    "/paper.tex::$DATA",
+    "/fig<1>.png",
+    "/what?.md",
+]
+
+
+@pytest.mark.parametrize("form", _ODD_FORMS)
+@pytest.mark.parametrize("dangerous", [False, True], ids=["default", "dangerous"])
+def test_names_windows_rewrites_on_open_are_refused_everywhere(
+    home, project, form, dangerous
+):
+    """Windows drops a trailing dot or space when it opens a file and maps
+    reserved device names, so ``/.env `` lands on ``.env`` while the policy
+    saw another name. Such a path is refused on every OS, read or write."""
+    key = form if not dangerous else str(project) + form.replace("/", os.sep)
+    backend = CustomSandboxBackend(
+        root_dir=str(project), virtual_mode=not dangerous, dangerous=dangerous
+    )
+    assert backend.write(key, "planted").error, key
+    assert backend.edit(key, "a", "b").error, key
+    assert backend.upload_files([(key, b"planted")])[0].error, key
+    assert backend.delete(key).error, key
+    try:
+        read = backend.read(key)
+    except ValueError:
+        read = None
+    assert read is None or read.error, key
+    assert backend.ls(key).error, key
+    assert not list(project.iterdir()), key
+
+
+def test_ordinary_names_with_dots_and_spaces_inside_still_work(home, project):
+    backend = CustomSandboxBackend(root_dir=str(project), virtual_mode=True)
+    for key in ("/my paper.tex", "/v1.2.3/notes.md", "/.hidden/x.md", "/a. b.md"):
+        assert not backend.write(key, "x").error, key
+        assert not backend.read(key).error, key
+
+
 def test_the_server_secret_cannot_be_read_by_file_tools(home, project):
     backend = CustomSandboxBackend(root_dir=str(project), dangerous=True)
     secret = home / ".metasci-scribe" / "server" / "secret"

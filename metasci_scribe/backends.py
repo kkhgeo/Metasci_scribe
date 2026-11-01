@@ -1520,7 +1520,14 @@ def guarded_path(
     """
     if _DEVICE_PATH.match(key):
         raise PermissionError("UNC and device paths are not available to file tools.")
-    resolved = resolve(key)
+    # Before and after resolving: the key is what the agent named, and
+    # ``realpath`` keeps a trailing dot or space that the OS would drop.
+    odd = policy.odd_path_component(key)
+    if odd is None:
+        resolved = resolve(key)
+        odd = policy.odd_path_component(resolved)
+    if odd is not None:
+        raise PermissionError(policy.ODD_NAME_ERROR.format(name=odd))
     if policy.is_private_state(resolved):
         raise PermissionError(policy.PRIVATE_STATE_ERROR)
     if write:

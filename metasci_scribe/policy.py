@@ -14,6 +14,9 @@ in one place and applied the same way everywhere:
   (:func:`is_private_state`);
 * configuration and code the app, Python, git or a shell loads at startup is
   never writable through a tool, in any mode (:func:`write_refusal`);
+* a path with a name Windows would rewrite on open (a trailing dot or
+  space, a device name, a stream) is refused on every OS
+  (:func:`odd_path_component`);
 * a shell command or a skill install needs a person to approve it, and is
   unavailable when nobody can (:func:`call_needs_person`);
 * links in skill folders are never followed out of them
@@ -163,6 +166,49 @@ def git_env(env: Mapping[str, str]) -> dict[str, str]:
             continue
         kept[key] = value
     return kept
+
+
+# =============================================================================
+# Names Windows rewrites when it opens them
+# =============================================================================
+
+# Windows drops a trailing dot or space from a name as it opens the file, maps
+# reserved device names (``CON``, ``NUL``, ``COM1``, also with an extension)
+# to the device, and reads ``name:stream`` as an alternate data stream of
+# ``name``. The name a path check sees is then not the file that is touched:
+# ``.env `` lands on ``.env``. Such paths are refused for every operation, on
+# every OS, so behaviour is the same everywhere; ``.`` and ``..`` are plain
+# path syntax and pass. A component with ``<>"|?*`` or a control character
+# cannot be a file name on Windows either, and is refused with them.
+# The device name may be followed by a dot, a colon or whitespace and then
+# anything (``NUL.txt``, ``LPT1 .py``); Windows still opens the device.
+_RESERVED_DEVICE = re.compile(
+    r"^(CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³]|CONIN\$|CONOUT\$)"
+    r"(?:[\s.:].*)?$",
+    re.IGNORECASE,
+)
+_UNNAMEABLE = re.compile(r'[<>"|?*\x00-\x1f]')
+_DRIVE = re.compile(r"^[A-Za-z]:$")
+ODD_NAME_ERROR = (
+    "{name!r} is not a usable file name: Windows would open a different file "
+    "under it, so file tools refuse it on every system."
+)
+
+
+def odd_path_component(path: str | Path) -> str | None:
+    """The first component of *path* whose name Windows would rewrite on
+    open, or ``None`` when every component is what it says."""
+    for component in re.split(r"[\\/]+", str(path)):
+        if component in ("", ".", "..") or _DRIVE.match(component):
+            continue
+        if (
+            component[-1] in ". "
+            or ":" in component
+            or _UNNAMEABLE.search(component)
+            or _RESERVED_DEVICE.match(component)
+        ):
+            return component
+    return None
 
 
 # =============================================================================
