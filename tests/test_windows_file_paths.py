@@ -141,6 +141,8 @@ async def test_dangerous_windows_query_paths_round_trip(
     )
     backend = object.__new__(backends.CustomSandboxBackend)
     backend._dangerous = True
+    backend.virtual_mode = False
+    backend.cwd = PureWindowsPath("C:/project")
 
     result = await _query(backend, tool, asynchronous, "/C:/project")
 
@@ -161,6 +163,8 @@ async def test_dangerous_query_preserves_empty_results(monkeypatch, tool, items)
     )
     backend = object.__new__(backends.CustomSandboxBackend)
     backend._dangerous = True
+    backend.virtual_mode = False
+    backend.cwd = PureWindowsPath("C:/project")
 
     assert await _query(backend, tool, False, "/C:/project") is result
     assert asdict(result) == expected
@@ -179,6 +183,8 @@ async def test_query_preserves_posix_and_virtual_paths(
     )
     backend = object.__new__(backends.CustomSandboxBackend)
     backend._dangerous = dangerous
+    backend.virtual_mode = not dangerous
+    backend.cwd = PureWindowsPath("C:/project")
 
     assert await _query(backend, tool, False, "/project") is result
     assert asdict(result) == expected

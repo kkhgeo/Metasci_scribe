@@ -99,9 +99,9 @@ def build_async_subagent_graph(
     # ``task_id`` from ``start_async_task`` and has no UI path to surface a
     # paused-on-interrupt child to the user. Setting ``interrupt_on`` here
     # would hang the sub-agent on its first ``execute`` call with no one to
-    # approve. The user-visible HITL boundary is the parent's
-    # ``start_async_task`` decision; restrict the child's reach by limiting
-    # ``tools`` in ``subagents/<name>.yaml`` instead.
+    # approve. So nobody approves its commands, and it gets no shell
+    # (``ShellGateMiddleware``). Restrict the rest of the child's reach by
+    # limiting ``tools`` in ``subagents/<name>.yaml``.
     #
     # ``for_async_subagent=True`` propagates the same reasoning to the
     # middleware list — specifically, it suppresses ``AskUserMiddleware``,
@@ -128,6 +128,7 @@ def build_async_subagent_graph(
         workspace=workspace,
         chat_model=model,
         backend=backend,
+        no_shell=True,
     )
 
     # ``backend=`` matters: without it the per-run SummarizationMiddleware

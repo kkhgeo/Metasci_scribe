@@ -76,8 +76,12 @@ _UNUSABLE_REFRESH_CODES = frozenset(
 _CODE_PATTERN = re.compile(r"[A-Za-z0-9_.-]{1,64}")
 _HOST_ID_PATTERN = re.compile(r"urn:uuid:[0-9a-f-]{36}")
 _HTTP_TIMEOUT_S = 30.0
-# Held across the refresh request, so a waiter must outlast one.
-_LOCK_TIMEOUT_S = 90.0
+# Held across the refresh request. A waiter outlasts one whose connect, write
+# and read each use their whole timeout.
+_LOCK_TIMEOUT_S = 120.0
+# A clock this far off still signs in; PyJWT checks ``iat`` against it too.
+_CLOCK_LEEWAY_S = 60
+_PERSIST_ATTEMPTS = 3
 _SHARING_RETRY_S = 2.0
 # Windows does not deliver Ctrl+C to a long Event.wait().
 _WAIT_SLICE_S = 0.2
@@ -128,6 +132,10 @@ class PlanUsageDisabled(ChatGPTAuthError):
 
 class CredentialStoreError(ChatGPTAuthError):
     """The auth folder cannot be secured, read, written or locked."""
+
+
+class _LockBusy(CredentialStoreError):
+    """The sign-in lock stayed taken; a later try can succeed."""
 
 
 @dataclass(frozen=True)
@@ -350,7 +358,7 @@ def _locked() -> Iterator[None]:
     try:
         lock.acquire(timeout=_LOCK_TIMEOUT_S)
     except Timeout:
-        raise CredentialStoreError(
+        raise _LockBusy(
             "Another Metasci Scribe process is holding the sign-in lock."
         ) from None
     try:
@@ -864,7 +872,7 @@ def _verified_claims(
             algorithms=[algorithm],
             audience=client_id,
             issuer=ISSUER,
-            leeway=5,
+            leeway=_CLOCK_LEEWAY_S,
             options={"require": ["iss", "aud", "sub", "exp", "iat"]},
         )
     except (jwt.PyJWTError, ValueError, TypeError, AttributeError):
@@ -1009,8 +1017,24 @@ def login(
 # ---------------------------------------------------------------- refresh
 
 
+def _persist_rotation(renewed: Credentials) -> None:
+    """Save a rotated token. The old one is spent, so a passing failure here
+    would cost the user their sign-in; ride it out."""
+    record = _record_from(renewed)
+    for attempt in range(1, _PERSIST_ATTEMPTS + 1):
+        try:
+            _write_record(record)
+            return
+        except CredentialStoreError:
+            if attempt == _PERSIST_ATTEMPTS:
+                raise
+            time.sleep(0.2)
+
+
 def _refresh(creds: Credentials) -> Credentials:
     """Spend the refresh token and persist what replaces it. Lock held."""
+    # A store that cannot be secured fails here, with the token still unspent.
+    _secure_dir()
     response = _post_token(
         {
             "grant_type": "refresh_token",
@@ -1039,7 +1063,7 @@ def _refresh(creds: Credentials) -> Credentials:
             if isinstance(scope, str) and scope
             else creds.scopes,
         )
-        _write_record(_record_from(renewed))
+        _persist_rotation(renewed)
         return renewed
 
     code = _error_code(body)
@@ -1069,6 +1093,14 @@ def get_access_token() -> str:
     :class:`RefreshRejected`, :class:`RefreshUnavailable` or
     :class:`CredentialStoreError`.
     """
+    try:
+        return _current_access_token()
+    except _LockBusy:
+        pass
+    raise RefreshUnavailable("Another process is using the sign-in; retry shortly.")
+
+
+def _current_access_token() -> str:
     # The lock covers the read: a token a refresh is about to replace, or
     # one another process just replaced, must not be spent again.
     with _locked():

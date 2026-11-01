@@ -70,6 +70,24 @@ _DESTRUCTIVE_PATTERNS = [
     r"\brm\s+-rf\s+['\"]?[A-Za-z]:[\\/]",
 ]
 
+# Sign-in secrets, spelled the ways a command names them. Checked after quotes
+# are dropped and backslashes turned to slashes, so "$HOME", %USERPROFILE%,
+# C:\... and C:/... forms all reach the same text.
+#
+# A speed bump, not a boundary: a shell can build this path in countless ways
+# (variables, globs, base64), so this catches the plain attempts and an honest
+# mistake, nothing more. The boundary is the human approving each command, and
+# with no human there is no shell (see ``no_human_gate``). OS sandboxing is out
+# of scope for now.
+_SECRET_PATH_PATTERNS = (
+    re.compile(r"chatgpt\.json", re.IGNORECASE),
+    re.compile(r"\.metasci-scribe/+auth(?![\w.-])", re.IGNORECASE),
+)
+_SECRET_PATH_ERROR = (
+    "Command blocked: it names Metasci Scribe's saved sign-in, which commands "
+    "may not touch."
+)
+
 # Dangerous commands that should never be executed
 BLOCKED_COMMANDS = [
     "sudo",
@@ -515,6 +533,24 @@ def hitl_suppressed_for_run(config=None) -> bool:
         config = _ensure_config()
     return bool(
         getattr(config, "auto_mode", False) or getattr(config, "auto_approve", False)
+    )
+
+
+def no_human_gate(config=None) -> bool:
+    """Whether a shell command in this run would start with nobody approving it.
+
+    True for ``auto_mode``, ``auto_approve`` and ``dangerous_mode``, from the
+    run's own key or the live session config, whichever says so: the two can
+    disagree for a run that reached the server directly. With no human gate
+    the agent gets no shell (:class:`~.middleware.shell_gate.ShellGateMiddleware`).
+    """
+    from .agent import _ensure_config
+
+    live = _ensure_config()
+    return (
+        is_hitl_suppressed(config)
+        or hitl_suppressed_for_run(live)
+        or bool(getattr(live, "dangerous_mode", False))
     )
 
 
@@ -1144,6 +1180,17 @@ def _extract_all_paths(
     return paths
 
 
+def _names_secret_path(command: str) -> bool:
+    """Whether ``command`` plainly names the saved sign-in. See the speed-bump
+    note on :data:`_SECRET_PATH_PATTERNS`."""
+    text = re.sub(r"[\"'`]", "", command).replace("\\", "/")
+    if any(pattern.search(text) for pattern in _SECRET_PATH_PATTERNS):
+        return True
+    # A relocated data folder has no ``.metasci-scribe`` in its name.
+    auth_dir = (paths.DATA_DIR / "auth").as_posix().casefold()
+    return auth_dir in text.casefold()
+
+
 def validate_command(
     command: str,
     allow_prefixes: tuple[str, ...] = (),
@@ -1159,13 +1206,17 @@ def validate_command(
             block list (matching rules in ``_is_under_allowed_prefix``).
         dangerous: When True (real-filesystem mode), skip the path-confinement
             checks (``..`` traversal, ``~/``/``cd /`` patterns, absolute system
-            paths). Privileged commands (:data:`BLOCKED_COMMANDS`) and
-            catastrophic patterns (:data:`_DESTRUCTIVE_PATTERNS`) are still
-            enforced.
+            paths). Privileged commands (:data:`BLOCKED_COMMANDS`),
+            catastrophic patterns (:data:`_DESTRUCTIVE_PATTERNS`) and the
+            saved sign-in (:data:`_SECRET_PATH_PATTERNS`) are still enforced.
 
     Returns:
         None if command is safe, error message string if blocked.
     """
+    # Always enforced, whatever the mode.
+    if _names_secret_path(command):
+        return _SECRET_PATH_ERROR
+
     # Path-confinement checks — skipped in dangerous mode.
     if not dangerous:
         # Check for '..' path traversal as a path component
@@ -1781,6 +1832,10 @@ def prepare_sandbox_command(
     """
     original_command = command
 
+    # Before SSH masking, which would hide a local expansion inside its argument.
+    if _names_secret_path(command):
+        return command, _SECRET_PATH_ERROR
+
     ssh_error = _validate_ssh_remote_command_format(command)
     if ssh_error:
         return command, ssh_error
@@ -1835,6 +1890,20 @@ def prepare_sandbox_command(
             )
 
     return _restore_spans(command, ssh_replacements), None
+
+
+def _is_auth_path(path: str | Path) -> bool:
+    """Whether ``path``, symlinks followed, is the auth folder or lies inside it.
+
+    Compared without regard to case: Windows and macOS file systems ignore it.
+    A path that cannot be resolved counts as inside.
+    """
+    try:
+        target = os.path.realpath(path).casefold()
+        auth = os.path.realpath(paths.DATA_DIR / "auth").casefold()
+    except (OSError, ValueError):
+        return True
+    return target == auth or target.startswith(auth + os.sep)
 
 
 class CustomSandboxBackend(LocalShellBackend):
@@ -1917,6 +1986,19 @@ class CustomSandboxBackend(LocalShellBackend):
         os.makedirs(str(self.cwd), exist_ok=True)
 
     def _resolve_path(self, key: str) -> Path:
+        """Resolve a tool path, refusing the saved sign-in in every mode.
+
+        ``PermissionError`` because every file operation reports an ``OSError``
+        as a failed call, and some let a ``ValueError`` through.
+        """
+        resolved = self._sanitized_path(key)
+        if _is_auth_path(resolved):
+            raise PermissionError(
+                "Metasci Scribe's saved sign-in is not available to file tools."
+            )
+        return resolved
+
+    def _sanitized_path(self, key: str) -> Path:
         """Resolve path with sanitization to prevent nested directories.
 
         Intercepts all file operations (read, write, edit, ls, grep, glob).
@@ -1991,10 +2073,25 @@ class CustomSandboxBackend(LocalShellBackend):
         return super().delete(file_path)
 
     def _tool_paths(self, items: list | None) -> list | None:
-        """Spell dangerous-mode result paths the way the file tools accept them."""
-        if not self._dangerous or not items:
+        """Drop the saved sign-in, which a search from a parent folder walks
+        into, and spell dangerous-mode paths the way the file tools accept them."""
+        if not items:
             return items
-        return [{**item, "path": paths.file_tool_path(item["path"])} for item in items]
+        hidden: dict[str, bool] = {}
+        visible = []
+        for item in items:
+            location = item["path"]
+            if location not in hidden:
+                # A virtual path is rooted at cwd; a real one replaces it here.
+                host = location.lstrip("/") if self.virtual_mode else location
+                hidden[location] = _is_auth_path(self.cwd / host)
+            if not hidden[location]:
+                visible.append(item)
+        if not self._dangerous:
+            return visible
+        return [
+            {**item, "path": paths.file_tool_path(item["path"])} for item in visible
+        ]
 
     def ls(self, path: str) -> LsResult:
         result = super().ls(path)

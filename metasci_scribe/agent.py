@@ -323,6 +323,7 @@ def _inject_subagent_middleware(
     backend=None,
     unattended: bool = False,
     model_retry_honors_run_key: bool = True,
+    no_shell: bool = False,
 ) -> None:
     """Ensure every subagent gets error handling and context management middleware.
 
@@ -344,6 +345,9 @@ def _inject_subagent_middleware(
     The spec's own list has to carry the subclass; deepagents' name merge
     then replaces the stock frozen-window instance in that subagent's
     core slot (#466).
+
+    *no_shell* keeps the shell off for every run, for a graph with no approval
+    path at all.
     """
     from .middleware import (
         ConfigurableModelMiddleware,
@@ -359,6 +363,7 @@ def _inject_subagent_middleware(
         default_memory_scheduler,
     )
     from .middleware.model_retry import ModelCallBoundaryMiddleware
+    from .middleware.shell_gate import ShellGateMiddleware
 
     cfg = cfg if cfg is not None else _ensure_config()
     memory_controls = MemoryControls.from_config(cfg)
@@ -409,6 +414,7 @@ def _inject_subagent_middleware(
             # Inside the retry layer: marks each provider call for the
             # stream decoder.
             ModelCallBoundaryMiddleware(),
+            ShellGateMiddleware(closed=no_shell or bool(cfg.dangerous_mode)),
         ]
         if memory_controls.memory_enabled:
             middleware.append(memory_middleware)
@@ -861,6 +867,7 @@ def _get_default_middleware(
     # the server gateway can render them client-side.
     from .middleware.events import resolve_middleware_event_sink
     from .middleware.model_retry import ModelCallBoundaryMiddleware
+    from .middleware.shell_gate import ShellGateMiddleware
 
     events = resolve_middleware_event_sink(
         events, for_async_subagent=for_async_subagent
@@ -933,6 +940,8 @@ def _get_default_middleware(
             model=tool_selector_model,
             events=events,
         ),
+        # Inside the selector, which must find the tools it always keeps.
+        ShellGateMiddleware(closed=for_async_subagent or bool(cfg.dangerous_mode)),
         # Interpreter prompt must land before runtime/memory context, so this
         # middleware sits ahead of runtime_context in the stack.
         create_code_interpreter_middleware(

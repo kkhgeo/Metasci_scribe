@@ -221,9 +221,7 @@ async def test_a_granted_fresh_turn_does_not_run_a_subagents_parked_batch(tmp_pa
     assert next(e for e in events if e["type"] == "done")["response"] == "Fresh."
 
 
-async def test_the_grant_does_not_arm_the_dangerous_guard_but_suppression_does(
-    tmp_path,
-):
+async def test_the_grant_keeps_the_shell_but_suppression_removes_it(tmp_path):
     (tmp_path / "granted").mkdir()
     granted = await _agent(
         tmp_path / "granted", [_execute("c1", "echo true | bash"), AIMessage("Done.")]
@@ -238,7 +236,7 @@ async def test_the_grant_does_not_arm_the_dangerous_guard_but_suppression_does(
         {"messages": [("user", "go")]}, config=_config(granted=True, suppressed=True)
     )
     assert not both.get("__interrupt__")
-    assert "Command blocked" in _tool_text(both, "c1")
+    assert "not available" in _tool_text(both, "c1")
 
 
 # --- a declining answer never travels with the grant --------------------------
@@ -348,4 +346,5 @@ async def test_a_served_graph_still_asks_when_a_client_sends_the_grant(
         {"messages": [("user", "go")]}, config=_config(suppressed=True)
     )
     assert not result.get("__interrupt__")
-    assert _written(tmp_path / "unattended") == ["one.txt"]
+    # Nobody approves there, so there is no shell at all.
+    assert _written(tmp_path / "unattended") == []

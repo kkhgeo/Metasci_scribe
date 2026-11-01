@@ -1297,3 +1297,76 @@ def test_get_access_token_is_safe_in_a_worker_thread(openai):
 
     assert asyncio.run(run()) == ["access-secret-2", "access-secret-2"]
     assert len(openai.token_forms) == 1
+
+
+@pytest.mark.parametrize("skew", [-30, 30], ids=["clock-slow", "clock-fast"])
+def test_clock_within_a_minute_still_signs_in(openai, skew):
+    now = int(time.time())
+    openai.id_claims = {"iat": now + skew, "exp": now + 3600 + skew}
+    assert login(open_browser=_browser(openai), timeout=10).client_id == ISSUED
+
+
+def test_id_token_from_far_in_the_future_is_refused(openai):
+    now = int(time.time())
+    openai.id_claims = {"iat": now + 300, "nbf": now + 300, "exp": now + 3900}
+    with pytest.raises(LoginFailed) as caught:
+        login(open_browser=_browser(openai), timeout=10)
+    assert caught.value.code == "id_token_invalid"
+
+
+def test_unsecurable_store_fails_before_the_token_is_spent(openai, monkeypatch):
+    before = _creds(expires_at=0)
+    save(before)
+    openai.token_reply = _rotating(openai)
+
+    def refuse(path):
+        raise cp.CredentialStoreError("no ACL right now")
+
+    monkeypatch.setattr(cp, "_restrict_dir", refuse)
+    with pytest.raises(cp.CredentialStoreError):
+        get_access_token()
+    assert openai.token_forms == []
+    assert load() == before
+
+
+def test_passing_store_failure_after_a_rotation_keeps_the_new_token(
+    openai, monkeypatch
+):
+    save(_creds(expires_at=0))
+    openai.token_reply = _rotating(openai)
+    real = cp._restrict_file
+    failures = [cp.CredentialStoreError("busy")]
+
+    def flaky(path):
+        if failures:
+            raise failures.pop()
+        real(path)
+
+    monkeypatch.setattr(cp, "_restrict_file", flaky)
+    assert get_access_token() == "access-secret-2"
+    assert load().refresh_token == "refresh-secret-2"
+    assert len(openai.token_forms) == 1
+
+
+def test_lock_outlasts_the_slowest_refresh():
+    assert cp._LOCK_TIMEOUT_S > 3 * cp._HTTP_TIMEOUT_S
+
+
+def test_lock_timeout_reads_as_temporary(openai, monkeypatch):
+    save(_creds(expires_at=0))
+    monkeypatch.setattr(cp, "_LOCK_TIMEOUT_S", 0.1)
+    caught = []
+
+    def worker():
+        try:
+            get_access_token()
+        except Exception as exc:
+            caught.append(exc)
+
+    with cp._locked():
+        thread = threading.Thread(target=worker)
+        thread.start()
+        thread.join(10)
+    assert isinstance(caught[0], RefreshUnavailable)
+    _assert_clean(caught[0])
+    assert openai.token_forms == []
