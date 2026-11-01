@@ -1,6 +1,6 @@
 """``/rubric``: acceptance criteria for the current thread.
 
-The command records operations in the session (``ChannelRuntime.rubric``);
+The command records operations in the session (``SessionRuntime.rubric``);
 the next message the user sends carries them to the grader, which stores the
 checklists on the thread and grades every marked run against them.
 """
@@ -17,7 +17,7 @@ from ..base import Command, SubCommand
 from ..manager import manager
 
 if TYPE_CHECKING:
-    from ..base import ChannelRuntime, CommandContext
+    from ..base import CommandContext, SessionRuntime
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +76,7 @@ class RubricCommand(Command):
     ]
 
     async def execute(self, ctx: CommandContext, args: list[str]) -> None:
-        runtime = ctx.channel_runtime
+        runtime = ctx.session_runtime
         if runtime is None or not ctx.ui.supports_interactive:
             ctx.ui.append_system(
                 "/rubric is available in the terminal session only.", style="yellow"
@@ -131,7 +131,7 @@ class RubricCommand(Command):
                 style="dim",
             )
 
-    async def _show(self, ctx: CommandContext, runtime: ChannelRuntime) -> None:
+    async def _show(self, ctx: CommandContext, runtime: SessionRuntime) -> None:
         pending = runtime.rubric.changes_for(ctx.thread_id)
         values = await read_thread_values(ctx, "/rubric show")
         if values is None:

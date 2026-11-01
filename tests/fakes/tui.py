@@ -74,12 +74,6 @@ async def capture_app(monkeypatch, workspace) -> object:
         "metasci_scribe.cli.history_suggester.HistorySuggester", _FakeSuggester
     )
 
-    monkeypatch.setattr(
-        "metasci_scribe.cli.tui_interactive._auto_start_channel",
-        lambda *_a, **_k: None,
-        raising=False,
-    )
-
     monkeypatch.setattr("metasci_scribe.cli.tui_interactive.mode", "dev", raising=False)
     # Note: ``create_run_dir`` and ``load_agent`` are passed
     # as parameters to ``run_textual_interactive`` (the factory), so the
@@ -93,7 +87,6 @@ async def capture_app(monkeypatch, workspace) -> object:
         await asyncio.to_thread(
             tui_mod.run_textual_interactive,
             show_thinking=False,
-            channel_send_thinking=False,
             # The banner shows this folder: keep it short, so it fits one line on
             # the 80-column screen whatever the temp folder is called (it wraps on
             # Windows and pushes the banner out of view).

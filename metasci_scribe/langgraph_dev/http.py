@@ -187,7 +187,7 @@ async def get_bg_processes_running(_request: Request) -> JSONResponse:
 async def post_policy(request: Request) -> JSONResponse:
     """Resolve HITL decisions for action requests, for non-Python clients.
 
-    The one source of truth is ``channels.interaction.resolve_config_decisions``
+    The one source of truth is ``stream.interaction.resolve_config_decisions``
     (the same chokepoint Python clients call in-process), evaluated against THIS
     server's own config — the caller never mirrors auto_approve / dangerous_mode
     / allow_list, which is exactly the part that drifted in client-side ports.
@@ -202,7 +202,7 @@ async def post_policy(request: Request) -> JSONResponse:
     what ``build_hitl_resume`` consumes, so the non-null response can be
     forwarded verbatim.
     """
-    from metasci_scribe.channels.interaction import resolve_config_decisions
+    from metasci_scribe.stream.interaction import resolve_config_decisions
 
     try:
         body = await request.json()

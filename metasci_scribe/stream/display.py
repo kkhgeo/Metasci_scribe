@@ -50,7 +50,7 @@ if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
 
     from ..backends import ParkedCloseReason
-    from ..channels.interaction import ApprovalOutcome
+    from .interaction import ApprovalOutcome
 
 # ---------------------------------------------------------------------------
 # Shared globals
@@ -147,11 +147,11 @@ def _response_markdown_for_display(
 formatter = ToolResultFormatter()
 
 
-# Stream-cancel events keyed by logical stream scope. Channel messages pass a
-# per-message scope so `/stop` only affects that message's run; scope-less
+# Stream-cancel events keyed by logical stream scope. Callers may pass a
+# per-run scope so a stop request only affects that run; scope-less
 # callers retain the legacy process-wide default event.
 _DEFAULT_STREAM_CANCEL_SCOPE = "__default__"
-# Serve signal handlers may request cancellation while the main thread is in a
+# Signal handlers may request cancellation while the main thread is in a
 # scoped cancellation lookup.  Re-entrancy prevents the Python signal callback
 # from deadlocking if it interrupts one of these short registry sections.
 _stream_cancel_lock = threading.RLock()
@@ -1372,7 +1372,7 @@ class _HitlResolution:
     was skipped because the human-round budget was already spent; auto
     fast paths never set it (issue #469). ``session_granted`` is True only
     when the decisions came from a session "approve all" already in force;
-    ``grant_in_force`` also covers the channel reply that grants. ``rejected``
+    ``grant_in_force`` also covers the reply that grants. ``rejected``
     is True when a human declined; a decline without it was left unanswered.
     """
 
@@ -1400,13 +1400,13 @@ def _resolve_hitl_approval(
 
     Args:
         interrupt_data: The interrupt event data.
-        prompt_fn: Optional custom prompt function (e.g. channel-based).
+        prompt_fn: Optional custom prompt function.
             If provided and manual approval is needed, this is called
             instead of the default CLI ``input()`` prompt.
     """
     global _session_auto_approve
 
-    from ..channels.interaction import (
+    from .interaction import (
         config_policy_snapshot,
         decisions_after_human_approval,
     )
@@ -1434,7 +1434,7 @@ def _resolve_hitl_approval(
     if decisions is not None:
         return _HitlResolution(decisions, human_prompted=False)
 
-    # A channel bridge owns a further fast path (its session grant), so it
+    # An outcome callback owns a further fast path (its session grant), so it
     # gets the budget flag and reports whether it actually prompted.
     if outcome_fn is not None:
         outcome = outcome_fn(action_requests, human_budget_exhausted)
@@ -1723,8 +1723,8 @@ def _run_streaming(
         metadata: Optional metadata dict forwarded to ``stream_agent_events``
             for LangGraph checkpoint persistence.
         gateway: Graph/thread gateway supplied by the active runtime.
-        approve_all_at_start: The channel this turn came from already holds an
-            "approve all" grant, so the turn's first call carries it.
+        approve_all_at_start: The turn starts with an "approve all" grant in
+            force, so its first call carries it.
 
     Returns:
         The final response text.
@@ -1807,7 +1807,7 @@ def _run_streaming(
                     return
                 event_type = state.handle_event(event)
 
-                # Relay thinking to channel when transitioning away from
+                # Relay thinking via on_thinking when transitioning away from
                 # thinking phase.  Uses content comparison so that replayed
                 # thinking after resume is skipped, but genuinely new
                 # thinking is still delivered.
@@ -1822,7 +1822,7 @@ def _run_streaming(
                         on_thinking(current)
                         _sent_thinking_text = current
 
-                # Send todo list to channel on first write_todos tool_call
+                # Send todo list via on_todo on first write_todos tool_call
                 if (
                     on_todo
                     and not _todo_sent
@@ -1833,7 +1833,7 @@ def _run_streaming(
                     on_todo(state.todo_items)
                     _todo_sent = True
 
-                # Send media file to channel when write_file succeeds
+                # Send media file via on_file_write when write_file succeeds
                 if (
                     on_file_write
                     and event_type == "tool_result"
@@ -1859,7 +1859,7 @@ def _run_streaming(
                                 _media_sent.add(wf_path)
                                 on_file_write(real_path)
 
-                # Send media file to channel when read_file returns an image
+                # Send media file via on_file_write when read_file returns an image
                 if (
                     on_file_write
                     and event_type == "tool_result"
@@ -1919,12 +1919,12 @@ def _run_streaming(
         Closes the parked interrupt without resuming the agent (a rejecting
         resume would run another invisible model step) and returns the
         partial response gathered so far. At the round limit (issue #469) a
-        notice is printed, and channel callers (``hitl_outcome_fn``) also get
+        notice is printed, and callers with a ``hitl_outcome_fn`` also get
         it in the returned text, because the console line never reaches them.
         """
         at_limit = reason == "round_limit"
         if at_limit:
-            from ..channels.hitl_budget import (
+            from .hitl_budget import (
                 HITL_BUDGET_STOP_NOTICE,
                 MAX_HITL_TOTAL_ROUNDS,
                 MAX_HUMAN_HITL_ROUNDS,
@@ -1966,7 +1966,7 @@ def _run_streaming(
         text = (state.response_text or "").strip()
         if not at_limit or hitl_outcome_fn is None:
             return text
-        from ..channels.hitl_budget import channel_response_with_budget_stop
+        from .hitl_budget import channel_response_with_budget_stop
 
         return channel_response_with_budget_stop(text)
 
@@ -1974,7 +1974,7 @@ def _run_streaming(
         # Iterative HITL resume loop (converted from recursion so a long
         # unattended turn cannot exhaust the frame stack). Only rounds that
         # prompted a human count toward the human budget in
-        # ``channels.hitl_budget``; auto-resolved rounds are free (issue #469).
+        # ``stream.hitl_budget``; auto-resolved rounds are free (issue #469).
         human_rounds = 0
         total_rounds = 0
 
@@ -2087,7 +2087,7 @@ def _run_streaming(
             # budget is applied later, only when a prompt would actually be
             # shown, so a session grant still auto-resolves after 50 human
             # rounds (issue #469).
-            from ..channels.hitl_budget import hitl_budget_stop
+            from .hitl_budget import hitl_budget_stop
 
             if (
                 state.pending_ask_user is not None
@@ -2191,115 +2191,3 @@ def _run_streaming(
             return (state.response_text or "").strip()
     finally:
         discard_stream_cancel(cancel_scope)
-
-
-# ---------------------------------------------------------------------------
-# Thread-safe static streaming (for background channels)
-# ---------------------------------------------------------------------------
-
-
-async def _astream_to_console(
-    agent: "CompiledStateGraph",
-    message: str,
-    thread_id: str,
-    show_thinking: bool = True,
-    *,
-    gateway: GraphGateway,
-) -> str:
-    """Stream agent events to console using static prints (thread-safe, no Live).
-
-    Used by the background iMessage channel to show streaming output in the CLI
-    without conflicting with prompt_toolkit's terminal handling in the main thread.
-
-    Rich console.print() is thread-safe (internal lock), unlike Live which is not.
-
-    Args:
-        agent: Compiled agent graph
-        message: User message
-        thread_id: Thread ID for conversation persistence
-        show_thinking: Whether to display thinking panel
-
-    Returns:
-        The final response text.
-    """
-    state = StreamState()
-
-    async for event in gateway.stream_events(
-        RunRequest(
-            message=message,
-            thread_id=thread_id,
-            target=_graph_target_for_local_agent(agent),
-        )
-    ):
-        etype = state.handle_event(event)
-
-        # Only show subagent starts as real-time progress.
-        # Full results rendered by display_final_results() after streaming.
-        if etype == "subagent_start":
-            name = event["name"]
-            desc = event.get("description", "")
-            line = Text()
-            line.append("\u25b6 ", style="cyan bold")
-            line.append(f"Cooking with {name}", style="cyan bold")
-            if desc:
-                short = desc[:50] + "\u2026" if len(desc) > 50 else desc
-                line.append(f" \u2014 {short}", style="dim")
-            console.print(line)
-
-    # Final output (streaming layout: tools → Task List → subagents → response)
-
-    # Thinking
-    if show_thinking and state.thinking_text:
-        dt = state.thinking_text.rstrip()
-        if len(dt) > 500:
-            dt = dt[:250] + "\n\u2026truncated\u2026\n" + dt[-250:]
-        console.print(
-            Panel(Text(dt, style="dim"), title="Thinking", border_style="blue")
-        )
-
-    # Summarization
-    if state.summarization_text:
-        st = state.summarization_text.rstrip()
-        if len(st) > 500:
-            st = st[:500] + " ..."
-        console.print(
-            Panel(
-                Text(st, style="dim italic"),
-                title="Context Summarized",
-                border_style="#f59e0b",
-            )
-        )
-
-    # 1) Regular (non-task) tools — above Task List
-    for tc in state.tool_calls:
-        if tc.get("name", "").lower() == "task":
-            continue
-        tr = _tool_result_for_call(state.tool_results, tc)
-        console.print(_render_tool_call_line(tc, tr))
-        if tr and not is_success(tr.get("content", "")):
-            for elem in format_tool_result_compact(tr["name"], tr.get("content", "")):
-                console.print(elem)
-
-    # 2) Task List panel — middle
-    if state.todo_items:
-        console.print(_render_todo_panel(state.todo_items))
-        console.print()
-
-    # 3) Subagent sections (compact) — below Task List
-    for sa in state.subagents:
-        if sa.tool_calls or not sa.is_active:
-            for elem in _render_subagent_section(sa, compact=True):
-                console.print(elem)
-
-    # 4) Response
-    if state.response_text:
-        clean = state.response_text.strip()
-        while clean.endswith("\n...") or clean.rstrip() == "...":
-            clean = clean.rstrip().removesuffix("...").rstrip()
-        console.print()
-        console.print(
-            Markdown(_fix_markdown_heading_spacing(clean or state.response_text))
-        )
-        console.print()
-
-    return (state.response_text or "").strip()

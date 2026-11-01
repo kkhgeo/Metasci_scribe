@@ -323,27 +323,25 @@ class TestSecrets:
         [
             ("openai_api_key", "sk-123456789", "…6789"),
             ("openai_api_key", "sk-12345", None),
-            ("email_smtp_password", "a-long-password", None),
-            ("telegram_bot_token", "123456:ABCDEFGHIJ", None),
+            ("custom_openai_api_key", "short", None),
         ],
     )
     def test_hint(self, key, value, hint):
         assert secret_hint(key, value) == hint
 
-    def test_display_masks_channel_secrets(self):
-        assert display_config_value("telegram_bot_token", "123456:ABCDEF") == "***"
+    def test_display_masks_api_keys(self):
         assert display_config_value("openai_api_key", "sk-123456789") == "***6789"
         assert display_config_value("model", "m") == "m"
         assert display_config_value("openai_api_key", "") == "(not set)"
 
 
-def test_config_list_does_not_print_channel_secrets(config_file):
+def test_config_list_does_not_print_secrets(config_file):
     from typer.testing import CliRunner
 
     from metasci_scribe.cli.commands import config_app
 
     config_file.write_text(
-        "telegram_bot_token: 123456:SECRETTOKEN\nopenai_api_key: sk-abcdefgh1234\n",
+        "tavily_api_key: tvly-SECRETTOKEN\nopenai_api_key: sk-abcdefgh1234\n",
         encoding="utf-8",
     )
     import io
@@ -359,7 +357,7 @@ def test_config_list_does_not_print_channel_secrets(config_file):
     for call in printed.call_args_list:
         render.print(*call.args)
     text = out.getvalue()
-    assert "telegram_bot_token" in text
+    assert "tavily_api_key" in text
     assert "SECRETTOKEN" not in text
     assert "sk-abcdefgh" not in text
     assert "***1234" in text
@@ -452,38 +450,3 @@ def test_onboard_exits_1_when_refused(config_file):
         result = CliRunner().invoke(app, ["onboard", "--non-interactive"])
     assert result.exit_code == 1
     assert config_file.read_bytes() == BROKEN
-
-
-def test_channel_setup_holds_the_lock_while_it_asks(config_file, monkeypatch):
-    from typer.testing import CliRunner
-
-    import metasci_scribe.cli.commands  # noqa: F401  registers the commands
-    from metasci_scribe.cli._app import app
-
-    monkeypatch.setattr(store, "_LOCK_TIMEOUT", 0.2)
-    seen = {}
-
-    def step(config, runtime=None):
-        def other():
-            try:
-                set_config_value("model", "from-elsewhere")
-            except store.ConfigLockedError:
-                seen["locked"] = True
-
-        t = threading.Thread(target=other)
-        t.start()
-        t.join()
-        return {"channel_enabled": "telegram"}
-
-    with (
-        patch(
-            "metasci_scribe.config.onboard.channels._step_channels", side_effect=step
-        ),
-        patch("metasci_scribe.cli.commands.console.print"),
-    ):
-        result = CliRunner().invoke(app, ["channel", "setup"])
-    assert result.exit_code == 0, result.output
-    assert seen == {"locked": True}
-    data = _mapping(config_file)
-    assert data["channel_enabled"] == "telegram"
-    assert "model" not in data

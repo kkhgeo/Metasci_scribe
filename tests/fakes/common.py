@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import re
 from collections.abc import AsyncIterator, Callable, Iterable
-from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -14,8 +12,6 @@ from unittest.mock import MagicMock, patch
 import httpx
 from langgraph_sdk.client import LangGraphClient
 
-from metasci_scribe.channels.base import Channel
-from metasci_scribe.channels.bus.events import InboundMessage, OutboundMessage
 from metasci_scribe.commands.base import CommandUI
 from metasci_scribe.gateway import (
     GraphEvent,
@@ -123,90 +119,6 @@ class FakeCommandUI(CommandUI):
 
     def update_status_after_compact(self, tokens_after: int) -> None:
         self.updated_tokens.append(tokens_after)
-
-
-@dataclass
-class FakeChannelConfig:
-    """Minimal config surface consumed by channel base tests."""
-
-    text_chunk_limit: int = 4096
-    allowed_senders: list | None = None
-    allowed_channels: list | None = None
-    proxy: str | None = None
-    require_mention: str = "group"
-    dm_policy: str = "allowlist"
-
-
-class StubChannel(Channel):
-    """Minimal concrete channel for unit tests of channel base behavior."""
-
-    name = "stub"
-
-    def __init__(self, config: Any | None = None) -> None:
-        super().__init__(config or FakeChannelConfig())
-        self._sent_chunks: list[tuple] = []
-        self._typing_started: list[str] = []
-        self._typing_stopped: list[str] = []
-        self._started = False
-
-    async def start(self) -> None:
-        self._started = True
-        self._running = True
-
-    async def _send_chunk(
-        self,
-        chat_id: str,
-        formatted_text: str,
-        raw_text: str,
-        reply_to: str | None,
-        metadata: dict,
-    ) -> None:
-        self._sent_chunks.append(
-            (chat_id, formatted_text, raw_text, reply_to, metadata)
-        )
-
-    async def _send_typing_action(self, chat_id: str) -> None:
-        self._typing_started.append(chat_id)
-
-
-class QueueFakeChannel(Channel):
-    """Concrete channel with queue receive and captured outbound messages."""
-
-    name = "fake"
-
-    def __init__(self, config: Any | None = None) -> None:
-        super().__init__(config or FakeChannelConfig())
-        self._started = False
-        self._stopped = False
-        self._sent: list[OutboundMessage] = []
-
-    async def start(self) -> None:
-        self._started = True
-
-    async def stop(self) -> None:
-        self._stopped = True
-
-    async def receive(self) -> AsyncIterator[InboundMessage]:
-        while True:
-            try:
-                msg = await asyncio.wait_for(self._queue.get(), timeout=0.5)
-                yield msg
-            except TimeoutError:
-                return
-
-    async def send(self, message: OutboundMessage) -> bool:
-        self._sent.append(message)
-        return True
-
-    async def _send_chunk(
-        self,
-        chat_id: str,
-        formatted_text: str,
-        raw_text: str,
-        reply_to: str | None,
-        metadata: dict,
-    ) -> None:
-        pass
 
 
 class FakeThreadStore(ThreadStore):
@@ -883,7 +795,7 @@ def attended_config(monkeypatch) -> None:
 
 def no_config_rule(monkeypatch) -> None:
     """The config policy leaves every approval to a human."""
-    import metasci_scribe.channels.interaction as interaction_mod
+    import metasci_scribe.stream.interaction as interaction_mod
 
     monkeypatch.setattr(
         interaction_mod, "config_policy_snapshot", lambda reqs: (None, {})

@@ -8,8 +8,8 @@ from unittest.mock import MagicMock
 import pytest
 from langchain_core.messages import AIMessage
 
-from metasci_scribe.channels.interaction import ApprovalOutcome
 from metasci_scribe.stream import display as display_mod
+from metasci_scribe.stream.interaction import ApprovalOutcome
 from tests.fakes.common import (
     FakeCheckpointAgent,
     FakeGraphGateway,
@@ -102,7 +102,7 @@ class TestRichLoopClosesAtADecline:
         assert agent.next == ()
 
     def test_a_reject_on_the_channel_closes_as_rejected_without_a_limit_notice(self):
-        from metasci_scribe.channels.hitl_budget import HITL_BUDGET_STOP_NOTICE
+        from metasci_scribe.stream.hitl_budget import HITL_BUDGET_STOP_NOTICE
 
         agent = _parked_agent()
         gateway = FakeGraphGateway(stream=_one_approval_then_done(), checkpoint=agent)
@@ -236,7 +236,7 @@ class TestRichResolverSaysWhoDeclined:
 
     @pytest.fixture(autouse=True)
     def _attended(self, monkeypatch):
-        import metasci_scribe.channels.interaction as interaction_mod
+        import metasci_scribe.stream.interaction as interaction_mod
 
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         monkeypatch.setattr(display_mod.console, "print", lambda *_a, **_k: None)
@@ -296,164 +296,3 @@ class TestRichResolverSaysWhoDeclined:
             )
         )
         assert (resolution.decisions, resolution.rejected) == (None, rejected)
-
-
-class TestConsumerClosesAtADecline:
-    """The standalone consumer: reject, timeout, stop and an unrecognized reply."""
-
-    @staticmethod
-    def _consumer(stream, media_dir, agent):
-        from metasci_scribe.channels.bus.message_bus import MessageBus
-        from metasci_scribe.channels.channel_manager import ChannelManager
-        from metasci_scribe.channels.consumer import InboundConsumer
-        from tests.fakes.common import StubChannel
-
-        bus = MessageBus()
-        manager = ChannelManager(bus, media_dir=media_dir)
-        manager.register(StubChannel())
-        gateway = FakeGraphGateway(stream=stream, checkpoint=agent)
-        consumer = InboundConsumer(
-            bus=bus,
-            manager=manager,
-            agent=agent,
-            thread_id="",
-            graph_gateway=gateway,
-            max_concurrent=2,
-            max_pending=10,
-            inference_timeout=5.0,
-            drain_timeout=10.0,
-        )
-        return consumer, bus, gateway
-
-    @staticmethod
-    async def _send(bus, content="go"):
-        from metasci_scribe.channels.bus.events import InboundMessage
-
-        await bus.publish_inbound(
-            InboundMessage(
-                channel="stub", sender_id="u1", chat_id="c1", content=content
-            )
-        )
-
-    @staticmethod
-    async def _stop(consumer, task):
-        await consumer.stop()
-        # The run loop only checks for a stop once a second.
-        task.cancel()
-        await task
-
-    @pytest.fixture(autouse=True)
-    def _no_config_rule(self, monkeypatch):
-        import metasci_scribe.channels.interaction as interaction_mod
-
-        monkeypatch.setattr(
-            interaction_mod, "config_policy_snapshot", lambda reqs: (None, {})
-        )
-
-    async def _decline(self, tmp_path, agent, reply, *, stream=None):
-        """Park one approval, send ``reply`` (``None`` = say nothing), return what was sent back."""
-        import asyncio
-
-        consumer, bus, gateway = self._consumer(
-            stream or _one_approval_then_done(), tmp_path, agent
-        )
-        await self._send(bus)
-        task = asyncio.create_task(consumer.run())
-        sent = [(await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)).content]
-        assert "Approval Required" in sent[0]
-        if reply is not None:
-            await self._send(bus, content=reply)
-            # A worker must hold the reply before stop() ends the run loop.
-            async with asyncio.timeout(10.0):
-                while consumer.metrics["total_processed"] < 2:
-                    await asyncio.sleep(0.01)
-        # Each worker finishes its turn before it takes stop()'s sentinel.
-        await self._stop(consumer, task)
-        while bus.outbound_size:
-            sent.append((await bus.consume_outbound()).content)
-        return sent, gateway
-
-    async def test_a_reject_reply_closes_as_rejected(self, tmp_path):
-        agent = _parked_agent()
-        sent, gateway = await self._decline(tmp_path, agent, "2")
-        assert sent[-1] == "❌ Rejected"
-        assert len(gateway.requests) == 1
-        assert _closed(agent) == [REJECTED]
-        assert agent.next == ()
-
-    async def test_the_round_limit_exit_records_the_limit(self, tmp_path, monkeypatch):
-        import asyncio
-
-        import metasci_scribe.channels.consumer as consumer_mod
-
-        async def _budget_spent(*_args, **_kwargs):
-            return ApprovalOutcome(budget_exhausted=True)
-
-        monkeypatch.setattr(consumer_mod, "resolve_approval", _budget_spent)
-        agent = _parked_agent()
-        consumer, bus, gateway = self._consumer(
-            _one_approval_then_done(), tmp_path, agent
-        )
-        await self._send(bus)
-        task = asyncio.create_task(consumer.run())
-        sent = [
-            (await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)).content
-            for _ in range(2)
-        ]
-        await self._stop(consumer, task)
-        assert sent == ["partial", "Approval round limit reached; stopping this turn."]
-        assert len(gateway.requests) == 1
-        assert _closed(agent) == [ROUND_LIMIT]
-
-    async def test_a_timeout_closes_as_unanswered(self, tmp_path, monkeypatch):
-        import metasci_scribe.channels.consumer as consumer_mod
-
-        monkeypatch.setattr(consumer_mod, "HITL_APPROVAL_TIMEOUT", 0.05)
-        agent = _parked_agent()
-        _sent, gateway = await self._decline(tmp_path, agent, None)
-        assert len(gateway.requests) == 1
-        assert _closed(agent) == [UNANSWERED]
-
-    async def test_a_stop_reply_closes_as_rejected(self, tmp_path):
-        agent = _parked_agent()
-        _sent, gateway = await self._decline(tmp_path, agent, "/stop")
-        assert len(gateway.requests) == 1
-        assert _closed(agent) == [REJECTED]
-
-    async def test_an_unrecognized_reply_closes_before_it_starts_the_next_turn(
-        self, tmp_path
-    ):
-        agent = _parked_agent()
-        closed_at_call: list[bool] = []
-
-        async def _fake_stream(_request):
-            closed_at_call.append(bool(_written(agent)))
-            if len(closed_at_call) == 1:
-                yield interrupt_event(1)
-                return
-            yield {"type": "text", "content": "finished"}
-            yield {"type": "done", "content": "finished"}
-
-        sent, gateway = await self._decline(
-            tmp_path, agent, "do something else instead", stream=_fake_stream
-        )
-        assert sent[-1] == "finished"
-        assert len(gateway.requests) == 2
-        assert closed_at_call == [False, True]
-        assert _closed(agent) == [REJECTED]
-
-    async def test_a_close_that_fails_ends_the_turn_with_one_short_log_line(
-        self, tmp_path, caplog
-    ):
-        agent = _parked_agent(
-            update_error=RuntimeError("409 conflict\nrun kwargs:\n" + "x" * 5000)
-        )
-        with caplog.at_level(logging.DEBUG, logger="metasci-scribe"):
-            sent, gateway = await self._decline(tmp_path, agent, "2")
-        assert sent[-1] == "❌ Rejected"
-        assert len(gateway.requests) == 1
-        warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
-        assert len(warnings) == 1
-        assert "Could not close the parked checkpoint" in warnings[0].getMessage()
-        assert "\n" not in warnings[0].getMessage()
-        assert warnings[0].exc_info is None

@@ -70,8 +70,8 @@ class CommandUI(Protocol):
 
 
 @dataclass
-class ChannelRuntime:
-    """Mutable handle to the agent + thread bound to running channels.
+class SessionRuntime:
+    """Mutable handle to the session's agent + thread.
 
     Also holds session-scoped bindings mutated by slash commands — the
     ``active_teams`` list backs the ``/expert`` command and ``rubric`` the
@@ -83,8 +83,8 @@ class ChannelRuntime:
     thread_id: str | None = None
     active_teams: list[str] = field(default_factory=list)
     rubric: RubricSession = field(default_factory=RubricSession)
-    # Serve's proactive-push controller (``proactive.serve.ProactiveServe``).
-    # Only serve sets it: it is the only surface that can deliver a push.
+    # Proactive-push controller (``proactive.serve.ProactiveServe``). Nothing
+    # sets it now that ``serve`` is gone; removed with the proactive feature.
     proactive: Any = None
 
     def bind(self, agent: Any, thread_id: str) -> None:
@@ -93,17 +93,17 @@ class ChannelRuntime:
 
     def clear(self) -> None:
         # ``active_teams`` is session-scoped and reset explicitly by ``/new``
-        # (session.py) and ``/expert clear`` — not tied to channel lifecycle.
-        # Clearing here on channel shutdown would silently dismiss the user's
-        # invited experts, which they never asked for.
+        # (session.py) and ``/expert clear`` — not tied to the agent binding.
+        # Clearing the binding here would silently dismiss the user's invited
+        # experts, which they never asked for.
         self.agent = None
         self.thread_id = None
 
 
 def active_teams_configurable_extra(
-    runtime: ChannelRuntime | None,
+    runtime: SessionRuntime | None,
 ) -> dict[str, Any] | None:
-    """Build ``RunRequest.configurable_extra`` from a channel runtime.
+    """Build ``RunRequest.configurable_extra`` from the session runtime.
 
     Returns ``{"active_teams": [...]}`` when the runtime has invited
     experts, or ``None`` when there is no runtime or no active invites —
@@ -129,7 +129,7 @@ class CommandContext:
     dirs: SessionDirs
     checkpointer: Any = None
     config: Any = None
-    channel_runtime: ChannelRuntime | None = None
+    session_runtime: SessionRuntime | None = None
     graph_gateway: GraphGateway | None = None
     async_runtime: AsyncRuntime | None = None
     command_error: str | None = None
@@ -177,7 +177,7 @@ class Command(ABC):
 
         Default returns :attr:`requires_agent`.  Override when a command
         has a mix of agent-using and agent-free subcommands (e.g.
-        ``/channel start`` vs ``/channel status``).
+        ``/mcp add`` vs ``/mcp list``).
         """
         return self.requires_agent
 

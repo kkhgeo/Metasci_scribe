@@ -1,6 +1,5 @@
 """Tests for HITL (Human-in-the-Loop) approval mechanism."""
 
-import asyncio
 from unittest.mock import MagicMock, patch
 
 from langgraph.types import Interrupt
@@ -466,163 +465,16 @@ class TestInterruptEventParsing:
 
 
 # =============================================================================
-# Channel consumer HITL helpers
+# Config-policy helpers
 # =============================================================================
 
 
-class TestConsumerHitlHelpers:
-    def test_parse_approval_approve(self):
-        from metasci_scribe.channels.interaction import parse_approval_reply
-
-        for text in ("1", "y", "yes", "approve", "ok", " 1 ", "  Y  "):
-            assert parse_approval_reply(text) == "approve", f"Failed for: {text!r}"
-
-    def test_parse_approval_reject(self):
-        from metasci_scribe.channels.interaction import parse_approval_reply
-
-        for text in ("2", "n", "no", "reject"):
-            assert parse_approval_reply(text) == "reject", f"Failed for: {text!r}"
-
-    def test_parse_approval_auto(self):
-        from metasci_scribe.channels.interaction import parse_approval_reply
-
-        for text in ("3", "a", "auto", "approve all"):
-            assert parse_approval_reply(text) == "auto", f"Failed for: {text!r}"
-
-    def test_parse_approval_unrecognized(self):
-        from metasci_scribe.channels.interaction import parse_approval_reply
-
-        assert parse_approval_reply("hello world") is None
-        assert parse_approval_reply("") is None
-        assert parse_approval_reply("maybe") is None
-
-    def test_format_approval_prompt(self):
-        from metasci_scribe.channels.interaction import format_approval_prompt
-
-        prompt = format_approval_prompt(
-            [
-                {"name": "execute", "args": {"command": "ls -la"}},
-            ]
-        )
-        assert "Approval Required" in prompt
-        assert "execute" in prompt
-        assert "ls -la" in prompt
-        assert "1=Approve" in prompt
-        assert "2=Reject" in prompt
-
-    def test_format_approval_prompt_multiple(self):
-        from metasci_scribe.channels.interaction import format_approval_prompt
-
-        prompt = format_approval_prompt(
-            [
-                {"name": "execute", "args": {"command": "ls"}},
-                {"name": "write_file", "args": {"path": "/out.txt"}},
-            ]
-        )
-        assert "1. execute: ls" in prompt
-        assert "2. write_file: /out.txt" in prompt
-
-    def test_should_auto_approve_non_execute(self):
-        from metasci_scribe.channels.interaction import ApprovalPolicy
-
-        assert ApprovalPolicy().auto_decision(
-            "tg:c1", [{"name": "write_file", "args": {}}]
-        ) == [{"type": "approve"}]
-
-    def test_should_auto_approve_empty(self):
-        from metasci_scribe.channels.interaction import ApprovalPolicy
-
-        assert ApprovalPolicy().auto_decision("tg:c1", []) == []
-
-    def test_should_auto_approve_execute_no_allowlist(self):
-        from metasci_scribe.channels.interaction import ApprovalPolicy
-
-        # With default config (auto_approve=False, shell_allow_list=""),
-        # execute should NOT auto-approve
-        mock_cfg = MagicMock()
-        mock_cfg.auto_approve = False
-        mock_cfg.shell_allow_list = ""
-        mock_cfg.dangerous_mode = False
-        with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
-            result = ApprovalPolicy().auto_decision(
-                "tg:c1",
-                [
-                    {"name": "execute", "args": {"command": "rm -rf /"}},
-                ],
-            )
-        assert result is None
-
-    def test_should_auto_approve_run_in_background_no_allowlist(self):
-        """Channel path must NOT auto-approve run_in_background (same as execute)."""
-        from metasci_scribe.channels.interaction import ApprovalPolicy
-
-        mock_cfg = MagicMock()
-        mock_cfg.auto_approve = False
-        mock_cfg.shell_allow_list = ""
-        mock_cfg.dangerous_mode = False
-        with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
-            result = ApprovalPolicy().auto_decision(
-                "tg:c1",
-                [
-                    {"name": "run_in_background", "args": {"command": "rm -rf /"}},
-                ],
-            )
-        assert result is None
-
-    def test_should_auto_approve_config_true(self):
-        from metasci_scribe.channels.interaction import ApprovalPolicy
-
-        mock_cfg = MagicMock()
-        mock_cfg.auto_approve = True
-        mock_cfg.dangerous_mode = False
-        with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
-            result = ApprovalPolicy().auto_decision(
-                "tg:c1",
-                [
-                    {"name": "execute", "args": {"command": "rm -rf /"}},
-                ],
-            )
-        assert result == [{"type": "approve"}]
-
-    def test_should_auto_approve_allowlist_match(self):
-        from metasci_scribe.channels.interaction import ApprovalPolicy
-
-        mock_cfg = MagicMock()
-        mock_cfg.auto_approve = False
-        mock_cfg.shell_allow_list = "ls,python"
-        mock_cfg.dangerous_mode = False
-        with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
-            result = ApprovalPolicy().auto_decision(
-                "tg:c1",
-                [
-                    {"name": "execute", "args": {"command": "ls -la"}},
-                ],
-            )
-        assert result == [{"type": "approve"}]
-
-    def test_should_auto_approve_delete_not_cleared(self):
-        """delete has no `command` arg, so shell_allow_list must never clear it
-        the way it clears execute (C1)."""
-        from metasci_scribe.channels.interaction import ApprovalPolicy
-
-        mock_cfg = MagicMock()
-        mock_cfg.auto_approve = False
-        mock_cfg.dangerous_mode = False
-        mock_cfg.shell_allow_list = "ls,python"
-        with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
-            result = ApprovalPolicy().auto_decision(
-                "tg:c1",
-                [
-                    {"name": "delete", "args": {"file_path": "/f.txt"}},
-                ],
-            )
-        assert result is None
-
+class TestConfigPolicyHelpers:
     def test_dangerous_mode_approves_always_prompt_tools(self):
         """dangerous_mode keeps its trust-everything meaning ahead of the
         always-prompt set: delete (and a dangerous execute) approve instead of
         interrupting the session on every guarded call."""
-        from metasci_scribe.channels.interaction import resolve_config_decisions
+        from metasci_scribe.stream.interaction import resolve_config_decisions
 
         mock_cfg = MagicMock()
         mock_cfg.auto_approve = False
@@ -636,51 +488,6 @@ class TestConsumerHitlHelpers:
                 ]
             )
         assert result == [{"type": "approve"}, {"type": "approve"}]
-
-
-# =============================================================================
-# Channel reply-interception mechanism (channel.py PendingReplyRegistry)
-# =============================================================================
-# The CLI bridge routes prompt replies through the shared asyncio-based
-# ``PendingReplyRegistry`` on the bus loop (replacing the old threading.Event
-# ``_pending_hitl`` globals). ``_bus_inbound_consumer`` feeds it via
-# ``try_resolve`` ahead of normal enqueue.
-
-
-class TestChannelReplyRegistry:
-    async def test_register_and_resolve_reply(self):
-        from metasci_scribe.cli import channel as channel_mod
-
-        reg = channel_mod._reply_registry
-        reg.clear()
-
-        async def _resolver():
-            await asyncio.sleep(0.01)  # let wait() register first
-            assert reg.try_resolve("telegram:chat123", "1") is True
-
-        got, _ = await asyncio.gather(
-            reg.wait("telegram:chat123", timeout=1.0), _resolver()
-        )
-        assert got == "1"
-        assert "telegram:chat123" not in reg
-
-    def test_try_resolve_no_pending(self):
-        from metasci_scribe.cli import channel as channel_mod
-
-        channel_mod._reply_registry.clear()
-        # No pending wait — should not intercept.
-        resolved = channel_mod._reply_registry.try_resolve("discord:no_pending", "y")
-        assert resolved is False
-
-    async def test_reply_timeout_returns_none(self):
-        from metasci_scribe.cli import channel as channel_mod
-
-        reg = channel_mod._reply_registry
-        reg.clear()
-        # No reply delivered — wait should time out and clean up.
-        got = await reg.wait("telegram:timeout_chat", timeout=0.02)
-        assert got is None
-        assert "telegram:timeout_chat" not in reg
 
 
 # =============================================================================

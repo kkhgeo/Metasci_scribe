@@ -342,67 +342,6 @@ async def test_the_tui_shows_an_approved_sub_agent_command_as_running(
     assert not box._is_active
 
 
-async def test_the_consumer_closes_a_declined_sub_agent_command(tmp_path, monkeypatch):
-    import metasci_scribe.channels.interaction as interaction_mod
-    from metasci_scribe.channels.bus.events import InboundMessage
-    from metasci_scribe.channels.bus.message_bus import MessageBus
-    from metasci_scribe.channels.channel_manager import ChannelManager
-    from metasci_scribe.channels.consumer import InboundConsumer
-    from tests.fakes.common import StubChannel
-
-    monkeypatch.setattr(
-        interaction_mod, "config_policy_snapshot", lambda reqs: (None, {})
-    )
-    scripts = {
-        "go": [AIMessage("", tool_calls=[_task("t1", "SUBA")])],
-        "SUBA": [
-            AIMessage("", tool_calls=[_write("a0", "a0.txt")]),
-            AIMessage(
-                "", tool_calls=[_call("a1", "execute", command="echo a > a.txt")]
-            ),
-        ],
-    }
-    work = tmp_path / "work"
-    work.mkdir()
-    agent = _agent(work, scripts)
-    bus = MessageBus()
-    manager = ChannelManager(bus, media_dir=tmp_path / "media")
-    manager.register(StubChannel())
-    consumer = InboundConsumer(
-        bus=bus,
-        manager=manager,
-        agent=agent,
-        thread_id="",
-        graph_gateway=LocalGraphGateway(),
-        max_concurrent=2,
-        max_pending=10,
-        inference_timeout=30.0,
-        drain_timeout=1.0,
-    )
-
-    async def _send(content: str) -> None:
-        await bus.publish_inbound(
-            InboundMessage(
-                channel="stub", sender_id="u1", chat_id="c1", content=content
-            )
-        )
-
-    runner = asyncio.create_task(consumer.run())
-    await _send("go")
-    prompt = await asyncio.wait_for(bus.consume_outbound(), timeout=20.0)
-    assert "Approval Required" in prompt.content
-    await _send("2")
-    feedback = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
-    assert feedback.content == "❌ Rejected"
-    await consumer.stop()
-    await runner
-
-    position, results = await _results(agent, await consumer._get_thread_id("u1"))
-    assert position == ()
-    assert close_result(results["t1"]) == NOT_FINISHED
-    assert _files(work) == ["a0.txt"]
-
-
 async def test_the_tui_closes_a_decline_when_ctrl_c_stops_the_sibling(
     monkeypatch, workspace, tmp_path
 ):

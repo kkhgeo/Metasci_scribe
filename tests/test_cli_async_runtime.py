@@ -44,7 +44,6 @@ def test_sessions_stats_uses_and_closes_cli_owned_runtime(monkeypatch, args):
     ("args", "patch_target"),
     [
         (["onboard"], "metasci_scribe.config.onboard.run_onboard"),
-        (["configure", "channels"], "metasci_scribe.cli.commands._run_onboard_cli"),
     ],
 )
 def test_onboarding_commands_share_and_close_cli_runtime(
@@ -65,33 +64,6 @@ def test_onboarding_commands_share_and_close_cli_runtime(
     monkeypatch.setattr(patch_target, fake_onboard)
 
     result = CliRunner().invoke(app, args)
-
-    assert result.exit_code == 0, result.exception
-    assert execution["thread"] == "metasci-scribe-async-runtime"
-    assert isinstance(execution["loop"], asyncio.AbstractEventLoop)
-    assert not any(
-        thread.name == "metasci-scribe-async-runtime" and thread.is_alive()
-        for thread in threading.enumerate()
-    )
-
-
-def test_channel_setup_shares_and_closes_cli_runtime(monkeypatch):
-    execution: dict[str, object] = {}
-
-    async def record_execution():
-        execution["thread"] = threading.current_thread().name
-        execution["loop"] = asyncio.get_running_loop()
-
-    def fake_step_channels(_config, *, runtime):
-        runtime.run_sync(record_execution)
-        return {}
-
-    monkeypatch.setattr("metasci_scribe.config.load_config", object)
-    monkeypatch.setattr(
-        "metasci_scribe.config.onboard.channels._step_channels", fake_step_channels
-    )
-
-    result = CliRunner().invoke(app, ["channel", "setup"])
 
     assert result.exit_code == 0, result.exception
     assert execution["thread"] == "metasci-scribe-async-runtime"

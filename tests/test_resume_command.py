@@ -131,9 +131,9 @@ class TestResumeClearsInvitedExperts:
     """Invitations are session-scoped: switching threads dismisses them."""
 
     def _runtime(self, invited):
-        from metasci_scribe.commands.base import ChannelRuntime
+        from metasci_scribe.commands.base import SessionRuntime
 
-        runtime = ChannelRuntime()
+        runtime = SessionRuntime()
         runtime.active_teams = list(invited)
         return runtime
 
@@ -144,9 +144,9 @@ class TestResumeClearsInvitedExperts:
             thread_id="current",
             thread_store=FakeThreadStore(resolved_thread_id="other-tid"),
         )
-        ctx.channel_runtime = self._runtime(["idea-brainstorm"])
+        ctx.session_runtime = self._runtime(["idea-brainstorm"])
         await ResumeCommand().execute(ctx, ["other-tid"])
-        assert ctx.channel_runtime.active_teams == []
+        assert ctx.session_runtime.active_teams == []
         msgs = [c.args[0] for c in ui.append_system.call_args_list]
         assert any(
             "Dismissed experts on session switch: idea-brainstorm" in m for m in msgs
@@ -159,9 +159,9 @@ class TestResumeClearsInvitedExperts:
             thread_id="current",
             thread_store=FakeThreadStore(resolved_thread_id="current"),
         )
-        ctx.channel_runtime = self._runtime(["idea-brainstorm"])
+        ctx.session_runtime = self._runtime(["idea-brainstorm"])
         await ResumeCommand().execute(ctx, ["current"])
-        assert ctx.channel_runtime.active_teams == ["idea-brainstorm"]
+        assert ctx.session_runtime.active_teams == ["idea-brainstorm"]
         msgs = [c.args[0] for c in ui.append_system.call_args_list]
         assert not any("Dismissed experts" in m for m in msgs)
 
@@ -169,6 +169,6 @@ class TestResumeClearsInvitedExperts:
         from metasci_scribe.commands.implementation.session import ResumeCommand
 
         ctx, _ui = _ctx(thread_store=FakeThreadStore())
-        ctx.channel_runtime = self._runtime(["idea-brainstorm"])
+        ctx.session_runtime = self._runtime(["idea-brainstorm"])
         await ResumeCommand().execute(ctx, ["nope"])
-        assert ctx.channel_runtime.active_teams == ["idea-brainstorm"]
+        assert ctx.session_runtime.active_teams == ["idea-brainstorm"]

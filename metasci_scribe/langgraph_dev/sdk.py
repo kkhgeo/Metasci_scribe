@@ -94,7 +94,7 @@ def get_langgraph_async_client(
 _ASYNC_CLIENT_CACHE: dict[tuple[str, tuple[tuple[str, str], ...]], object] = {}
 
 # The cached client backs the read-only completion poll, which is awaited
-# inline on the channel/serve dispatch path. Without a cap it inherits the SDK
+# inline on the interactive dispatch path. Without a cap it inherits the SDK
 # default ``read=300s``, so a jammed dev server (the known stuck-queue
 # condition) would block dispatch for up to five minutes per poll. A timed-out
 # poll takes the caller's ``except Exception`` branch and retries next tick.

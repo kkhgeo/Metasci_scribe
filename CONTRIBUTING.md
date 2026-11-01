@@ -29,9 +29,8 @@ If you want to add a niche or specialized workflow, consider contributing to the
 
 2. **Install dependencies** (requires [uv](https://docs.astral.sh/uv/)):
    ```bash
-   uv sync --dev --extra all-channels
+   uv sync --dev
    ```
-   The channel extras let the channel tests run; without them they are skipped.
 
 3. **Run the test suite** (no API keys or network needed):
    ```bash
@@ -100,9 +99,9 @@ Metasci Scribe is a multi-agent AI system for automated scientific experimentati
 ### Data flow
 
 ```txt
-User Input (CLI / TUI / 10 Channel Integrations)
+User Input (CLI / TUI)
     |
-CLI (cli/) / TUI (cli/tui_*) / Channel Server (channels/)
+CLI (cli/) / TUI (cli/tui_*)
     |
 Main Agent (agent.py) -- create_deep_agent()
     +-- System Prompt (prompts.py)

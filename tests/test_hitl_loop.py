@@ -14,22 +14,14 @@ clears ``next`` instead, so the checkpoint cannot poison the next turn.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-import metasci_scribe.channels.consumer as consumer_mod
-from metasci_scribe.channels.bus.events import InboundMessage as BusInbound
-from metasci_scribe.channels.bus.message_bus import MessageBus
-from metasci_scribe.channels.channel_manager import ChannelManager
-from metasci_scribe.channels.consumer import InboundConsumer
-from metasci_scribe.middleware import events as mw_events
 from metasci_scribe.stream import display as display_mod
 from tests.fakes.common import FakeCheckpointAgent, FakeGraphGateway
-from tests.fakes.common import StubChannel as _StubChannel
 from tests.fakes.common import attended_config as _attended_config
 from tests.fakes.common import interrupt_event as _interrupt_event
 
@@ -220,7 +212,7 @@ class TestRichCliHitlRoundBudget:
         resume, which would otherwise run another model step (issue #469)."""
         from langgraph.types import Command  # type: ignore[import-untyped]
 
-        import metasci_scribe.channels.hitl_budget as budget_mod
+        import metasci_scribe.stream.hitl_budget as budget_mod
 
         monkeypatch.setattr(budget_mod, "MAX_HITL_TOTAL_ROUNDS", 2)
         monkeypatch.setattr(display_mod, "_session_auto_approve", True)
@@ -260,7 +252,7 @@ class TestRichCliHitlRoundBudget:
 
     def test_session_grant_after_human_budget_still_auto_resolves(self, monkeypatch):
         """The human budget is checked only when a prompt would be shown."""
-        import metasci_scribe.channels.hitl_budget as budget_mod
+        import metasci_scribe.stream.hitl_budget as budget_mod
 
         monkeypatch.setattr(budget_mod, "MAX_HUMAN_HITL_ROUNDS", 1)
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
@@ -306,7 +298,7 @@ class TestRichCliHitlRoundBudget:
         assert stream_calls == 4
 
     def test_close_failure_keeps_the_partial_response(self, monkeypatch, caplog):
-        import metasci_scribe.channels.hitl_budget as budget_mod
+        import metasci_scribe.stream.hitl_budget as budget_mod
 
         monkeypatch.setattr(budget_mod, "MAX_HUMAN_HITL_ROUNDS", 0)
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
@@ -347,51 +339,9 @@ class TestRichCliHitlRoundBudget:
         assert len(failures) == 1
         assert failures[0].exc_info is None
 
-    def test_channel_session_grant_resumes_past_50_rounds(self, monkeypatch):
-        from langgraph.types import Command  # type: ignore[import-untyped]
-
-        from metasci_scribe.cli import channel as channel_mod
-
-        msg = channel_mod.ChannelMessage(
-            msg_id="m1", content="run", sender="u", channel_type="telegram"
-        )
-        policy = channel_mod.ApprovalPolicy()
-        policy.grant_session(channel_mod._channel_message_session_key(msg))
-        monkeypatch.setattr(channel_mod, "_approval_policy", policy)
-        monkeypatch.setattr(display_mod, "_session_auto_approve", False)
-        stream_calls = 0
-
-        async def _fake_stream(_request):
-            nonlocal stream_calls
-            stream_calls += 1
-            if stream_calls <= 60:
-                yield _interrupt_event(stream_calls)
-                return
-            yield {"type": "text", "content": "All sixty rounds done"}
-            yield {"type": "done", "content": "All sixty rounds done"}
-
-        gateway = FakeGraphGateway(stream=_fake_stream)
-        result = display_mod._run_streaming(
-            agent=MagicMock(),
-            message="hello",
-            thread_id="t1",
-            show_thinking=False,
-            interactive=True,
-            gateway=gateway,
-            _state=display_mod.StreamState(),
-            hitl_outcome_fn=lambda reqs, exhausted: channel_mod.channel_hitl_prompt(
-                reqs, msg, human_budget_exhausted=exhausted
-            ),
-        )
-
-        resumes = [r for r in gateway.requests if isinstance(r.message, Command)]
-        assert stream_calls == 61
-        assert len(resumes) == 60
-        assert result == "All sixty rounds done"
-
     def test_channel_budget_stop_reaches_the_channel_reply(self, monkeypatch):
-        from metasci_scribe.channels.hitl_budget import HITL_BUDGET_STOP_NOTICE
-        from metasci_scribe.channels.interaction import ApprovalOutcome
+        from metasci_scribe.stream.hitl_budget import HITL_BUDGET_STOP_NOTICE
+        from metasci_scribe.stream.interaction import ApprovalOutcome
 
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         monkeypatch.setattr(
@@ -504,7 +454,7 @@ class TestRichCliSessionGrantReachesTheGraph:
         assert self._extras(gateway) == [None, None, GRANT, GRANT]
 
     def test_an_allow_list_answer_is_not_keyed(self, monkeypatch):
-        import metasci_scribe.channels.interaction as interaction_mod
+        import metasci_scribe.stream.interaction as interaction_mod
 
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         monkeypatch.setattr(
@@ -520,7 +470,7 @@ class TestRichCliSessionGrantReachesTheGraph:
     def test_a_bridge_answer_is_keyed_only_when_the_chat_is_granted(
         self, monkeypatch, granted
     ):
-        from metasci_scribe.channels.interaction import ApprovalOutcome
+        from metasci_scribe.stream.interaction import ApprovalOutcome
 
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         _attended_config(monkeypatch)
@@ -554,7 +504,7 @@ class TestRichCliSessionGrantReachesTheGraph:
     def test_a_starting_grant_is_dropped_from_a_call_that_must_not_carry_it(
         self, monkeypatch
     ):
-        from metasci_scribe.channels.interaction import ApprovalOutcome
+        from metasci_scribe.stream.interaction import ApprovalOutcome
 
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         _attended_config(monkeypatch)
@@ -655,7 +605,7 @@ class TestRichCliSessionGrantReachesTheGraph:
         self, monkeypatch
     ):
         """A chat grant seen during the turn holds for the rest of it."""
-        from metasci_scribe.channels.interaction import ApprovalOutcome
+        from metasci_scribe.stream.interaction import ApprovalOutcome
 
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         _attended_config(monkeypatch)
@@ -677,7 +627,7 @@ class TestRichCliSessionGrantReachesTheGraph:
         """The reply that grants is a human answer (unkeyed), but the chat's
         grant is in force afterwards: the answer to a question that comes next
         carries it, so no approval pauses after the question."""
-        from metasci_scribe.channels.interaction import ApprovalOutcome
+        from metasci_scribe.stream.interaction import ApprovalOutcome
 
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         _attended_config(monkeypatch)
@@ -712,7 +662,7 @@ class TestRichCliSessionGrantReachesTheGraph:
     ):
         """The same for a channel answer with no grant behind it, whether the
         user approved once or the bridge answered on its own."""
-        from metasci_scribe.channels.interaction import ApprovalOutcome
+        from metasci_scribe.stream.interaction import ApprovalOutcome
 
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         _attended_config(monkeypatch)
@@ -730,7 +680,7 @@ class TestRichCliSessionGrantReachesTheGraph:
         self, monkeypatch
     ):
         """An allow-list answer is not a grant either."""
-        import metasci_scribe.channels.interaction as interaction_mod
+        import metasci_scribe.stream.interaction as interaction_mod
 
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         monkeypatch.setattr(
@@ -746,7 +696,7 @@ class TestRichCliSessionGrantReachesTheGraph:
         """A channel-origin turn whose chat is granted (the caller says so), yet
         this batch is answered by the config rules before the bridge is asked:
         not the grant's answer, so the resume goes out unkeyed."""
-        import metasci_scribe.channels.interaction as interaction_mod
+        import metasci_scribe.stream.interaction as interaction_mod
 
         def _bridge_must_not_be_asked(_reqs, _exhausted):
             raise AssertionError("the config rule answers first")
@@ -765,18 +715,6 @@ class TestRichCliSessionGrantReachesTheGraph:
         )
         assert self._extras(gateway) == [GRANT, None]
 
-    def test_a_chats_grant_does_not_key_a_local_turn(self, monkeypatch):
-        """Only a channel-origin call site passes a chat's grant in."""
-        from metasci_scribe.cli import channel as channel_mod
-
-        policy = channel_mod.ApprovalPolicy()
-        policy.grant_session("telegram:c1")
-        monkeypatch.setattr(channel_mod, "_approval_policy", policy)
-        monkeypatch.setattr(display_mod, "_session_auto_approve", False)
-        gateway = FakeGraphGateway(stream=_interrupts_then_done(0))
-        self._run(gateway)
-        assert self._extras(gateway) == [None]
-
     def test_a_declined_prompt_sends_nothing_more(self, monkeypatch):
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         _attended_config(monkeypatch)
@@ -784,383 +722,10 @@ class TestRichCliSessionGrantReachesTheGraph:
         self._run(gateway, hitl_prompt_fn=lambda _requests: None)
         assert self._extras(gateway) == [None]
 
-    def test_channel_relays_span_the_whole_uninterrupted_stream(self, monkeypatch):
-        """Without approval pauses a granted turn is one stream: the thinking
-        relay sends the accumulated text each time it grows and only the first
-        todo list is relayed - the shape of an ``auto_approve`` turn."""
-        monkeypatch.setattr(display_mod, "_session_auto_approve", True)
-        first, second = "a" * 220, "b" * 220
-
-        async def _fake_stream(_request):
-            yield {"type": "thinking", "content": first}
-            yield {
-                "type": "tool_call",
-                "id": "t1",
-                "name": "write_todos",
-                "args": {"todos": [{"content": "step one", "status": "pending"}]},
-            }
-            yield {
-                "type": "tool_result",
-                "id": "t1",
-                "name": "write_todos",
-                "content": "ok",
-            }
-            yield {"type": "thinking", "content": second}
-            yield {
-                "type": "tool_call",
-                "id": "t2",
-                "name": "write_todos",
-                "args": {
-                    "todos": [
-                        {"content": "step one", "status": "completed"},
-                        {"content": "step two", "status": "pending"},
-                    ]
-                },
-            }
-            yield {
-                "type": "tool_result",
-                "id": "t2",
-                "name": "write_todos",
-                "content": "ok",
-            }
-            yield {"type": "text", "content": "finished"}
-            yield {"type": "done", "content": "finished"}
-
-        thinking: list[str] = []
-        todos: list[list] = []
-        gateway = FakeGraphGateway(stream=_fake_stream)
-        self._run(
-            gateway,
-            on_thinking=thinking.append,
-            on_todo=lambda items: todos.append(list(items)),
-        )
-        assert self._extras(gateway) == [GRANT]
-        assert thinking == [first, first + second]
-        assert [[item["content"] for item in batch] for batch in todos] == [
-            ["step one"]
-        ]
-
-
-class TestConsumerSessionGrantReachesTheGraph:
-    """The standalone consumer follows the same rule as the Rich loop, per chat."""
-
-    @staticmethod
-    def _consumer(stream, media_dir):
-        return TestConsumerHitlRoundBudget()._consumer(stream, media_dir)
-
-    @staticmethod
-    async def _send(bus, chat_id="c1", content="go"):
-        await bus.publish_inbound(
-            BusInbound(channel="stub", sender_id="u1", chat_id=chat_id, content=content)
-        )
-
-    @staticmethod
-    def _keyed(gateway):
-        return [
-            (request.configurable_extra or {}).get("hitl_approve_all") is True
-            for request in gateway.requests
-        ]
-
-    async def test_a_granted_chat_is_keyed_from_its_first_call(self, tmp_path):
-        consumer, bus, gateway = self._consumer(_interrupts_then_done(2), tmp_path)
-        consumer._approval_policy.grant_session("stub:c1")
-        await self._send(bus)
-        task = asyncio.create_task(consumer.run())
-        outbound = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
-        await consumer.stop()
-        await task
-
-        assert outbound.content == "finished"
-        assert self._keyed(gateway) == [True, True, True]
-
-    async def test_the_reply_that_grants_is_sent_unkeyed(self, tmp_path, monkeypatch):
-        import metasci_scribe.channels.interaction as interaction_mod
-
-        monkeypatch.setattr(
-            interaction_mod, "config_policy_snapshot", lambda reqs: (None, {})
-        )
-        consumer, bus, gateway = self._consumer(_interrupts_then_done(2), tmp_path)
-        await self._send(bus)
-        task = asyncio.create_task(consumer.run())
-        prompt = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
-        assert "Approval Required" in prompt.content
-        await self._send(bus, content="3")  # approve all for this chat
-        outbound = None
-        for _ in range(4):
-            outbound = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
-            if outbound.content == "finished":
-                break
-        await consumer.stop()
-        await task
-
-        assert outbound is not None
-        assert outbound.content == "finished"
-        # first call, the granting answer, then the auto-answered resume.
-        assert self._keyed(gateway) == [False, False, True]
-
-    async def test_another_chats_grant_does_not_key_this_chat(
-        self, tmp_path, monkeypatch
-    ):
-        import metasci_scribe.channels.interaction as interaction_mod
-
-        monkeypatch.setattr(
-            interaction_mod,
-            "config_policy_snapshot",
-            lambda reqs: ([{"type": "approve"} for _ in reqs], {}),
-        )
-        consumer, bus, gateway = self._consumer(_interrupts_then_done(1), tmp_path)
-        consumer._approval_policy.grant_session("stub:other")
-        await self._send(bus)
-        task = asyncio.create_task(consumer.run())
-        outbound = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
-        await consumer.stop()
-        await task
-
-        assert outbound.content == "finished"
-        # The config rule answered the approval: not the grant, so no key.
-        assert self._keyed(gateway) == [False, False]
-
-    async def test_a_declined_reply_sends_no_further_call(self, tmp_path, monkeypatch):
-        import metasci_scribe.channels.interaction as interaction_mod
-
-        monkeypatch.setattr(
-            interaction_mod, "config_policy_snapshot", lambda reqs: (None, {})
-        )
-        consumer, bus, gateway = self._consumer(_interrupts_then_done(2), tmp_path)
-        await self._send(bus)
-        task = asyncio.create_task(consumer.run())
-        prompt = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
-        assert "Approval Required" in prompt.content
-        await self._send(bus, content="2")  # reject
-        await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
-        await consumer.stop()
-        await task
-
-        assert self._keyed(gateway) == [False]
-
-    async def test_a_grant_answer_with_a_reject_is_not_keyed(
-        self, tmp_path, monkeypatch
-    ):
-        """Belt and braces: the key is sent only when every decision approves."""
-        from metasci_scribe.channels.interaction import ApprovalOutcome
-
-        async def _resolve(*_args, **_kwargs):
-            return ApprovalOutcome(
-                decisions=[{"type": "reject", "message": "no"}], session_granted=True
-            )
-
-        monkeypatch.setattr(consumer_mod, "resolve_approval", _resolve)
-        consumer, bus, gateway = self._consumer(_interrupts_then_done(1), tmp_path)
-        await self._send(bus)
-        task = asyncio.create_task(consumer.run())
-        outbound = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
-        await consumer.stop()
-        await task
-
-        assert outbound.content == "finished"
-        assert self._keyed(gateway) == [False, False]
-
-    async def test_a_question_in_an_ungranted_chat_is_answered_unkeyed(
-        self, tmp_path, monkeypatch
-    ):
-        """A keyed answer here would let every later gated call of the turn run
-        with no prompt; another chat's grant must not count."""
-        calls = 0
-
-        async def _fake_stream(_request):
-            nonlocal calls
-            calls += 1
-            if calls == 1:
-                yield {
-                    "type": "ask_user",
-                    "interrupt_id": "ask-1",
-                    "questions": [{"question": "Continue?"}],
-                }
-                return
-            yield {"type": "text", "content": "finished"}
-            yield {"type": "done", "content": "finished"}
-
-        async def _answer(_questions, _io, timeout=0):
-            return dict(ANSWER)
-
-        consumer, bus, gateway = self._consumer(_fake_stream, tmp_path)
-        consumer._approval_policy.grant_session("stub:other")
-        monkeypatch.setattr(consumer_mod, "resolve_ask_user", _answer)
-        await self._send(bus)
-        task = asyncio.create_task(consumer.run())
-        outbound = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
-        await consumer.stop()
-        await task
-
-        assert outbound.content == "finished"
-        assert self._keyed(gateway) == [False, False]
-
-    async def test_a_question_after_a_plain_approval_is_answered_unkeyed(
-        self, tmp_path, monkeypatch
-    ):
-        """Approving once grants nothing, so the question's answer is unkeyed."""
-        from metasci_scribe.channels.interaction import ApprovalOutcome
-
-        calls = 0
-
-        async def _fake_stream(_request):
-            nonlocal calls
-            calls += 1
-            if calls == 1:
-                yield _interrupt_event(1)
-                return
-            if calls == 2:
-                yield {
-                    "type": "ask_user",
-                    "interrupt_id": "ask-1",
-                    "questions": [{"question": "Continue?"}],
-                }
-                return
-            yield {"type": "text", "content": "finished"}
-            yield {"type": "done", "content": "finished"}
-
-        async def _approve_once(requests, *_args, **_kwargs):
-            return ApprovalOutcome(
-                decisions=[{"type": "approve"} for _ in requests], prompted=True
-            )
-
-        async def _answer(_questions, _io, timeout=0):
-            return dict(ANSWER)
-
-        consumer, bus, gateway = self._consumer(_fake_stream, tmp_path)
-        monkeypatch.setattr(consumer_mod, "resolve_approval", _approve_once)
-        monkeypatch.setattr(consumer_mod, "resolve_ask_user", _answer)
-        await self._send(bus)
-        task = asyncio.create_task(consumer.run())
-        outbound = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
-        await consumer.stop()
-        await task
-
-        assert outbound.content == "finished"
-        assert self._keyed(gateway) == [False, False, False]
-
-    async def test_an_approval_that_times_out_sends_no_further_call(
-        self, tmp_path, monkeypatch
-    ):
-        import metasci_scribe.channels.interaction as interaction_mod
-
-        monkeypatch.setattr(
-            interaction_mod, "config_policy_snapshot", lambda reqs: (None, {})
-        )
-        monkeypatch.setattr(consumer_mod, "HITL_APPROVAL_TIMEOUT", 0.05)
-        consumer, bus, gateway = self._consumer(_interrupts_then_done(2), tmp_path)
-        await self._send(bus)
-        task = asyncio.create_task(consumer.run())
-        prompt = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
-        assert "Approval Required" in prompt.content
-        await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)  # timeout notice
-        await consumer.stop()
-        await task
-
-        assert self._keyed(gateway) == [False]
-
-    async def test_a_refed_reply_starts_an_unkeyed_turn(self, tmp_path, monkeypatch):
-        """An unrecognized reply declines the approval and becomes a new turn."""
-        import metasci_scribe.channels.interaction as interaction_mod
-
-        monkeypatch.setattr(
-            interaction_mod, "config_policy_snapshot", lambda reqs: (None, {})
-        )
-        consumer, bus, gateway = self._consumer(_interrupts_then_done(1), tmp_path)
-        await self._send(bus)
-        task = asyncio.create_task(consumer.run())
-        prompt = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
-        assert "Approval Required" in prompt.content
-        await self._send(bus, content="do something else instead")
-        outbound = None
-        for _ in range(4):
-            outbound = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
-            if outbound.content == "finished":
-                break
-        await consumer.stop()
-        await task
-
-        assert outbound is not None
-        assert outbound.content == "finished"
-        assert self._keyed(gateway) == [False, False]
-
-    async def test_an_ask_user_pause_still_splits_a_granted_turn(
-        self, tmp_path, monkeypatch
-    ):
-        """Approvals no longer pause a granted turn, a question still does: the
-        reply holds the text after it and the todo list is relayed per stream."""
-
-        def _todos(call_id, *items):
-            return {
-                "type": "tool_call",
-                "id": call_id,
-                "name": "write_todos",
-                "args": {"todos": [{"content": i, "status": "pending"} for i in items]},
-            }
-
-        calls = 0
-
-        async def _fake_stream(_request):
-            nonlocal calls
-            calls += 1
-            if calls == 1:
-                yield {"type": "thinking", "content": "thinking before."}
-                yield _todos("t1", "step one")
-                yield {"type": "text", "content": "before the question."}
-                yield {
-                    "type": "ask_user",
-                    "interrupt_id": "ask-1",
-                    "questions": [{"question": "Continue?"}],
-                }
-                return
-            yield {"type": "thinking", "content": "thinking after."}
-            yield _todos("t2", "step one", "step two")
-            yield {"type": "text", "content": "after the question."}
-            yield {"type": "done", "content": "after the question."}
-
-        async def _answer(_questions, _io, timeout=0):
-            return {"answers": ["yes"], "status": "answered"}
-
-        bus = MessageBus()
-        manager = ChannelManager(bus, media_dir=tmp_path)
-        stub = _StubChannel()
-        stub.send_thinking = True
-        manager.register(stub)
-        agent = FakeCheckpointAgent()
-        gateway = FakeGraphGateway(stream=_fake_stream, checkpoint=agent)
-        consumer = InboundConsumer(
-            bus=bus,
-            manager=manager,
-            agent=agent,
-            thread_id="",
-            graph_gateway=gateway,
-            max_concurrent=2,
-            max_pending=10,
-            inference_timeout=5.0,
-            drain_timeout=1.0,
-        )
-        consumer._approval_policy.grant_session("stub:c1")
-        monkeypatch.setattr(consumer_mod, "resolve_ask_user", _answer)
-
-        await self._send(bus)
-        task = asyncio.create_task(consumer.run())
-        outbound = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
-        await consumer.stop()
-        await task
-
-        assert outbound.content == "after the question."
-        assert self._keyed(gateway) == [True, True]
-        relayed = [chunk[2] for chunk in stub._sent_chunks]
-        assert len([text for text in relayed if "tasks" in text]) == 2
-        assert [text for text in relayed if "thinking" in text] == [
-            "\U0001f9e0\nthinking before.\n\u23f3",
-            "\U0001f9e0\nthinking after.\n\u23f3",
-        ]
-
 
 def test_resolver_reports_the_grant_only_on_its_fast_path(monkeypatch):
-    import metasci_scribe.channels.interaction as interaction_mod
-    from metasci_scribe.channels.interaction import ApprovalOutcome
+    import metasci_scribe.stream.interaction as interaction_mod
+    from metasci_scribe.stream.interaction import ApprovalOutcome
 
     pending = _interrupt_event(1)
     monkeypatch.setattr(
@@ -1201,7 +766,7 @@ def test_resolver_reports_the_grant_only_on_its_fast_path(monkeypatch):
 
 
 def test_hitl_budget_stop_ignores_human_cap_for_auto_rounds():
-    import metasci_scribe.channels.hitl_budget as budget_mod
+    import metasci_scribe.stream.hitl_budget as budget_mod
 
     assert not budget_mod.hitl_budget_stop(
         human_rounds=50, total_rounds=51, needs_human=False
@@ -1214,396 +779,6 @@ def test_hitl_budget_stop_ignores_human_cap_for_auto_rounds():
     )
 
 
-class TestConsumerHitlRoundBudget:
-    """Channel consumer ``_stream_with_hitl`` resume-loop budgeting."""
-
-    def _consumer(
-        self, stream, media_dir
-    ) -> tuple[InboundConsumer, MessageBus, FakeGraphGateway]:
-        bus = MessageBus()
-        mgr = ChannelManager(bus, media_dir=media_dir)
-        mgr.register(_StubChannel())
-        agent = FakeCheckpointAgent()
-        gateway = FakeGraphGateway(stream=stream, checkpoint=agent)
-        return (
-            InboundConsumer(
-                bus=bus,
-                manager=mgr,
-                agent=agent,
-                thread_id="",
-                graph_gateway=gateway,
-                max_concurrent=2,
-                max_pending=10,
-                inference_timeout=5.0,
-                drain_timeout=1.0,
-            ),
-            bus,
-            gateway,
-        )
-
-    async def test_session_grant_resumes_past_50_rounds(self, tmp_path):
-        """An auto-approving session grant drives 60 guarded calls to
-        completion instead of falling out of the loop at 50 (issue #469)."""
-        stream_calls = 0
-
-        async def _fake_stream(_request):
-            nonlocal stream_calls
-            stream_calls += 1
-            if stream_calls <= 60:
-                yield _interrupt_event(stream_calls)
-                return
-            yield {"type": "text", "content": "final answer"}
-            yield {"type": "done", "content": "final answer"}
-
-        consumer, bus, _gateway = self._consumer(_fake_stream, tmp_path)
-        consumer._approval_policy.grant_session("stub:c1")
-
-        await bus.publish_inbound(
-            BusInbound(channel="stub", sender_id="u1", chat_id="c1", content="go")
-        )
-        task = asyncio.create_task(consumer.run())
-        outbound = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
-
-        assert outbound.content == "final answer"
-        assert stream_calls == 61  # initial stream + 60 auto-resumed rounds
-
-        await consumer.stop()
-        await task
-
-    async def test_session_grant_runs_long_unattended_turns_past_200_rounds(
-        self, tmp_path
-    ):
-        """The runaway guard is 1000 total rounds (CLI parity), not 200: an
-        unattended session-grant turn with 205 guarded calls must run to
-        completion — no stop, no truncation at the old cap (issue #469)."""
-        stream_calls = 0
-
-        async def _fake_stream(_request):
-            nonlocal stream_calls
-            stream_calls += 1
-            if stream_calls <= 205:
-                yield _interrupt_event(stream_calls)
-                return
-            yield {"type": "text", "content": "all done"}
-            yield {"type": "done", "content": "all done"}
-
-        consumer, bus, _gateway = self._consumer(_fake_stream, tmp_path)
-        consumer._approval_policy.grant_session("stub:c1")
-
-        await bus.publish_inbound(
-            BusInbound(channel="stub", sender_id="u1", chat_id="c1", content="go")
-        )
-        task = asyncio.create_task(consumer.run())
-        outbound = await asyncio.wait_for(bus.consume_outbound(), timeout=30.0)
-
-        assert outbound.content == "all done"
-        assert stream_calls == 206  # initial stream + 205 auto-resumed rounds
-
-        await consumer.stop()
-        await task
-
-    @pytest.mark.parametrize("pause", ["interrupt", "ask_user"])
-    async def test_pause_closes_stream_in_consumer_context(
-        self, monkeypatch, tmp_path, pause
-    ):
-        """Leaving the stream at an approval or a question closes it right
-        away, in the consumer's own task and contextvars context (issue #568).
-
-        The fake stream binds and resets the run event sink like
-        ``stream_agent_events``: ``reset_run_event_sink`` raises
-        ``ValueError`` if it runs in another context, e.g. in the event
-        loop's generator finalizer, or when ``_timeout_aiter`` advances the
-        stream in a child task (``asyncio.wait_for`` before Python 3.12).
-        """
-        stream_calls = 0
-        started_in: list[asyncio.Task | None] = []
-        closed_in: list[asyncio.Task | None] = []
-        sink_at_start: list[object] = []
-        loop_errors: list[dict] = []
-        asyncio.get_running_loop().set_exception_handler(
-            lambda _loop, context: loop_errors.append(context)
-        )
-
-        async def _fake_stream(_request):
-            nonlocal stream_calls
-            stream_calls += 1
-            started_in.append(asyncio.current_task())
-            sink_at_start.append(mw_events._current_run_event_sink.get())
-            token = mw_events.bind_run_event_sink(MagicMock())
-            try:
-                if stream_calls == 1:
-                    if pause == "interrupt":
-                        yield _interrupt_event(stream_calls)
-                    else:
-                        yield {
-                            "type": "ask_user",
-                            "interrupt_id": "ask-1",
-                            "questions": [{"question": "Continue?"}],
-                        }
-                    return
-                yield {"type": "text", "content": "final answer"}
-                yield {"type": "done", "content": "final answer"}
-            finally:
-                closed_in.append(asyncio.current_task())
-                mw_events.reset_run_event_sink(token)
-
-        async def _fake_ask_user(_questions, _io, timeout=0):
-            return {"answers": ["yes"], "status": "answered"}
-
-        consumer, bus, _gateway = self._consumer(_fake_stream, tmp_path)
-        consumer._approval_policy.grant_session("stub:c1")
-        monkeypatch.setattr(consumer_mod, "resolve_ask_user", _fake_ask_user)
-
-        await bus.publish_inbound(
-            BusInbound(channel="stub", sender_id="u1", chat_id="c1", content="go")
-        )
-        task = asyncio.create_task(consumer.run())
-        outbound = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
-
-        assert outbound.content == "final answer"
-        assert stream_calls == 2
-        assert closed_in == started_in
-        # The first run's sink was unbound before the resumed run started.
-        assert sink_at_start == [None, None]
-        assert loop_errors == []
-
-        await consumer.stop()
-        await task
-
-    async def test_human_round_budget_exhausted_notifies_channel(
-        self, monkeypatch, caplog, tmp_path
-    ):
-        """50 human decisions are all resumed (the 50th approval IS sent);
-        the 51st pending is refused BEFORE prompting, the parked checkpoint
-        is closed without a rejecting resume, and the user sees the stop
-        message (issue #469)."""
-        from langgraph.types import Command  # type: ignore[import-untyped]
-
-        from metasci_scribe.channels.interaction import ApprovalOutcome
-
-        stream_calls = 0
-        prompt_calls = 0
-
-        async def _fake_stream(_request):
-            nonlocal stream_calls
-            stream_calls += 1
-            yield _interrupt_event(stream_calls)
-
-        async def _human_approves(
-            _action_reqs,
-            _io,
-            _policy,
-            _session_key,
-            *,
-            timeout=0,
-            human_budget_exhausted=False,
-        ):
-            nonlocal prompt_calls
-            if human_budget_exhausted:
-                return ApprovalOutcome(budget_exhausted=True)
-            prompt_calls += 1
-            return ApprovalOutcome(decisions=[{"type": "approve"}], prompted=True)
-
-        consumer, bus, gateway = self._consumer(_fake_stream, tmp_path)
-        monkeypatch.setattr(consumer_mod, "resolve_approval", _human_approves)
-
-        await bus.publish_inbound(
-            BusInbound(channel="stub", sender_id="u1", chat_id="c1", content="go")
-        )
-        with caplog.at_level(
-            logging.WARNING, logger="metasci_scribe.channels.consumer"
-        ):
-            task = asyncio.create_task(consumer.run())
-            outbound = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
-
-        assert prompt_calls == 50  # the 51st pending never prompts a human
-        assert stream_calls == 51  # initial + 50 approve resumes, no drain stream
-        assert outbound.content == "Approval round limit reached; stopping this turn."
-        assert any("HITL round limit" in r.getMessage() for r in caplog.records)
-
-        fiftieth = gateway.requests[-1]
-        assert isinstance(fiftieth.message, Command)
-        assert fiftieth.message.resume["i50"]["decisions"] == [{"type": "approve"}]
-        assert consumer.agent.updates[-1][0] is None
-        assert consumer.agent.updates[-1][1] == "__end__"
-
-        await consumer.stop()
-        await task
-
-    async def test_ask_user_rounds_share_budget_and_drain_cancelled(
-        self, monkeypatch, caplog, tmp_path
-    ):
-        """ask_user rounds count toward the same human budget; the 51st
-        question is never asked and its checkpoint is closed without a
-        cancelled resume (issue #469)."""
-
-        stream_calls = 0
-        asked = 0
-
-        async def _fake_stream(_request):
-            nonlocal stream_calls
-            stream_calls += 1
-            if stream_calls <= 51:
-                yield {
-                    "type": "ask_user",
-                    "interrupt_id": f"ask-{stream_calls}",
-                    "questions": [{"question": "Continue?"}],
-                }
-                return
-            yield {"type": "text", "content": "never reached"}
-            yield {"type": "done", "content": "never reached"}
-
-        async def _fake_ask_user(_questions, _io, timeout=0):
-            nonlocal asked
-            asked += 1
-            return {"answers": ["yes"], "status": "answered"}
-
-        consumer, bus, _gateway = self._consumer(_fake_stream, tmp_path)
-        monkeypatch.setattr(consumer_mod, "resolve_ask_user", _fake_ask_user)
-
-        await bus.publish_inbound(
-            BusInbound(channel="stub", sender_id="u1", chat_id="c1", content="go")
-        )
-        with caplog.at_level(
-            logging.WARNING, logger="metasci_scribe.channels.consumer"
-        ):
-            task = asyncio.create_task(consumer.run())
-            outbound = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
-
-        assert asked == 50  # the 51st question is never asked
-        assert stream_calls == 51  # initial + 50 answer resumes, no drain stream
-        assert outbound.content == "Approval round limit reached; stopping this turn."
-        assert any("HITL round limit" in r.getMessage() for r in caplog.records)
-        assert consumer.agent.updates[-1][1] == "__end__"
-
-        await consumer.stop()
-        await task
-
-    async def test_human_budget_does_not_block_a_following_session_grant(
-        self, monkeypatch, tmp_path
-    ):
-        """Approving one-by-one and then granting the session must not stop
-        the next auto-resolved pending (issue #469 review)."""
-        import metasci_scribe.channels.hitl_budget as budget_mod
-        from metasci_scribe.channels.interaction import ApprovalOutcome
-
-        monkeypatch.setattr(budget_mod, "MAX_HUMAN_HITL_ROUNDS", 1)
-        stream_calls = 0
-
-        async def _fake_stream(_request):
-            nonlocal stream_calls
-            stream_calls += 1
-            if stream_calls <= 3:
-                yield _interrupt_event(stream_calls)
-                return
-            yield {"type": "text", "content": "continued"}
-            yield {"type": "done", "content": "continued"}
-
-        prompts = 0
-
-        async def _human_then_grant(
-            _action_reqs,
-            _io,
-            policy,
-            session_key,
-            *,
-            timeout=0,
-            human_budget_exhausted=False,
-        ):
-            nonlocal prompts
-            if policy.is_session_granted(session_key):
-                return ApprovalOutcome(decisions=[{"type": "approve"}])
-            if human_budget_exhausted:
-                return ApprovalOutcome(budget_exhausted=True)
-            prompts += 1
-            policy.grant_session(session_key)
-            return ApprovalOutcome(decisions=[{"type": "approve"}], prompted=True)
-
-        consumer, bus, _gateway = self._consumer(_fake_stream, tmp_path)
-        monkeypatch.setattr(consumer_mod, "resolve_approval", _human_then_grant)
-
-        await bus.publish_inbound(
-            BusInbound(channel="stub", sender_id="u1", chat_id="c1", content="go")
-        )
-        task = asyncio.create_task(consumer.run())
-        outbound = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
-
-        assert prompts == 1
-        assert outbound.content == "continued"
-        assert stream_calls == 4
-
-        await consumer.stop()
-        await task
-
-    async def test_close_failure_still_sends_partial_and_stop(
-        self, monkeypatch, caplog, tmp_path
-    ):
-        import metasci_scribe.channels.hitl_budget as budget_mod
-
-        monkeypatch.setattr(budget_mod, "MAX_HUMAN_HITL_ROUNDS", 0)
-
-        async def _fake_stream(_request):
-            yield {"type": "text", "content": "partial answer"}
-            yield _interrupt_event(1)
-
-        consumer, bus, _gateway = self._consumer(_fake_stream, tmp_path)
-        consumer.agent.update_error = RuntimeError("checkpoint store down")
-
-        await bus.publish_inbound(
-            BusInbound(channel="stub", sender_id="u1", chat_id="c1", content="go")
-        )
-        with caplog.at_level(logging.WARNING, logger="metasci-scribe"):
-            task = asyncio.create_task(consumer.run())
-            first = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
-            second = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
-
-        assert first.content == "partial answer"
-        assert second.content == "Approval round limit reached; stopping this turn."
-        failures = [
-            r
-            for r in caplog.records
-            if "Could not close the parked checkpoint" in r.getMessage()
-        ]
-        assert len(failures) == 1
-        assert failures[0].exc_info is None
-
-        await consumer.stop()
-        await task
-
-    async def test_total_cap_closes_without_another_resume(self, monkeypatch, tmp_path):
-        """The 1000-round runaway guard stops an auto-approved consumer turn
-        and closes the checkpoint. No further resume is streamed."""
-        from langgraph.types import Command
-
-        import metasci_scribe.channels.hitl_budget as budget_mod
-
-        monkeypatch.setattr(budget_mod, "MAX_HITL_TOTAL_ROUNDS", 2)
-        stream_calls = 0
-
-        async def _fake_stream(_request):
-            nonlocal stream_calls
-            stream_calls += 1
-            yield _interrupt_event(stream_calls)
-
-        consumer, bus, gateway = self._consumer(_fake_stream, tmp_path)
-        consumer._approval_policy.grant_session("stub:c1")
-
-        await bus.publish_inbound(
-            BusInbound(channel="stub", sender_id="u1", chat_id="c1", content="go")
-        )
-        task = asyncio.create_task(consumer.run())
-        outbound = await asyncio.wait_for(bus.consume_outbound(), timeout=10.0)
-
-        resumes = [r for r in gateway.requests if isinstance(r.message, Command)]
-        assert stream_calls == 2
-        assert len(resumes) == 1
-        assert consumer.agent.updates[-1][1] == "__end__"
-        assert outbound.content == "Approval round limit reached; stopping this turn."
-
-        await consumer.stop()
-        await task
-
-
 def test_tui_loop_does_not_build_a_resume_past_the_total_cap(monkeypatch):
     """TUI HITL loop, without a Pilot harness.
 
@@ -1611,8 +786,8 @@ def test_tui_loop_does_not_build_a_resume_past_the_total_cap(monkeypatch):
     builds a resume. Auto rounds ignore the human cap; at the total cap the
     branch stops with no resume left unsent.
     """
-    import metasci_scribe.channels.hitl_budget as budget_mod
-    from metasci_scribe.channels.hitl_budget import hitl_budget_stop
+    import metasci_scribe.stream.hitl_budget as budget_mod
+    from metasci_scribe.stream.hitl_budget import hitl_budget_stop
 
     monkeypatch.setattr(budget_mod, "MAX_HITL_TOTAL_ROUNDS", 2)
     resumes_built = 0
@@ -1634,7 +809,7 @@ def test_tui_loop_does_not_build_a_resume_past_the_total_cap(monkeypatch):
 def test_tui_loop_human_cap_does_not_stop_an_auto_branch():
     """A session-grant branch keeps resuming after the human cap; a widget
     branch does not."""
-    from metasci_scribe.channels.hitl_budget import hitl_budget_stop
+    from metasci_scribe.stream.hitl_budget import hitl_budget_stop
 
     assert not hitl_budget_stop(human_rounds=50, total_rounds=51, needs_human=False)
     assert hitl_budget_stop(human_rounds=50, total_rounds=51, needs_human=True)
@@ -1643,8 +818,8 @@ def test_tui_loop_human_cap_does_not_stop_an_auto_branch():
 def test_tui_loop_level_total_cap_uses_completed_round_helper(monkeypatch):
     """The TUI loop-top guard is ``hitl_completed_round_cap_reached``,
     not a rewritten copy of the stop condition (issue #469 review)."""
-    import metasci_scribe.channels.hitl_budget as budget_mod
-    from metasci_scribe.channels.hitl_budget import hitl_completed_round_cap_reached
+    import metasci_scribe.stream.hitl_budget as budget_mod
+    from metasci_scribe.stream.hitl_budget import hitl_completed_round_cap_reached
 
     monkeypatch.setattr(budget_mod, "MAX_HITL_TOTAL_ROUNDS", 2)
     assert not hitl_completed_round_cap_reached(0)
@@ -1671,7 +846,7 @@ def test_tui_hitl_loop_checks_completed_round_cap_before_clearing_pending():
 
 
 def test_channel_response_with_budget_stop_keeps_partial_then_notice():
-    from metasci_scribe.channels.hitl_budget import (
+    from metasci_scribe.stream.hitl_budget import (
         HITL_BUDGET_STOP_NOTICE,
         channel_response_with_budget_stop,
     )
@@ -1727,7 +902,7 @@ def test_abandoned_tool_messages_closes_invalid_tool_calls():
 
 
 def test_hitl_pause_unresolved_does_not_replay_without_a_resume():
-    from metasci_scribe.channels.hitl_budget import hitl_pause_unresolved
+    from metasci_scribe.stream.hitl_budget import hitl_pause_unresolved
 
     assert hitl_pause_unresolved(resuming=False, pending=True)
     assert not hitl_pause_unresolved(resuming=True, pending=True)
@@ -1747,22 +922,6 @@ def test_tui_unresolved_pause_exits_without_budget_notice():
     gate = src[notice - 250 : notice]
     assert "_hitl_budget_exhausted" in gate
     assert "_hitl_unresolved = True" in src
-
-
-def test_tui_budget_stop_folds_notice_into_channel_response():
-    """Channel replies come from ``_stream_with_widgets``'s return value,
-    not ``_append_system``. The close path must fold the notice in when
-    channel HITL callbacks are set (issue #469 / CodeRabbit)."""
-    from pathlib import Path
-
-    import metasci_scribe.cli.tui_interactive as tui
-
-    src = Path(tui.__file__).read_text()
-    folded = src.index("channel_response_with_budget_stop(response)")
-    gate = src[folded - 700 : folded]
-    assert "HITL_BUDGET_STOP_NOTICE" in gate
-    assert "channel_hitl_fn" in gate
-    assert "channel_ask_user_fn" in gate
 
 
 class _StickyCheckpointAgent:

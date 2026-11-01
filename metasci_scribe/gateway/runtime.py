@@ -42,7 +42,7 @@ def create_runtime_gateways(
     langgraph_client: LangGraphClient | None = None,
     events: SessionEvents | None = None,
 ) -> RuntimeGateways:
-    """Create gateway handles for CLI/TUI/serve execution.
+    """Create gateway handles for CLI/TUI execution.
 
     ``events`` is the frontend event sink; it is attached to the local gateway
     so the streaming path shares the same sink instance the frontend injects

@@ -8,7 +8,6 @@ import pytest
 
 from metasci_scribe.paths import Workspace
 from metasci_scribe.tools.skills_manager import list_skills
-from tests.fakes.common import StubChannel
 
 
 def _write_skill(skills_dir: Path, name: str) -> None:
@@ -119,50 +118,6 @@ def test_default_backend_defaults_to_workspace_root(two_workspaces):
     a, _ = two_workspaces
     backend = _get_default_backend(a)
     assert Path(backend.default.cwd) == a.root
-
-
-def test_channel_media_goes_to_the_injected_folder(tmp_path):
-    from metasci_scribe.channels.bus import MessageBus
-    from metasci_scribe.channels.channel_manager import ChannelManager
-
-    media_dir = tmp_path / "ws" / "media"
-    manager = ChannelManager(MessageBus(), media_dir=media_dir)
-    channel = StubChannel()
-    manager.register(channel)
-
-    path = channel._media_path("photo.jpg")
-    assert path == media_dir / "photo.jpg"
-    assert media_dir.is_dir()
-
-
-def test_channel_without_media_folder_fails_loudly():
-    channel = StubChannel()
-    with pytest.raises(RuntimeError, match="no media folder"):
-        channel._media_path("photo.jpg")
-
-
-def test_standalone_without_agent_does_not_load_config(tmp_path, monkeypatch):
-    """A headless channel with no agent reads no config (as before)."""
-    import metasci_scribe.channels.standalone as standalone
-    import metasci_scribe.config as config_mod
-
-    monkeypatch.delenv("METASCI_SCRIBE_WORKSPACE_DIR", raising=False)
-    monkeypatch.chdir(tmp_path)
-
-    def _no_config(*_a, **_k):
-        raise AssertionError("config must not be loaded without an agent")
-
-    captured = {}
-
-    async def _fake_main(*_args, workspace, **_kwargs):
-        captured["workspace"] = workspace
-
-    monkeypatch.setattr(config_mod, "get_effective_config", _no_config)
-    monkeypatch.setattr(standalone, "_async_main", _fake_main)
-
-    standalone.run_standalone(StubChannel(), object(), use_agent=False)
-
-    assert captured["workspace"] == Workspace(tmp_path)
 
 
 def test_compact_offloads_into_the_work_dir(two_workspaces, tmp_path, monkeypatch):

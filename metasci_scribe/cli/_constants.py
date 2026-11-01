@@ -17,7 +17,7 @@ def _agent_name() -> str:
     return AGENT_NAME
 
 
-# Dangerous-mode warning banner — shared by Rich CLI, Textual TUI, and serve so
+# Dangerous-mode warning banner — shared by Rich CLI and Textual TUI so
 # the wording never drifts. Label is rendered white-on-red, message in red.
 DANGEROUS_BANNER_LABEL = "DANGEROUS MODE"
 DANGEROUS_BANNER_MESSAGE = (

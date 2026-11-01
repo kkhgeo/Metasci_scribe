@@ -209,10 +209,10 @@ class InstallSkills(Command):
 
         selected_sources: list[str] | None = None
 
-        # For non-interactive UIs (channels), if a tag is provided, we can auto-install all matching skills
+        # For non-interactive UIs (non-interactive), if a tag is provided, we can auto-install all matching skills
         # instead of failing due to lack of interactive UI.
-        is_channel = not ctx.ui.supports_interactive
-        if is_channel and tag:
+        non_interactive = not ctx.ui.supports_interactive
+        if non_interactive and tag:
             tag_lower = tag.lower()
             matches = []
             for s in index:
@@ -243,7 +243,7 @@ class InstallSkills(Command):
         # tag matches) and already printed its own specific message; the
         # outer layer should stay silent rather than claim a cancel.
         if selected_sources is None:
-            if not is_channel:
+            if not non_interactive:
                 ctx.ui.append_system("Browse cancelled.", style="dim")
             return
 
@@ -279,7 +279,7 @@ class InstallSkills(Command):
                 f"Successfully installed {installed_count} skill(s).", style="dim"
             )
             _announce_expert_install(ctx, installed_results)
-        elif not is_channel:
+        elif not non_interactive:
             ctx.ui.append_system("No skills were installed.", style="yellow")
 
 

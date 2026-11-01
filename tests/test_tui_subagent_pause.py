@@ -12,16 +12,13 @@ pytest.importorskip("textual")
 from textual.app import App
 from textual.widgets import Static
 
-import metasci_scribe.channels.hitl_budget as budget_mod
 import metasci_scribe.cli.tui_interactive as tui_mod
-from metasci_scribe.channels.interaction import ApprovalOutcome
 from metasci_scribe.cli.widgets.subagent_widget import SubAgentWidget
 from metasci_scribe.cli.widgets.tool_call_widget import ToolCallWidget
 from metasci_scribe.gateway import RuntimeGateways
 from metasci_scribe.stream import display as display_mod
 from tests.fakes.common import FakeGraphGateway, no_config_rule
 from tests.fakes.tui import (
-    APPROVE,
     APPROVING_ONCE,
     DONE,
     FINISHED,
@@ -183,46 +180,6 @@ async def test_ends_that_are_not_marked_as_paused_read_rejected_after_a_decline(
         prepare=lambda app: widget_answers(monkeypatch, app, REJECTING),
     )
     assert rows == {"sub-1": REJECTED, "sub-2": REJECTED}
-    assert still_open == []
-
-
-async def test_a_turn_stopped_at_the_round_limit_leaves_them_rejected(
-    monkeypatch, workspace
-):
-    """The limit ends the turn at the approval itself, before any end event."""
-    no_config_rule(monkeypatch)
-    rows, still_open, calls = await _turn(
-        monkeypatch,
-        workspace,
-        [_two_parked("ends last"), FINISHED],
-        parked_agent(name="task"),
-        channel_hitl_fn=lambda _reqs, human_budget_exhausted=False: ApprovalOutcome(
-            budget_exhausted=True
-        ),
-    )
-    assert calls == 1
-    assert set(rows.values()) == {REJECTED}
-    assert still_open == []
-
-
-async def test_the_round_cap_after_an_automatic_answer_settles_the_box(
-    monkeypatch, workspace
-):
-    """A channel's grant answers by itself and the cap on rounds then ends
-    the turn without another stream call: nothing may be left spinning."""
-    no_config_rule(monkeypatch)
-    monkeypatch.setattr(budget_mod, "MAX_HITL_TOTAL_ROUNDS", 1)
-    rows, still_open, calls = await _turn(
-        monkeypatch,
-        workspace,
-        [[*_sub_agent(1), approval_interrupt(1)], FINISHED],
-        parked_agent(name="task"),
-        channel_hitl_fn=lambda _reqs, human_budget_exhausted=False: ApprovalOutcome(
-            decisions=list(APPROVE), session_granted=True, grant_in_force=True
-        ),
-    )
-    assert calls == 1
-    assert rows == {"sub-1": INTERRUPTED}
     assert still_open == []
 
 

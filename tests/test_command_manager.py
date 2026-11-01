@@ -46,16 +46,6 @@ class TestCommandManagerSubcommands:
         names = {name for name, _desc in scs}
         assert {"list", "add", "remove", "clear", "save", "help"} <= names
 
-    def test_channel_has_subcommands(self):
-        """``/channel`` must expose status, stop, and channel type subcommands."""
-        manager = CommandManager()
-        from metasci_scribe.commands.implementation.channel import ChannelCommand
-
-        manager.register(ChannelCommand())
-        scs = manager.list_subcommands("/channel")
-        names = {name for name, _desc in scs}
-        assert {"status", "stop", "telegram", "discord"}.issubset(names)
-
     def test_command_without_subcommands_returns_empty(self):
         """A command with no subcommands must return an empty list."""
         manager = CommandManager()

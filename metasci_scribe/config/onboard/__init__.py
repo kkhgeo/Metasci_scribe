@@ -6,9 +6,8 @@ Everything else lives in submodules — import directly from them:
 - :mod:`metasci_scribe.config.onboard.wizard` — orchestrator, ``run_onboard``,
   ``STEPS``, ``render_progress``
 - :mod:`metasci_scribe.config.onboard.steps` — per-step functions
-- :mod:`metasci_scribe.config.onboard.channels` — channel selection + setup
 - :mod:`metasci_scribe.config.onboard.helpers` — API-key prompt, ccproxy,
-  npx/node, LaTeX, iMessage helpers
+  npx/node, LaTeX helpers
 - :mod:`metasci_scribe.config.onboard.style` — Rich styles + ``_checkbox_ask``
 - :mod:`metasci_scribe.config.onboard.validators` — input validators
 - :mod:`metasci_scribe.config.onboard.prompter` — ``NonInteractivePrompter``

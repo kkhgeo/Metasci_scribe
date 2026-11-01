@@ -1,4 +1,4 @@
-"""Tests for channel-initiated stream cancellation."""
+"""Tests for scoped stream cancellation."""
 
 from __future__ import annotations
 

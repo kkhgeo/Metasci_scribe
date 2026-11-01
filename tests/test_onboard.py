@@ -29,7 +29,7 @@ def _patch_all_questionary(mock_q):
     """Patch ``questionary`` in every onboard submodule that imports it.
 
     The wizard delegates to step functions across multiple submodules
-    (steps/helpers/channels/style/wizard), and each submodule binds its own
+    (steps/helpers/style/wizard), and each submodule binds its own
     ``questionary`` name at import time. Patching just one location wouldn't
     intercept calls made from the others.
 
@@ -42,7 +42,6 @@ def _patch_all_questionary(mock_q):
         patch("metasci_scribe.config.onboard.wizard.questionary", mock_q),
         patch("metasci_scribe.config.onboard.steps.questionary", mock_q),
         patch("metasci_scribe.config.onboard.helpers.questionary", mock_q),
-        patch("metasci_scribe.config.onboard.channels.questionary", mock_q),
         patch("metasci_scribe.config.onboard.style.questionary", mock_q),
         patch("metasci_scribe.config.onboard.helpers._check_npx", return_value=True),
     ):
@@ -55,9 +54,9 @@ def _patch_all_questionary(mock_q):
 
 
 class TestConstants:
-    def test_steps_has_thirteen_items(self):
-        """Test that STEPS contains exactly 13 steps."""
-        assert len(STEPS) == 13
+    def test_steps_has_twelve_items(self):
+        """Test that STEPS contains exactly 12 steps."""
+        assert len(STEPS) == 12
         assert STEPS == [
             "UI",
             "LangGraph Port",
@@ -71,7 +70,6 @@ class TestConstants:
             "Skills",
             "MCP Servers",
             "LaTeX",
-            "Channels",
         ]
 
     def test_wizard_style_is_style_instance(self):
@@ -1158,185 +1156,6 @@ class TestPromptAndValidateApiKey:
         validate_fn.assert_called_once_with("new-key")
 
 
-class TestValidateImessage:
-    def test_valid_when_cli_found_with_rpc(self):
-        """Test validate_imessage returns valid when imsg CLI found and RPC works."""
-        from metasci_scribe.config.onboard.helpers import validate_imessage
-
-        version_result = Mock(returncode=0, stdout="imsg 1.2.3")
-        rpc_result = Mock(returncode=0)
-
-        with (
-            patch("metasci_scribe.config.onboard.helpers.sys") as mock_sys,
-            patch("metasci_scribe.channels.imessage.probe.shutil") as mock_shutil,
-            patch("metasci_scribe.config.onboard.helpers.subprocess") as mock_sub,
-        ):
-            mock_sys.platform = "darwin"
-            mock_shutil.which.return_value = "/opt/homebrew/bin/imsg"
-            mock_sub.run.side_effect = [version_result, rpc_result]
-            valid, msg = validate_imessage()
-
-        assert valid is True
-        assert "imsg" in msg
-        assert "1.2.3" in msg
-
-    def test_invalid_when_cli_not_found(self):
-        """Test validate_imessage returns not_installed when imsg CLI missing."""
-        from metasci_scribe.config.onboard.helpers import validate_imessage
-
-        with (
-            patch("metasci_scribe.config.onboard.helpers.sys") as mock_sys,
-            patch("metasci_scribe.channels.imessage.probe.shutil") as mock_shutil,
-        ):
-            mock_sys.platform = "darwin"
-            mock_shutil.which.return_value = None
-            valid, msg = validate_imessage()
-
-        assert valid is False
-        assert msg == "not_installed"
-
-    def test_invalid_on_non_macos(self):
-        """Test validate_imessage returns invalid on non-macOS."""
-        from metasci_scribe.config.onboard.helpers import validate_imessage
-
-        with patch("metasci_scribe.config.onboard.helpers.sys") as mock_sys:
-            mock_sys.platform = "linux"
-            valid, msg = validate_imessage()
-
-        assert valid is False
-        assert "macOS" in msg
-
-    def test_invalid_when_rpc_not_supported(self):
-        """Test validate_imessage returns invalid when RPC check fails."""
-        from metasci_scribe.config.onboard.helpers import validate_imessage
-
-        version_result = Mock(returncode=0, stdout="imsg 0.1.0")
-        rpc_result = Mock(returncode=1)
-
-        with (
-            patch("metasci_scribe.config.onboard.helpers.sys") as mock_sys,
-            patch("metasci_scribe.channels.imessage.probe.shutil") as mock_shutil,
-            patch("metasci_scribe.config.onboard.helpers.subprocess") as mock_sub,
-        ):
-            mock_sys.platform = "darwin"
-            mock_shutil.which.return_value = "/usr/local/bin/imsg"
-            mock_sub.run.side_effect = [version_result, rpc_result]
-            valid, msg = validate_imessage()
-
-        assert valid is False
-        assert "RPC not supported" in msg
-
-
-class TestInstallImsg:
-    def test_install_success(self):
-        """Test _install_imsg returns True on success."""
-        from metasci_scribe.config.onboard.helpers import _install_imsg
-
-        with patch("metasci_scribe.config.onboard.helpers.subprocess") as mock_sub:
-            mock_sub.run.return_value = Mock(returncode=0)
-            mock_sub.TimeoutExpired = subprocess.TimeoutExpired
-            result = _install_imsg()
-
-        assert result is True
-
-    def test_install_brew_not_found(self):
-        """Test _install_imsg handles missing Homebrew."""
-        from metasci_scribe.config.onboard.helpers import _install_imsg
-
-        with (
-            patch("metasci_scribe.config.onboard.helpers.subprocess") as mock_sub,
-            patch("metasci_scribe.config.onboard.helpers.console"),
-        ):
-            mock_sub.run.side_effect = FileNotFoundError()
-            mock_sub.TimeoutExpired = subprocess.TimeoutExpired
-            result = _install_imsg()
-
-        assert result is False
-
-    def test_install_failure(self):
-        """Test _install_imsg returns False on non-zero exit."""
-        from metasci_scribe.config.onboard.helpers import _install_imsg
-
-        with patch("metasci_scribe.config.onboard.helpers.subprocess") as mock_sub:
-            mock_sub.run.return_value = Mock(returncode=1)
-            mock_sub.TimeoutExpired = subprocess.TimeoutExpired
-            result = _install_imsg()
-
-        assert result is False
-
-
-class TestSetupImessage:
-    def test_already_installed(self):
-        """Test _setup_imessage returns True when already installed."""
-        from metasci_scribe.config.onboard.helpers import _setup_imessage
-
-        with (
-            patch(
-                "metasci_scribe.config.onboard.helpers.validate_imessage",
-                return_value=(True, "imsg at /bin/imsg"),
-            ),
-            patch("metasci_scribe.config.onboard.helpers.console"),
-        ):
-            result = _setup_imessage()
-
-        assert result is True
-
-    def test_not_macos(self):
-        """Test _setup_imessage returns False on non-macOS."""
-        from metasci_scribe.config.onboard.helpers import _setup_imessage
-
-        with (
-            patch(
-                "metasci_scribe.config.onboard.helpers.validate_imessage",
-                return_value=(False, "iMessage requires macOS"),
-            ),
-            patch("metasci_scribe.config.onboard.helpers.console"),
-        ):
-            result = _setup_imessage()
-
-        assert result is False
-
-    def test_install_then_valid(self):
-        """Test _setup_imessage installs and re-validates successfully."""
-        from metasci_scribe.config.onboard.helpers import _setup_imessage
-
-        with (
-            patch(
-                "metasci_scribe.config.onboard.helpers.validate_imessage"
-            ) as mock_val,
-            patch(
-                "metasci_scribe.config.onboard.helpers._install_imsg", return_value=True
-            ),
-            patch("metasci_scribe.config.onboard.helpers.questionary") as mock_q,
-            patch("metasci_scribe.config.onboard.helpers.console"),
-        ):
-            mock_val.side_effect = [
-                (False, "not_installed"),  # First check
-                (True, "imsg at /bin/imsg"),  # After install
-            ]
-            mock_q.confirm.return_value.ask.return_value = True  # Yes, install
-            result = _setup_imessage()
-
-        assert result is True
-
-    def test_user_declines_install(self):
-        """Test _setup_imessage returns False when user declines install."""
-        from metasci_scribe.config.onboard.helpers import _setup_imessage
-
-        with (
-            patch(
-                "metasci_scribe.config.onboard.helpers.validate_imessage",
-                return_value=(False, "not_installed"),
-            ),
-            patch("metasci_scribe.config.onboard.helpers.questionary") as mock_q,
-            patch("metasci_scribe.config.onboard.helpers.console"),
-        ):
-            mock_q.confirm.return_value.ask.return_value = False
-            result = _setup_imessage()
-
-        assert result is False
-
-
 class TestSkillsWorkspace:
     """Onboarding checks skills where the CLI starts: env override, config, cwd."""
 
@@ -1584,175 +1403,6 @@ class TestStepSkills:
         assert "installed" in title_text
 
 
-class TestStepChannels:
-    def test_returns_disabled_when_skip(self):
-        """Test channels step returns empty dict when user selects nothing."""
-        from metasci_scribe.config.onboard.channels import _step_channels
-
-        config = ScribeConfig()
-
-        with patch("metasci_scribe.config.onboard.channels.questionary") as mock_q:
-            mock_q.checkbox.return_value.ask.return_value = []
-            result = _step_channels(config)
-
-        assert result == {"channel_enabled": "", "imessage_enabled": False}
-
-    def test_returns_enabled_when_setup_passes(self):
-        """Test channels step returns enabled when iMessage setup succeeds."""
-        from metasci_scribe.config.onboard.channels import _step_channels
-
-        config = ScribeConfig()
-
-        with (
-            patch("metasci_scribe.config.onboard.channels.questionary") as mock_q,
-            patch(
-                "metasci_scribe.config.onboard.channels._setup_imessage",
-                return_value=True,
-            ),
-        ):
-            mock_q.checkbox.return_value.ask.return_value = ["imessage"]
-            mock_q.text.return_value.ask.return_value = ""
-            result = _step_channels(config)
-
-        assert result["channel_enabled"] == "imessage"
-        assert result["imessage_enabled"] is True
-
-    def test_returns_enabled_with_senders(self):
-        """Test channels step returns enabled with specific senders."""
-        from metasci_scribe.config.onboard.channels import _step_channels
-
-        config = ScribeConfig()
-
-        with (
-            patch("metasci_scribe.config.onboard.channels.questionary") as mock_q,
-            patch(
-                "metasci_scribe.config.onboard.channels._setup_imessage",
-                return_value=True,
-            ),
-        ):
-            mock_q.checkbox.return_value.ask.return_value = ["imessage"]
-            mock_q.text.return_value.ask.return_value = "+1234567890,+0987654321"
-            result = _step_channels(config)
-
-        assert result["channel_enabled"] == "imessage"
-        assert result["imessage_enabled"] is True
-        assert result["imessage_allowed_senders"] == "+1234567890,+0987654321"
-
-    def test_setup_fails_user_declines(self):
-        """Test channels step skips iMessage when setup fails and user declines."""
-        from metasci_scribe.config.onboard.channels import _step_channels
-
-        config = ScribeConfig()
-
-        with (
-            patch("metasci_scribe.config.onboard.channels.questionary") as mock_q,
-            patch(
-                "metasci_scribe.config.onboard.channels._setup_imessage",
-                return_value=False,
-            ),
-        ):
-            mock_q.checkbox.return_value.ask.return_value = ["imessage"]
-            mock_q.confirm.return_value.ask.return_value = False
-            result = _step_channels(config)
-
-        assert result["channel_enabled"] == ""
-        assert result["imessage_enabled"] is False
-
-    def test_setup_fails_user_enables_anyway(self):
-        """Test channels step enables iMessage when setup fails but user confirms."""
-        from metasci_scribe.config.onboard.channels import _step_channels
-
-        config = ScribeConfig()
-
-        with (
-            patch("metasci_scribe.config.onboard.channels.questionary") as mock_q,
-            patch(
-                "metasci_scribe.config.onboard.channels._setup_imessage",
-                return_value=False,
-            ),
-        ):
-            mock_q.checkbox.return_value.ask.return_value = ["imessage"]
-            mock_q.confirm.return_value.ask.return_value = True
-            mock_q.text.return_value.ask.return_value = ""
-            result = _step_channels(config)
-
-        assert result["channel_enabled"] == "imessage"
-        assert result["imessage_enabled"] is True
-
-    def test_raises_keyboard_interrupt_on_cancel(self):
-        """Test channels step raises KeyboardInterrupt on cancel."""
-        from metasci_scribe.config.onboard.channels import _step_channels
-
-        config = ScribeConfig()
-
-        with patch("metasci_scribe.config.onboard.channels.questionary") as mock_q:
-            mock_q.checkbox.return_value.ask.return_value = None
-            with pytest.raises(KeyboardInterrupt):
-                _step_channels(config)
-
-    def test_telegram_channel_selected(self):
-        """Test channels step handles Telegram selection."""
-        from metasci_scribe.config.onboard.channels import _step_channels
-
-        config = ScribeConfig()
-
-        _real_import = (
-            __builtins__.__import__
-            if hasattr(__builtins__, "__import__")
-            else __import__
-        )
-
-        def _fake_import(name, *args, **kwargs):
-            if name == "telegram":
-                return  # pretend installed
-            return _real_import(name, *args, **kwargs)
-
-        with (
-            patch("metasci_scribe.config.onboard.channels.questionary") as mock_q,
-            patch("metasci_scribe.config.onboard.channels._probe_channel"),
-            patch("builtins.__import__", side_effect=_fake_import),
-        ):
-            mock_q.checkbox.return_value.ask.return_value = ["telegram"]
-            # Bot token is a secret → prompted via questionary.password.
-            mock_q.password.return_value.ask.return_value = "test-token"
-            mock_q.text.return_value.ask.return_value = ""
-            result = _step_channels(config)
-
-        assert result["channel_enabled"] == "telegram"
-        assert result["telegram_bot_token"] == "test-token"
-
-    def test_discord_channel_selected(self):
-        """Test channels step handles Discord selection."""
-        from metasci_scribe.config.onboard.channels import _step_channels
-
-        config = ScribeConfig()
-
-        _real_import = (
-            __builtins__.__import__
-            if hasattr(__builtins__, "__import__")
-            else __import__
-        )
-
-        def _fake_import(name, *args, **kwargs):
-            if name == "discord":
-                return  # pretend installed
-            return _real_import(name, *args, **kwargs)
-
-        with (
-            patch("metasci_scribe.config.onboard.channels.questionary") as mock_q,
-            patch("metasci_scribe.config.onboard.channels._probe_channel"),
-            patch("builtins.__import__", side_effect=_fake_import),
-        ):
-            mock_q.checkbox.return_value.ask.return_value = ["discord"]
-            # Bot token is a secret → prompted via questionary.password.
-            mock_q.password.return_value.ask.return_value = "discord-token"
-            mock_q.text.return_value.ask.return_value = ""
-            result = _step_channels(config)
-
-        assert result["channel_enabled"] == "discord"
-        assert result["discord_bot_token"] == "discord-token"
-
-
 class TestStepMcpServersNpxFailure:
     def _make_test_servers(self):
         from metasci_scribe.mcp.registry import MCPServerEntry
@@ -1931,7 +1581,6 @@ class TestRunOnboard:
             patch("metasci_scribe.config.onboard.wizard.save_config") as mock_save,
             patch("metasci_scribe.config.onboard.wizard.console"),
             patch("metasci_scribe.config.onboard.steps.console"),
-            patch("metasci_scribe.config.onboard.channels.console"),
             patch("metasci_scribe.config.onboard.helpers.console"),
             patch("metasci_scribe.config.onboard.wizard._step_tinytex"),
         ):
@@ -1940,7 +1589,7 @@ class TestRunOnboard:
 
             # Mock all questionary calls — order matches the wizard's select
             # sequence: UI → Provider → Anthropic auth_mode → Model →
-            # Workspace → Thinking → (channels skipped via empty checkbox).
+            # Workspace → Thinking.
             mock_q.select.return_value.ask.side_effect = [
                 "tui",  # UI backend
                 "anthropic",  # Provider
@@ -1989,7 +1638,6 @@ class TestRunOnboard:
             patch("metasci_scribe.config.onboard.wizard.save_config") as mock_save,
             patch("metasci_scribe.config.onboard.wizard.console"),
             patch("metasci_scribe.config.onboard.steps.console"),
-            patch("metasci_scribe.config.onboard.channels.console"),
             patch("metasci_scribe.config.onboard.helpers.console"),
             patch("metasci_scribe.config.onboard.wizard._step_tinytex"),
         ):
@@ -2212,7 +1860,6 @@ class TestRunOnboard:
             patch("metasci_scribe.config.onboard.wizard.save_config") as mock_save,
             patch("metasci_scribe.config.onboard.wizard.console"),
             patch("metasci_scribe.config.onboard.steps.console"),
-            patch("metasci_scribe.config.onboard.channels.console"),
             patch("metasci_scribe.config.onboard.helpers.console"),
         ):
             mock_load.return_value = ScribeConfig()
@@ -2251,7 +1898,6 @@ class TestRunOnboard:
             patch("metasci_scribe.config.onboard.wizard.load_config") as mock_load,
             patch("metasci_scribe.config.onboard.wizard.console"),
             patch("metasci_scribe.config.onboard.steps.console"),
-            patch("metasci_scribe.config.onboard.channels.console"),
             patch("metasci_scribe.config.onboard.helpers.console"),
             patch("metasci_scribe.config.onboard.wizard._step_tinytex"),
         ):
@@ -2275,7 +1921,6 @@ class TestRunOnboard:
             patch("metasci_scribe.config.onboard.wizard.save_config") as mock_save,
             patch("metasci_scribe.config.onboard.wizard.console"),
             patch("metasci_scribe.config.onboard.steps.console"),
-            patch("metasci_scribe.config.onboard.channels.console"),
             patch("metasci_scribe.config.onboard.helpers.console"),
             patch("metasci_scribe.config.onboard.wizard._step_tinytex"),
         ):
@@ -2347,7 +1992,6 @@ class TestRunOnboard:
                 ),
                 patch("metasci_scribe.config.onboard.wizard.console"),
                 patch("metasci_scribe.config.onboard.steps.console"),
-                patch("metasci_scribe.config.onboard.channels.console"),
                 patch("metasci_scribe.config.onboard.helpers.console"),
                 patch("metasci_scribe.config.onboard.wizard._step_tinytex"),
             ):
@@ -2398,7 +2042,6 @@ class TestRunOnboard:
             ),
             patch("metasci_scribe.config.onboard.wizard.console"),
             patch("metasci_scribe.config.onboard.steps.console"),
-            patch("metasci_scribe.config.onboard.channels.console"),
             patch("metasci_scribe.config.onboard.helpers.console"),
             patch("metasci_scribe.config.onboard.wizard._step_tinytex"),
         ):

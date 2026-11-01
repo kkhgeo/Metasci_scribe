@@ -1,5 +1,5 @@
 """Cross-step helpers: API key prompt loop, ccproxy login, npx/node bootstrapping,
-LaTeX detection/install, iMessage setup.
+LaTeX detection/install.
 """
 
 from __future__ import annotations
@@ -429,56 +429,6 @@ def _auto_install_latexmk() -> None:
         )
 
 
-def validate_imessage() -> tuple[bool, str]:
-    """Validate iMessage environment by checking for the imsg CLI.
-
-    Returns:
-        Tuple of (is_valid, message).
-    """
-    # macOS only
-    if sys.platform != "darwin":
-        return False, "iMessage requires macOS"
-
-    from ...channels.imessage.probe import find_cli
-
-    cli_path = find_cli()
-    if not cli_path:
-        return False, "not_installed"
-
-    # Check version
-    try:
-        result = subprocess.run(
-            [cli_path, "--version"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        version = result.stdout.strip() if result.returncode == 0 else None
-    except Exception:
-        version = None
-
-    # Check RPC support
-    try:
-        result = subprocess.run(
-            [cli_path, "rpc", "--help"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        rpc_ok = result.returncode == 0
-    except Exception:
-        rpc_ok = False
-
-    if not rpc_ok:
-        return (
-            False,
-            f"imsg found at {cli_path} but RPC not supported (update with: brew upgrade imsg)",
-        )
-
-    version_str = f" ({version})" if version else ""
-    return True, f"imsg{version_str} at {cli_path}"
-
-
 def _install_ccproxy() -> bool:
     """Run pip install for ccproxy (metasci-scribe[oauth]).
 
@@ -495,87 +445,3 @@ def _install_ccproxy() -> bool:
         console.print("  [red]✗ Installation failed.[/red]")
         return False
     return is_ccproxy_available()
-
-
-def _install_imsg() -> bool:
-    """Run brew install for imsg CLI.
-
-    Returns:
-        True if installation succeeded.
-    """
-    try:
-        proc = subprocess.run(
-            ["brew", "install", "steipete/tap/imsg"],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        return proc.returncode == 0
-    except FileNotFoundError:
-        console.print("  [red]✗ Homebrew not found[/red]")
-        console.print("  [dim]Install Homebrew first: https://brew.sh[/dim]")
-        return False
-    except subprocess.TimeoutExpired:
-        console.print("  [red]✗ Installation timed out[/red]")
-        return False
-    except Exception as e:
-        console.print(f"  [red]✗ Installation failed: {e}[/red]")
-        return False
-
-
-def _setup_imessage() -> bool:
-    """Guide the user through iMessage setup: install, validate, test.
-
-    Returns:
-        True if iMessage is ready to use.
-    """
-    # Step 1: Validate
-    console.print("  [dim]Checking iMessage environment...[/dim]")
-    valid, msg = validate_imessage()
-
-    if valid:
-        console.print(f"  [green]✓ {msg}[/green]")
-        return True
-
-    if msg == "iMessage requires macOS":
-        console.print(f"  [red]✗ {msg}[/red]")
-        return False
-
-    if msg == "not_installed":
-        console.print("  [yellow]✗ imsg CLI not installed[/yellow]")
-        console.print()
-
-        # Step 2: Offer to install
-        install = questionary.confirm(
-            "Install imsg via Homebrew? (brew install steipete/tap/imsg)",
-            default=True,
-            style=WIZARD_STYLE,
-            qmark=f"  {QMARK}",
-        ).ask()
-
-        if install is None:
-            raise KeyboardInterrupt()
-
-        if install:
-            console.print()
-            if _install_imsg():
-                console.print()
-                # Re-validate after install
-                valid, msg = validate_imessage()
-                if valid:
-                    console.print(f"  [green]✓ {msg}[/green]")
-                    return True
-                else:
-                    console.print(f"  [red]✗ {msg}[/red]")
-                    return False
-            else:
-                return False
-        else:
-            console.print(
-                "  [dim]Skipped. Install manually: brew install steipete/tap/imsg[/dim]"
-            )
-            return False
-    else:
-        # RPC not supported or other issue
-        console.print(f"  [red]✗ {msg}[/red]")
-        return False

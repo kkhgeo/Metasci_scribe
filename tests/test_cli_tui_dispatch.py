@@ -272,7 +272,6 @@ def test_cmd_interactive_dispatches_to_textual(monkeypatch, workspace):
     dirs = SessionDirs(workspace)
     cmd_interactive(
         show_thinking=True,
-        channel_send_thinking=True,
         mode="daemon",
         model="demo-model",
         provider="demo-provider",
@@ -295,6 +294,5 @@ def test_cmd_interactive_dispatches_to_textual(monkeypatch, workspace):
     assert kwargs["run_name"] == "demo-run"
     assert kwargs["thread_id"] == "thread-1"
     assert kwargs["config"] is effective_config
-    assert kwargs["channel_send_thinking"] is True
     assert callable(kwargs["load_agent"])
     assert callable(kwargs["create_run_dir"])

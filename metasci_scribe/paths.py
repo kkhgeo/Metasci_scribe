@@ -57,7 +57,7 @@ class Workspace:
     """A project folder: the unit that owns skills, runs, media and memory.
 
     Build one where a workspace enters the process (CLI startup, ``/resume``,
-    ``serve``, a server graph build) and pass it to whatever needs it.
+    a server graph build) and pass it to whatever needs it.
     Constructing a ``Workspace`` never touches the filesystem beyond resolving
     the path, and never creates the folder.
     """

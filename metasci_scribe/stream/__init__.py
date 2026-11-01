@@ -33,7 +33,6 @@ __getattr__, __dir__, __all__ = _lazy.attach(
         "console": ["console"],
         "diff_format": ["build_edit_diff", "format_diff_rich"],
         "display": [
-            "_astream_to_console",
             "create_streaming_display",
             "display_final_results",
             "format_tool_result_compact",

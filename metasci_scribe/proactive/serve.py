@@ -80,8 +80,8 @@ ORIGIN_METADATA_KEYS = (
 def origin_run_metadata(origin: Any) -> dict[str, str]:
     """Run metadata keys that persist a channel origin across restarts.
 
-    ``origin`` is a ``cli.channel._ChannelOrigin``. The keys avoid the five the
-    API strips from request metadata (``thread_id``, ``assistant_id``,
+    ``origin`` carries ``channel_type``, ``chat_id`` and ``metadata``. The keys
+    avoid the five the API strips from request metadata (``thread_id``, ``assistant_id``,
     ``run_id``, ``cron_id``, ``counters_since_delta_snapshot``).
     """
     meta = {
@@ -223,7 +223,7 @@ class ProactiveServe:
     can_deliver: Callable[[str], bool] | None = None
     # Drop a thread's channel origin (serve stops delivering to it).
     forget_origin: Callable[[str], None] | None = None
-    # A thread's channel origin, or None (a ``cli.channel._ChannelOrigin``).
+    # A thread's channel origin, or None (an object with ``channel_type``, ``chat_id``, ``metadata``).
     origin_of: Callable[[str], Any] | None = None
     # Record a thread's channel origin again (a value ``origin_of`` returned).
     remember_origin: Callable[[str, Any], None] | None = None

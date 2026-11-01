@@ -5,7 +5,7 @@ once the conversation has gone quiet and something new has happened;
 ``/proactive off`` stops it; ``/proactive`` shows the state and the settings.
 
 Only ``metasci-scribe serve`` can deliver a push, so only serve hands this command a
-controller (``ChannelRuntime.proactive``). Elsewhere the command explains
+controller (``SessionRuntime.proactive``). Elsewhere the command explains
 that and changes nothing. In serve on the ``local`` backend, or after the dev
 server was unavailable at startup, the controller carries the reason instead.
 """
@@ -25,7 +25,7 @@ _SERVE_ONLY = (
 
 
 def _controller(ctx: CommandContext) -> Any:
-    return getattr(ctx.channel_runtime, "proactive", None)
+    return getattr(ctx.session_runtime, "proactive", None)
 
 
 def _settings_lines() -> list[str]:

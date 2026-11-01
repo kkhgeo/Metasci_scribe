@@ -48,7 +48,6 @@ def temp_config_dir(tmp_path, monkeypatch):
         "METASCI_SCRIBE_WORKSPACE_DIR",
         "METASCI_SCRIBE_UI_BACKEND",
         "METASCI_SCRIBE_GATEWAY_BACKEND",
-        "METASCI_SCRIBE_GATEWAY_BACKEND_SERVE",
         "METASCI_SCRIBE_GATEWAY_BACKEND_SINGLE_SHOT",
         "METASCI_SCRIBE_GATEWAY_BACKEND_INTERACTIVE",
         "METASCI_SCRIBE_GATEWAY_BACKEND_TUI",
@@ -89,7 +88,6 @@ def clean_env(monkeypatch):
         "METASCI_SCRIBE_WORKSPACE_DIR",
         "METASCI_SCRIBE_UI_BACKEND",
         "METASCI_SCRIBE_GATEWAY_BACKEND",
-        "METASCI_SCRIBE_GATEWAY_BACKEND_SERVE",
         "METASCI_SCRIBE_GATEWAY_BACKEND_SINGLE_SHOT",
         "METASCI_SCRIBE_GATEWAY_BACKEND_INTERACTIVE",
         "METASCI_SCRIBE_GATEWAY_BACKEND_TUI",
@@ -155,9 +153,6 @@ class TestScribeConfig:
         )
         assert config.memory_skill_synthesis_time == "03:00"
         assert config.ollama_base_url == ""
-        assert config.channel_debug_tracing is False
-        assert config.imessage_enabled is False
-        assert config.imessage_allowed_senders == ""
 
     def test_bind_hosts_default_to_loopback(self):
         """Both servers stay off the network until asked.
@@ -266,14 +261,13 @@ class TestScribeConfig:
     def test_gateway_backend_per_surface_defaults_split(self):
         """Global server flips the fixed-workspace surfaces, not CLI/TUI.
 
-        serve/single-shot/standalone default to ``inherit`` (so a global
+        single-shot/standalone default to ``inherit`` (so a global
         ``langgraph_server`` moves them); the interactive CLI and TUI default to
         ``local``, so the global flag can't move them (the server path is lossy
         there until #413/#454 close).
         """
         config = ScribeConfig(gateway_backend="langgraph_server")
         for surface in (
-            GatewaySurface.SERVE,
             GatewaySurface.SINGLE_SHOT,
             GatewaySurface.STANDALONE,
         ):
@@ -285,10 +279,11 @@ class TestScribeConfig:
         """A per-surface override resolves independently of the global flag."""
         config = ScribeConfig(
             gateway_backend="local",
-            gateway_backend_serve="langgraph_server",
+            gateway_backend_single_shot="langgraph_server",
         )
         assert (
-            resolve_gateway_backend(config, GatewaySurface.SERVE) == "langgraph_server"
+            resolve_gateway_backend(config, GatewaySurface.SINGLE_SHOT)
+            == "langgraph_server"
         )
         # TUI/INTERACTIVE default to local, and the global is local too.
         assert resolve_gateway_backend(config, GatewaySurface.TUI) == "local"
@@ -320,13 +315,14 @@ class TestScribeConfig:
         with caplog.at_level(_logging.WARNING, logger="metasci_scribe.config.settings"):
             config = ScribeConfig(
                 gateway_backend="langgraph_server",
-                gateway_backend_serve="langgraph-server",  # hyphen typo
+                gateway_backend_single_shot="langgraph-server",  # hyphen typo
             )
-        assert config.gateway_backend_serve == "inherit"
-        assert "Invalid gateway_backend_serve" in caplog.text
+        assert config.gateway_backend_single_shot == "inherit"
+        assert "Invalid gateway_backend_single_shot" in caplog.text
         # Inherit means the (valid) global still applies.
         assert (
-            resolve_gateway_backend(config, GatewaySurface.SERVE) == "langgraph_server"
+            resolve_gateway_backend(config, GatewaySurface.SINGLE_SHOT)
+            == "langgraph_server"
         )
 
     def test_ui_backend_legacy_aliases_and_case_fold(self):
@@ -540,33 +536,6 @@ class TestGetSetValues:
         set_config_value("show_thinking", "yes")
         assert get_config_value("show_thinking") is True
 
-    def test_set_imessage_enabled_coercion(self, temp_config_dir, clean_env):
-        """Test that imessage_enabled is coerced from string to bool."""
-        save_config(ScribeConfig())
-
-        set_config_value("imessage_enabled", "true")
-        assert get_config_value("imessage_enabled") is True
-
-        set_config_value("imessage_enabled", "false")
-        assert get_config_value("imessage_enabled") is False
-
-    def test_set_imessage_allowed_senders(self, temp_config_dir, clean_env):
-        """Test that imessage_allowed_senders stores comma-separated string."""
-        save_config(ScribeConfig())
-
-        set_config_value("imessage_allowed_senders", "+1234567890,+0987654321")
-        assert get_config_value("imessage_allowed_senders") == "+1234567890,+0987654321"
-
-    def test_set_channel_debug_tracing_coercion(self, temp_config_dir, clean_env):
-        """Test that channel_debug_tracing is coerced from string to bool."""
-        save_config(ScribeConfig())
-
-        set_config_value("channel_debug_tracing", "true")
-        assert get_config_value("channel_debug_tracing") is True
-
-        set_config_value("channel_debug_tracing", "false")
-        assert get_config_value("channel_debug_tracing") is False
-
     def test_set_memory_observation_writer_validates_value(
         self, temp_config_dir, clean_env
     ):
@@ -672,7 +641,6 @@ class TestPriorityChain:
             "METASCI_SCRIBE_WORKSPACE_DIR",
             "METASCI_SCRIBE_UI_BACKEND",
             "METASCI_SCRIBE_GATEWAY_BACKEND",
-            "METASCI_SCRIBE_GATEWAY_BACKEND_SERVE",
             "METASCI_SCRIBE_GATEWAY_BACKEND_SINGLE_SHOT",
             "METASCI_SCRIBE_GATEWAY_BACKEND_INTERACTIVE",
             "METASCI_SCRIBE_GATEWAY_BACKEND_TUI",
@@ -749,12 +717,15 @@ class TestPriorityChain:
         self, temp_config_dir, monkeypatch
     ):
         """Each per-surface backend has its own env var, resolving independently."""
-        monkeypatch.setenv("METASCI_SCRIBE_GATEWAY_BACKEND_SERVE", "langgraph_server")
+        monkeypatch.setenv(
+            "METASCI_SCRIBE_GATEWAY_BACKEND_SINGLE_SHOT", "langgraph_server"
+        )
         config = get_effective_config()
-        assert config.gateway_backend_serve == "langgraph_server"
+        assert config.gateway_backend_single_shot == "langgraph_server"
         assert config.gateway_backend_tui == "local"  # CLI/TUI default
         assert (
-            resolve_gateway_backend(config, GatewaySurface.SERVE) == "langgraph_server"
+            resolve_gateway_backend(config, GatewaySurface.SINGLE_SHOT)
+            == "langgraph_server"
         )
         assert resolve_gateway_backend(config, GatewaySurface.TUI) == "local"
 
@@ -771,13 +742,6 @@ class TestPriorityChain:
         monkeypatch.setenv("METASCI_SCRIBE_REASONING_EFFORT", "high")
         config = get_effective_config()
         assert config.reasoning_effort == "high"
-
-    def test_env_channel_debug_tracing_override(self, temp_config_dir, monkeypatch):
-        """Channel tracing can be enabled via environment variable."""
-        save_config(ScribeConfig(channel_debug_tracing=False))
-        monkeypatch.setenv("METASCI_SCRIBE_CHANNEL_DEBUG_TRACING", "true")
-        config = get_effective_config()
-        assert config.channel_debug_tracing is True
 
     def test_env_memory_controls_override(self, temp_config_dir, monkeypatch):
         """Memory controls can be selected via environment variables."""

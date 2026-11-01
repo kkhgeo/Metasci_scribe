@@ -157,7 +157,7 @@ def _uv_tool_reinstall_cmd(
     records: Metasci Scribe's version (or the source it came from) and extras,
     the Python, every ``--with`` requirement and, through *constraints*, the
     constraints. A package already in the receipt keeps its recorded spec.
-    Metasci Scribe's own extras (``metasci-scribe[telegram]``) join its own
+    Metasci Scribe's own extras (``metasci-scribe[oauth]``) join its own
     requirement: a second metasci-scribe entry would make the receipt one that
     ``metasci-scribe update`` refuses."""
     from importlib.metadata import version

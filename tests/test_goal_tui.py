@@ -454,7 +454,7 @@ async def test_a_slash_command_typed_during_a_turn_runs_as_a_command(
         # The message after the command carries the operation it recorded.
         changes = held.gateway.requests[1].configurable_extra["rubric_run"]["changes"]
         assert [op.get("next") for op in changes] == ["- once"]
-        assert app._channel_runtime.rubric.changes_for(tid) == changes
+        assert app._session_runtime.rubric.changes_for(tid) == changes
         assert "/rubric next - once" in _texts(app, "system")
 
 
@@ -476,7 +476,7 @@ async def test_queued_commands_in_a_row_all_run(monkeypatch, workspace):
         assert "Unknown command: /nosuchcommand" in system
         tid = app._conversation_tid
         assert [
-            op.get("next") for op in app._channel_runtime.rubric.changes_for(tid)
+            op.get("next") for op in app._session_runtime.rubric.changes_for(tid)
         ] == ["- once"]
         assert not app.query_one("#prompt").disabled
 
@@ -498,7 +498,7 @@ async def test_ctrl_c_drops_what_was_queued_before_it(monkeypatch, workspace):
             await _idle(app, pilot)
             assert app._queued_messages == []
             assert [request.message for request in held.gateway.requests] == ["first"]
-            assert app._channel_runtime.rubric.changes_for(app._conversation_tid) == []
+            assert app._session_runtime.rubric.changes_for(app._conversation_tid) == []
     finally:
         display_mod.discard_stream_cancel()
 
@@ -744,70 +744,6 @@ async def test_a_command_cut_by_ctrl_c_leaves_a_later_turn_alone(
         assert not app.query_one("#prompt").disabled
 
 
-async def test_a_command_cut_by_ctrl_c_leaves_a_channel_turns_input_off(
-    monkeypatch, workspace, tmp_path
-):
-    """The same, with a channel turn taking the app: it keeps its input off
-    until it ends, and the old command's end must not switch it on."""
-    from unittest.mock import MagicMock
-
-    from metasci_scribe.cli.channel import ChannelMessage, _register_channel_request
-
-    agent, _model = cli_goal_agent(tmp_path)
-    app = await capture_app(monkeypatch, workspace)
-    msg = ChannelMessage(
-        msg_id="m-2",
-        content="from the channel",
-        sender="u1",
-        channel_type="imessage",
-        metadata={},
-        channel_ref=None,
-        bus_ref=None,
-        chat_id="chat-a",
-        message_id="ts-2",
-    )
-    async with app.run_test(size=(100, 40)) as pilot:
-        await pilot.pause()
-        _wire(app, workspace, agent)
-        ready = asyncio.Event()
-        release = asyncio.Event()
-        first_wait = True
-
-        async def _ready():
-            nonlocal first_wait
-            if first_wait:
-                first_wait = False
-                await ready.wait()
-            return MagicMock()
-
-        async def _held_stream(*_args, **_kwargs):
-            await release.wait()
-            return "ok"
-
-        app._await_agent_ready = _ready
-        monkeypatch.setattr(app, "_stream_with_widgets", _held_stream)
-        await submit(app, "/goal pause")
-        await pilot.pause(0.2)
-        app.action_request_quit()
-        await pilot.pause(0.1)
-        _register_channel_request(msg)
-        turn = asyncio.ensure_future(app._process_channel_message(msg))
-        try:
-            await _until(pilot, lambda: app._busy)
-            ready.set()  # the old command finishes inside the channel turn
-            await _until(pilot, lambda: not app._background_tasks)
-            await pilot.pause(0.2)
-            assert app._busy is True
-            assert app.query_one("#prompt").disabled
-        finally:
-            ready.set()
-            release.set()
-            await asyncio.wait_for(turn, timeout=10)
-        await pilot.pause(0.1)
-        assert app._busy is False
-        assert not app.query_one("#prompt").disabled
-
-
 async def test_a_second_ctrl_c_drops_the_handle_of_a_turn_that_never_ran(
     monkeypatch, workspace
 ):
@@ -994,53 +930,6 @@ async def test_ctrl_c_before_a_dispatched_command_starts_stops_it(
         assert app._run_task is None
         assert model.calls == {"main": 0, "draft": 0, "grade": 0}
         assert not list(app.query(AskUserWidget))
-        assert not app.query_one("#prompt").disabled
-
-
-async def test_ctrl_c_during_a_channel_turn_keeps_the_input_off(monkeypatch, workspace):
-    """Ctrl+C on a busy app without a foreground turn never switches the
-    input on: whoever switched it off (here a channel turn, started directly)
-    restores it at its own end."""
-    from unittest.mock import MagicMock
-
-    from metasci_scribe.cli.channel import ChannelMessage, _register_channel_request
-
-    app = await capture_app(monkeypatch, workspace)
-    msg = ChannelMessage(
-        msg_id="m-1",
-        content="from the channel",
-        sender="u1",
-        channel_type="imessage",
-        metadata={},
-        channel_ref=None,
-        bus_ref=None,
-        chat_id="chat-a",
-        message_id="ts-1",
-    )
-    release = asyncio.Event()
-
-    async def _held_stream(*_args, **_kwargs):
-        await release.wait()
-        return "ok"
-
-    async with app.run_test(size=(100, 40)) as pilot:
-        await pilot.pause()
-        app._await_agent_ready = AsyncMock(return_value=MagicMock())
-        monkeypatch.setattr(app, "_stream_with_widgets", _held_stream)
-        _register_channel_request(msg)
-        turn = asyncio.ensure_future(app._process_channel_message(msg))
-        try:
-            await _until(pilot, lambda: app._busy)
-            await pilot.pause(0.1)
-            prompt = app.query_one("#prompt")
-            assert prompt.disabled
-            app.action_request_quit()
-            await pilot.pause(0.1)
-            assert prompt.disabled
-        finally:
-            release.set()
-            await asyncio.wait_for(turn, timeout=10)
-        await pilot.pause(0.1)
         assert not app.query_one("#prompt").disabled
 
 
@@ -1322,8 +1211,8 @@ async def test_a_command_cut_by_ctrl_c_leaves_an_open_approval_alone(
     monkeypatch, workspace
 ):
     """The same with a tool approval open in the turn that took the app."""
-    from metasci_scribe.channels import interaction as interaction_mod
     from metasci_scribe.cli.widgets.approval_widget import ApprovalWidget
+    from metasci_scribe.stream import interaction as interaction_mod
     from tests.fakes.common import FakeGraphGateway, FakeThreadStore
     from tests.fakes.common import interrupt_event as _interrupt_event
 

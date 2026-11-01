@@ -4,7 +4,7 @@ Lifecycle methods (``request_quit``, ``force_quit``, ``clear_chat``,
 ``start_new_session``, ``handle_session_resume``, ``update_status_after_compact``)
 are callback-driven: when their corresponding ``on_*`` constructor kwarg
 is ``None``, the method is a silent no-op, mirroring
-``ChannelCommandUI``'s fallback pattern.  Callers that need a specific
+the CommandUI fallback pattern.  Callers that need a specific
 side-effect (REPL quit flag flip, status-bar refresh, …) wire the
 callback at construction time; non-interactive surfaces (tests,
 alternate REPLs) can leave callbacks unset without crashing.
@@ -32,7 +32,7 @@ class RichCLICommandUI(CommandUI):
 
     Commands that affect CLI-closure state (session lifecycle, exit flag,
     status-bar snapshot) go through optional callbacks wired by the REPL.
-    This mirrors ``ChannelCommandUI``'s injection pattern and keeps
+    This follows the CommandUI injection pattern and keeps
     ``interactive.py``'s ``state`` dict as the single source of truth.
     """
 

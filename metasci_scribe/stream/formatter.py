@@ -178,3 +178,13 @@ class ToolResultFormatter:
             Text(f"{name}:", style="cyan bold"),
             Text(f"   {display}", style="dim"),
         ]
+
+
+def _format_todo_list(todos: list[dict]) -> str:
+    """Format todo items as a numbered list."""
+    lines = ["\U0001f4cb Todo List\n"]  # clipboard
+    for i, item in enumerate(todos, 1):
+        content = item.get("content", "")
+        lines.append(f"{i}. {content}")
+    lines.append(f"\n\U0001f680 {len(todos)} tasks")  # rocket
+    return "\n".join(lines)

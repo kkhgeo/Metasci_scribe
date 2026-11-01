@@ -116,7 +116,7 @@ class RunRequest:
     ``thread_id`` — e.g. ``{"active_teams": [...]}`` from the TUI
     ``/expert`` command. WebUI callers achieve the same effect via
     ``langgraph_sdk``'s ``config.configurable`` on their own; this field is
-    the local-gateway equivalent so CLI / TUI / headless serve can bias
+    the local-gateway equivalent so CLI / TUI can bias
     the run identically."""
     rubric: str | None = None
     """Acceptance criteria this turn is graded against; ``None`` means ungraded."""

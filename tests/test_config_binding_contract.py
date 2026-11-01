@@ -37,11 +37,6 @@ from metasci_scribe.langgraph_dev.manager import (
 
 #: Channel justification for each explicitly excluded field.
 FIELD_CHANNELS: dict[str, str] = {
-    "require_mention": "channel stack policy (CLI process)",
-    "text_chunk_limit": "channel stack policy (CLI process)",
-    "allowed_channels": "channel stack policy (CLI process)",
-    "dm_policy": "channel stack policy (CLI process)",
-    "shared_webhook_port": "channel stack policy (CLI process)",
     "show_thinking": "UI display flag (client-side rendering)",
     "ui_backend": "client UI selection",
     "log_level": "CLI-process logging",
@@ -53,24 +48,12 @@ FIELD_CHANNELS: dict[str, str] = {
     "langgraph_dev_keepalive": "server lifecycle flag consumed at spawn time,"
     " not by graph construction",
     "shell_allow_list": "per-call client-side approval policy, read fresh at"
-    " each HITL interrupt (channels/interaction.py, stream/display.py)",
+    " each HITL interrupt (stream/interaction.py, stream/display.py)",
     "mirror": "download source, read from the config file at each install",
 }
 
 #: Channel justification for each prefix-based exclusion.
 PREFIX_CHANNELS: dict[str, str] = {
-    "channel_": "channel stack switches (CLI process)",
-    "imessage_": "messaging channel adapter (CLI process)",
-    "telegram_": "messaging channel adapter (CLI process)",
-    "discord_": "messaging channel adapter (CLI process)",
-    "slack_": "messaging channel adapter (CLI process)",
-    "feishu_": "messaging channel adapter (CLI process)",
-    "wechat_": "messaging channel adapter (CLI process)",
-    "dingtalk_": "messaging channel adapter (CLI process)",
-    "email_": "messaging channel adapter (CLI process)",
-    "qq_": "messaging channel adapter (CLI process)",
-    "signal_": "messaging channel adapter (CLI process)",
-    "stt_": "speech-to-text (CLI process)",
     "gateway_backend": "client-side gateway selection; only decides whether the"
     " CLI starts a server",
 }

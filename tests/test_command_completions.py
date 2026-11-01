@@ -88,13 +88,6 @@ class TestSubcommandCompletions:
         r = compute_completions("/model-fallback help ", 21)
         assert r.kind == "empty"
 
-    def test_channel_all_types(self):
-        r = compute_completions("/channel ", 9)
-        names = [c.text for c in r.candidates]
-        assert "status" in names
-        assert "telegram" in names
-        assert "discord" in names
-
     def test_model_fallback_subcommands(self):
         r = compute_completions("/model-fallback ", 16)
         names = [c.text for c in r.candidates]

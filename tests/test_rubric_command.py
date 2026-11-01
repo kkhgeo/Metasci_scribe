@@ -6,7 +6,7 @@ import os
 from unittest.mock import AsyncMock, MagicMock
 
 import metasci_scribe.commands.implementation  # noqa: F401  (registers the commands)
-from metasci_scribe.commands.base import ChannelRuntime, CommandContext
+from metasci_scribe.commands.base import CommandContext, SessionRuntime
 from metasci_scribe.commands.manager import manager
 from metasci_scribe.paths import SessionDirs, Workspace
 from tests.fakes.common import FakeGraphGateway
@@ -17,13 +17,13 @@ _LOADED_AGENT = object()
 def _ctx(tmp_path, *, agent=_LOADED_AGENT, ui=None, gateway=None, runtime=None):
     ui = ui if ui is not None else MagicMock()
     ui.flush = AsyncMock()  # the manager awaits it after every command
-    runtime = runtime if runtime is not None else ChannelRuntime()
+    runtime = runtime if runtime is not None else SessionRuntime()
     ctx = CommandContext(
         agent=agent,
         thread_id="t",
         ui=ui,
         dirs=SessionDirs(Workspace(tmp_path)),
-        channel_runtime=runtime,
+        session_runtime=runtime,
         graph_gateway=gateway if gateway is not None else FakeGraphGateway(),
     )
     return ctx, ui, runtime

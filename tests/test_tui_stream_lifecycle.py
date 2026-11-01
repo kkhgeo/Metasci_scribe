@@ -71,21 +71,18 @@ async def test_pause_closes_stream_in_tui_turn_context(monkeypatch, workspace, p
         )
         if pause == "interrupt":
             app._hitl_auto_approve = True
+        else:
+            monkeypatch.setattr(
+                app,
+                "_wait_for_ask_user",
+                AsyncMock(return_value={"answers": ["yes"], "status": "answered"}),
+            )
 
         loop = asyncio.get_running_loop()
         previous_exception_handler = loop.get_exception_handler()
         loop.set_exception_handler(lambda _loop, context: loop_errors.append(context))
         try:
-            response = await app._stream_with_widgets(
-                "hello",
-                channel_ask_user_fn=(
-                    lambda _event: (
-                        {"answers": ["yes"], "status": "answered"}
-                        if pause == "ask_user"
-                        else None
-                    )
-                ),
-            )
+            response = await app._stream_with_widgets("hello")
         finally:
             loop.set_exception_handler(previous_exception_handler)
 

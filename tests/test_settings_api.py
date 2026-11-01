@@ -65,16 +65,16 @@ def _no_checks():
 class TestGet:
     def test_url_passwords_are_hidden(self, server, config_file):
         config_file.write_text(
-            "telegram_proxy: http://me:hunter2@proxy.test:3128\n"
-            "slack_proxy: http://proxy.test:3128\n"
+            "ollama_base_url: http://me:hunter2@proxy.test:3128\n"
+            "anthropic_base_url: http://proxy.test:3128\n"
             "custom_openai_base_url: https://u:pw@llm.test/v1\n",
             encoding="utf-8",
         )
         response = server.get("/api/settings")
         assert "hunter2" not in response.text
         settings = response.json()["settings"]
-        assert settings["telegram_proxy"] == "http://***@proxy.test:3128"
-        assert settings["slack_proxy"] == "http://proxy.test:3128"
+        assert settings["ollama_base_url"] == "http://***@proxy.test:3128"
+        assert settings["anthropic_base_url"] == "http://proxy.test:3128"
         assert settings["custom_openai_base_url"] == "https://***@llm.test/v1"
 
     @pytest.mark.parametrize("password", ["pa/ss", "pa?ss", "pa#ss", "p@ss"])
@@ -82,22 +82,22 @@ class TestGet:
         self, server, config_file, password
     ):
         config_file.write_text(
-            f"telegram_proxy: 'http://me:{password}@proxy.test:3128'\n",
+            f"ollama_base_url: 'http://me:{password}@proxy.test:3128'\n",
             encoding="utf-8",
         )
         response = server.get("/api/settings")
         assert password not in response.text
-        assert response.json()["settings"]["telegram_proxy"] == (
+        assert response.json()["settings"]["ollama_base_url"] == (
             "http://***@proxy.test:3128"
         )
 
     def test_url_with_leading_whitespace_is_hidden(self, server, secret, config_file):
         # PATCH keeps a string as sent, so the space reaches the file.
         value = "  http://me:hunter2@proxy.test:3128"
-        server.patch("/api/settings", json={"telegram_proxy": value}, headers=secret)
+        server.patch("/api/settings", json={"ollama_base_url": value}, headers=secret)
         response = server.get("/api/settings")
         assert "hunter2" not in response.text
-        assert response.json()["settings"]["telegram_proxy"] == (
+        assert response.json()["settings"]["ollama_base_url"] == (
             "  http://***@proxy.test:3128"
         )
 
@@ -105,26 +105,26 @@ class TestGet:
         config_file.write_text(
             "openai_api_key: sk-openai-1234567890\n"
             "tavily_api_key: tvly-short\n"
-            "telegram_bot_token: 123456:TELEGRAMSECRET\n"
-            "email_smtp_password: hunter2-long-password\n"
-            "feishu_encrypt_key: FEISHUENCRYPT\n",
+            "siliconflow_api_key: 123456:SILICONFLOWSECRET\n"
+            "custom_anthropic_api_key: hunter2-long-password\n"
+            "dashscope_api_key: DASHSCOPESECRET\n",
             encoding="utf-8",
         )
         response = server.get("/api/settings")
         assert response.status_code == 200
         for value in (
             "sk-openai-123456",
-            "TELEGRAMSECRET",
+            "SILICONFLOWSECRET",
             "hunter2",
-            "FEISHUENCRYPT",
+            "DASHSCOPESECRET",
             "tvly-short",
         ):
             assert value not in response.text
         settings = response.json()["settings"]
         assert settings["openai_api_key"] == {"set": True, "hint": "…7890"}
         assert settings["tavily_api_key"] == {"set": True, "hint": "…hort"}
-        assert settings["telegram_bot_token"] == {"set": True}
-        assert settings["email_smtp_password"] == {"set": True}
+        assert settings["siliconflow_api_key"] == {"set": True, "hint": "…CRET"}
+        assert settings["custom_anthropic_api_key"] == {"set": True, "hint": "…word"}
         assert settings["anthropic_api_key"] == {"set": False}
         assert settings["mimo_token_plan_base_url"] == ""
 
@@ -273,15 +273,13 @@ class TestPatch:
         assert response.json() == {"errors": {"provider": "unknown provider"}}
         assert config_file.read_bytes() == before
 
-    def test_channel_access_and_programs_are_read_only(self):
+    def test_what_the_agent_may_run_is_read_only(self):
         from dataclasses import fields
 
         from metasci_scribe.config.settings import ScribeConfig
 
         names = {f.name for f in fields(ScribeConfig)}
-        senders = {n for n in names if n.endswith("_allowed_senders")}
-        assert senders  # one per channel
-        expected = senders | {"signal_cli_path", "dm_policy", "allowed_channels"}
+        expected = {"dangerous_mode", "auto_approve", "auto_mode", "shell_allow_list"}
         assert expected <= settings_api.READ_ONLY_FIELDS
         assert settings_api.READ_ONLY_FIELDS <= names
 
@@ -534,17 +532,17 @@ class TestPatch:
 
     def test_echoed_hidden_url_keeps_the_stored_one(self, server, secret, config_file):
         config_file.write_text(
-            "telegram_proxy: http://me:hunter2@proxy.test:3128\n", encoding="utf-8"
+            "ollama_base_url: http://me:hunter2@proxy.test:3128\n", encoding="utf-8"
         )
-        shown = server.get("/api/settings").json()["settings"]["telegram_proxy"]
+        shown = server.get("/api/settings").json()["settings"]["ollama_base_url"]
         response = server.patch(
             "/api/settings",
-            json={"telegram_proxy": shown, "show_thinking": False},
+            json={"ollama_base_url": shown, "show_thinking": False},
             headers=secret,
         )
         assert response.status_code == 200
         assert response.json()["changed"] == ["show_thinking"]
-        assert _mapping(config_file)["telegram_proxy"] == (
+        assert _mapping(config_file)["ollama_base_url"] == (
             "http://me:hunter2@proxy.test:3128"
         )
 
@@ -717,14 +715,18 @@ class TestPatchValues:
         self, server, secret, config_file
     ):
         config_file.write_text(
-            "telegram_bot_token: 123456:TELEGRAMSECRET\n"
-            "email_smtp_password: hunter2-long-password\n"
+            "siliconflow_api_key: 123456:SILICONFLOWSECRET\n"
+            "custom_anthropic_api_key: hunter2-long-password\n"
             "custom_openai_api_key: sk-custom-1234567890\n",
             encoding="utf-8",
         )
         before = config_file.read_bytes()
         shown = server.get("/api/settings").json()["settings"]
-        names = ("telegram_bot_token", "email_smtp_password", "custom_openai_api_key")
+        names = (
+            "siliconflow_api_key",
+            "custom_anthropic_api_key",
+            "custom_openai_api_key",
+        )
         response = server.patch(
             "/api/settings", json={name: shown[name] for name in names}, headers=secret
         )
@@ -762,15 +764,15 @@ class TestPatchValues:
         self, server, secret, config_file
     ):
         config_file.write_text(
-            "telegram_proxy: http://me:hunter2@proxy.test:3128\n", encoding="utf-8"
+            "ollama_base_url: http://me:hunter2@proxy.test:3128\n", encoding="utf-8"
         )
         response = server.patch(
             "/api/settings",
-            json={"telegram_proxy": "http://***@proxy.test:3129"},
+            json={"ollama_base_url": "http://***@proxy.test:3129"},
             headers=secret,
         )
         assert response.status_code == 200
-        assert _mapping(config_file)["telegram_proxy"] == (
+        assert _mapping(config_file)["ollama_base_url"] == (
             "http://me:hunter2@proxy.test:3129"
         )
 
@@ -781,14 +783,14 @@ class TestPatchValues:
         self, server, secret, config_file, sent
     ):
         config_file.write_text(
-            "telegram_proxy: http://me:hunter2@proxy.test:3128\n", encoding="utf-8"
+            "ollama_base_url: http://me:hunter2@proxy.test:3128\n", encoding="utf-8"
         )
         before = config_file.read_bytes()
         response = server.patch(
-            "/api/settings", json={"telegram_proxy": sent}, headers=secret
+            "/api/settings", json={"ollama_base_url": sent}, headers=secret
         )
         assert response.status_code == 400
-        assert list(response.json()["errors"]) == ["telegram_proxy"]
+        assert list(response.json()["errors"]) == ["ollama_base_url"]
         assert config_file.read_bytes() == before
 
     @pytest.mark.parametrize(
@@ -814,12 +816,12 @@ class TestPatchValues:
     def test_hidden_url_with_the_same_host_keeps_the_credentials(
         self, server, secret, config_file, stored, sent, saved
     ):
-        config_file.write_text(f"telegram_proxy: '{stored}'\n", encoding="utf-8")
+        config_file.write_text(f"ollama_base_url: '{stored}'\n", encoding="utf-8")
         response = server.patch(
-            "/api/settings", json={"telegram_proxy": sent}, headers=secret
+            "/api/settings", json={"ollama_base_url": sent}, headers=secret
         )
         assert response.status_code == 200
-        assert _mapping(config_file)["telegram_proxy"] == saved
+        assert _mapping(config_file)["ollama_base_url"] == saved
 
 
 class TestRestartRules:

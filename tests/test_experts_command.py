@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from metasci_scribe.commands.base import ChannelRuntime, CommandContext
+from metasci_scribe.commands.base import CommandContext, SessionRuntime
 from metasci_scribe.commands.implementation.experts import (
     ExpertCommand,
     ExpertsCommand,
@@ -70,14 +70,14 @@ def _make_ctx(
     workspace: Workspace, active_teams: list[str] | None = None
 ) -> tuple[CommandContext, _FakeUI]:
     ui = _FakeUI()
-    runtime = ChannelRuntime()
+    runtime = SessionRuntime()
     if active_teams:
         runtime.active_teams = list(active_teams)
     ctx = CommandContext(
         agent=None,
         thread_id="t1",
         ui=ui,
-        channel_runtime=runtime,
+        session_runtime=runtime,
         dirs=SessionDirs(workspace),
     )
     return ctx, ui
@@ -141,7 +141,7 @@ class TestExpertToggle:
         assert any(
             "No expert skill named 'not-an-expert'" in text for text, _ in ui.lines
         )
-        assert ctx.channel_runtime.active_teams == []
+        assert ctx.session_runtime.active_teams == []
 
     async def test_async_outage_does_not_block_invite(self, workspace):
         """An async outage must not make an installed expert un-invitable.
@@ -163,7 +163,7 @@ class TestExpertToggle:
             ),
         ):
             await ExpertCommand().execute(ctx, args=["literature-review"])
-        assert ctx.channel_runtime.active_teams == ["literature-review"]
+        assert ctx.session_runtime.active_teams == ["literature-review"]
 
     async def test_invite_adds_to_active_teams(self, workspace):
         ctx, ui = _make_ctx(workspace)
@@ -172,7 +172,7 @@ class TestExpertToggle:
             return_value=[_FakeSkillInfo(name="idea-brainstorm")],
         ):
             await ExpertCommand().execute(ctx, args=["idea-brainstorm"])
-        assert ctx.channel_runtime.active_teams == ["idea-brainstorm"]
+        assert ctx.session_runtime.active_teams == ["idea-brainstorm"]
         assert any("Invited expert: idea-brainstorm" in text for text, _ in ui.lines)
 
     async def test_invite_hint_states_the_dispatch_boundary(self, workspace):
@@ -208,7 +208,7 @@ class TestExpertToggle:
             return_value=[_FakeSkillInfo(name="idea-brainstorm")],
         ):
             await ExpertCommand().execute(ctx, args=["Idea-Brainstorm"])
-        assert ctx.channel_runtime.active_teams == ["idea-brainstorm"]
+        assert ctx.session_runtime.active_teams == ["idea-brainstorm"]
         assert any("Invited expert: idea-brainstorm" in text for text, _ in ui.lines)
 
     async def test_toggle_dismisses_when_already_invited(self, workspace):
@@ -218,13 +218,13 @@ class TestExpertToggle:
             return_value=[_FakeSkillInfo(name="idea-brainstorm")],
         ):
             await ExpertCommand().execute(ctx, args=["idea-brainstorm"])
-        assert ctx.channel_runtime.active_teams == []
+        assert ctx.session_runtime.active_teams == []
         assert any("Dismissed expert: idea-brainstorm" in text for text, _ in ui.lines)
 
     async def test_clear_dismisses_all(self, workspace):
         ctx, ui = _make_ctx(workspace, active_teams=["idea-brainstorm", "second"])
         await ExpertCommand().execute(ctx, args=["clear"])
-        assert ctx.channel_runtime.active_teams == []
+        assert ctx.session_runtime.active_teams == []
         assert any(
             "Dismissed experts: idea-brainstorm, second" in text for text, _ in ui.lines
         )
@@ -232,17 +232,17 @@ class TestExpertToggle:
     async def test_clear_on_empty_list_reports_nothing_to_do(self, workspace):
         ctx, ui = _make_ctx(workspace)
         await ExpertCommand().execute(ctx, args=["clear"])
-        assert ctx.channel_runtime.active_teams == []
+        assert ctx.session_runtime.active_teams == []
         assert any("No experts invited" in text for text, _ in ui.lines)
 
-    async def test_no_channel_runtime_prints_warning(self):
+    async def test_no_session_runtime_prints_warning(self):
         ui = _FakeUI()
         ctx = CommandContext(
             dirs=SessionDirs(TEST_WORKSPACE),
             agent=None,
             thread_id="t1",
             ui=ui,
-            channel_runtime=None,
+            session_runtime=None,
         )
         await ExpertCommand().execute(ctx, args=["idea-brainstorm"])
         assert any("/expert requires a session runtime" in text for text, _ in ui.lines)

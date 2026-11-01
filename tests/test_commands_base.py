@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from metasci_scribe.commands.base import ChannelRuntime, active_teams_configurable_extra
+from metasci_scribe.commands.base import SessionRuntime, active_teams_configurable_extra
 
 
 class TestActiveTeamsConfigurableExtra:
@@ -18,11 +18,11 @@ class TestActiveTeamsConfigurableExtra:
         # unconditionally without polluting ``configurable`` with an empty
         # ``active_teams: []`` (which ``ActiveTeamMiddleware`` would treat
         # as no-op anyway, but the wire stays cleaner without it).
-        runtime = ChannelRuntime()
+        runtime = SessionRuntime()
         assert active_teams_configurable_extra(runtime) is None
 
     def test_runtime_with_invites_returns_dict_copy(self):
-        runtime = ChannelRuntime()
+        runtime = SessionRuntime()
         runtime.active_teams = ["idea-brainstorm", "paper-review"]
         result = active_teams_configurable_extra(runtime)
         assert result == {"active_teams": ["idea-brainstorm", "paper-review"]}
@@ -32,15 +32,15 @@ class TestActiveTeamsConfigurableExtra:
         assert runtime.active_teams == ["idea-brainstorm", "paper-review"]
 
 
-class TestChannelRuntimeClear:
-    """``ChannelRuntime.clear`` runs on channel shutdown; it must leave the
+class TestSessionRuntimeClear:
+    """``SessionRuntime.clear`` runs on channel shutdown; it must leave the
     session-scoped ``active_teams`` list intact so stopping a channel does
     not silently dismiss the user's invited experts. ``/new`` and
     ``/expert clear`` handle invite reset explicitly.
     """
 
     def test_clear_preserves_active_teams(self):
-        runtime = ChannelRuntime()
+        runtime = SessionRuntime()
         runtime.agent = object()
         runtime.thread_id = "t-42"
         runtime.active_teams = ["idea-brainstorm"]

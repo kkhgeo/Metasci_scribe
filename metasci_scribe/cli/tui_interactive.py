@@ -8,29 +8,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import queue
 import random
 import sys
-import threading
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from rich.console import Group
 from rich.text import Text
 
-import metasci_scribe.cli.channel as _ch_mod
 from metasci_scribe.cli.widgets.thread_selector import ThreadPickerWidget
 
-from ..channels.hitl_budget import (
-    HITL_BUDGET_STOP_NOTICE,
-    channel_response_with_budget_stop,
-    hitl_budget_stop,
-    hitl_completed_round_cap_reached,
-    hitl_pause_unresolved,
-)
 from ..commands import Command, CommandContext
 from ..commands import manager as cmd_manager
 from ..gateway import (
@@ -47,6 +36,12 @@ from ..rubric_session import (
     thread_run_extra,
 )
 from ..sessions import get_checkpointer
+from ..stream.hitl_budget import (
+    HITL_BUDGET_STOP_NOTICE,
+    hitl_budget_stop,
+    hitl_completed_round_cap_reached,
+    hitl_pause_unresolved,
+)
 from ..stream.state import ResearchPhase, StreamState
 from ._agent_loader import BackgroundAgentLoader, MCPProgressTracker
 from ._constants import (
@@ -66,16 +61,6 @@ from .async_notifier import (
     enqueue_completions_from_state_throttled,
     has_pending_notifications,
     read_async_tasks_from_gateway,
-)
-from .channel import (
-    ChannelMessage,
-    _auto_start_channel,
-    _channels_is_running,
-    _channels_stop,
-    _message_queue,
-    _set_channel_response,
-    dispatch_channel_slash_command,
-    get_channel_startup_results,
 )
 from .file_mentions import complete_file_mention, resolve_file_mentions
 from .history_suggester import HistorySuggester
@@ -101,7 +86,7 @@ if TYPE_CHECKING:
     from ..backends import ParkedCloseReason
     from ..runtime import AsyncRuntime
 
-_channel_logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 # How long an approval widget waits for the user before the approval counts
 # as unanswered.
@@ -130,47 +115,6 @@ def _agent_shell_notices() -> list[str]:
     return [n for n in notices if n is not None]
 
 
-async def _auto_start_channel_in_worker(
-    agent: Any,
-    thread_id: str,
-    config: Any,
-    *,
-    media_dir: Path,
-    send_thinking: bool,
-    runtime: Any,
-    stop_requested: threading.Event,
-) -> list[tuple[str, bool, str]]:
-    """Run blocking channel startup without occupying the TUI event loop."""
-
-    def _start() -> list[tuple[str, bool, str]]:
-        try:
-            return _auto_start_channel(
-                agent,
-                thread_id,
-                config,
-                media_dir=media_dir,
-                send_thinking=send_thinking,
-                runtime=runtime,
-            )
-        finally:
-            if stop_requested.is_set():
-                _channels_stop(runtime=runtime)
-
-    worker = asyncio.create_task(asyncio.to_thread(_start))
-    try:
-        return await asyncio.shield(worker)
-    except asyncio.CancelledError:
-        stop_requested.set()
-        try:
-            await worker
-        except Exception:
-            _channel_logger.debug(
-                "Channel startup worker failed during cancellation",
-                exc_info=True,
-            )
-        raise
-
-
 def _build_welcome_banner(
     *,
     thread_id: str,
@@ -179,13 +123,8 @@ def _build_welcome_banner(
     model: str | None,
     provider: str | None,
     ui_backend: str | None = None,
-    channels: list[tuple[str, bool, str]] | None = None,
 ) -> Any:
-    """Build CLI-matching welcome banner with logo, info line, and channels.
-
-    Args:
-        channels: List of (name, ok, detail) tuples for the channels panel.
-    """
+    """Build CLI-matching welcome banner with logo and info line."""
     banner = Text()
     for line, color in zip(LOGO_LINES, LOGO_GRADIENT, strict=False):
         banner.append(f"{line}\n", style=f"bold {color}")
@@ -247,32 +186,6 @@ def _build_welcome_banner(
 
     slogan = Text(f"\n  {random.choice(WELCOME_SLOGANS)}", style="dim italic")
 
-    # Channels panel
-    if channels:
-        from rich.panel import Panel
-
-        lines: list[Text] = []
-        all_ok = True
-        for name, ok, detail in channels:
-            line = Text()
-            if ok:
-                line.append("\u25cf ", style="green")
-                line.append(name, style="bold")
-            else:
-                line.append("\u25cb ", style="dim")
-                line.append(name, style="bold dim")
-                all_ok = False
-            if detail:
-                line.append(f"  {detail}", style="dim")
-            lines.append(line)
-        body = Text("\n").join(lines)
-        border = "green" if all_ok else "dim"
-        panel = Panel(
-            body, title="[bold]Channels[/bold]", border_style=border, expand=False
-        )
-        return Group(banner, Text(""), panel, slogan)
-
-    # No channels — append slogan directly to banner
     banner.append_text(slogan)
     return banner
 
@@ -311,15 +224,6 @@ async def _sync_tui_command_completion(
         update_model = getattr(app, "update_status_after_model_change", None)
         if callable(update_model):
             update_model(cfg.model, cfg.provider)
-
-    # Rebind the runtime whenever the agent OR thread_id may have moved
-    # — ``/new`` and ``/resume`` rotate ``app._conversation_tid``
-    # without swapping the agent, and the bus expects both to stay in
-    # sync (matches the serve-mode hook contract).
-    if _channels_is_running():
-        runtime_agent = ctx.agent if ctx.agent is not None else app._agent_loader.agent
-        if runtime_agent is not None:
-            app._channel_runtime.bind(runtime_agent, app._conversation_tid)
 
     await app._refresh_status_snapshot(reset_streaming_text=True)
 
@@ -510,14 +414,13 @@ def _normalize_chat_scroll(container: Any) -> None:
 
 def _session_auto_approve_decisions(action_requests: list) -> list[dict]:
     """TUI session "approve all": an explicit human opt-in, so blanket-approve
-    everything (dangerous set included), matching the Rich CLI and channel."""
+    everything (dangerous set included), matching the Rich CLI."""
     return [{"type": "approve"} for _ in action_requests]
 
 
 def run_textual_interactive(
     *,
     show_thinking: bool,
-    channel_send_thinking: bool = True,
     dirs: SessionDirs,
     mode: str | None,
     model: str | None,
@@ -677,7 +580,6 @@ def run_textual_interactive(
             dirs: SessionDirs,
             checkpointer: Any,
             runtime_gateways: RuntimeGateways,
-            channel_send_thinking_value: bool = True,
             resumed: bool = False,
             resume_warning: str = "",
         ) -> None:
@@ -694,12 +596,9 @@ def run_textual_interactive(
             self._dirs = dirs
             self._checkpointer = checkpointer
             self._runtime_gateways = runtime_gateways
-            self._channel_send_thinking = channel_send_thinking_value
             self._resumed = resumed
             self._resume_warning = resume_warning
-            self._channel_timer: Any = None
-            self._channel_start_results: list[tuple[str, bool, str]] = []
-            self._channel_start_stop = threading.Event()
+            self._notification_timer: Any = None
             self._busy = False
             self._notification_consuming: bool = (
                 False  # prevent overlapping consume coroutines
@@ -707,11 +606,6 @@ def run_textual_interactive(
             self._idle_reader_inflight: bool = (
                 False  # prevent overlapping throttled idle state reads
             )
-            # At most one channel message is off the queue and not yet started:
-            # scheduled by the poll, or held because the app was taken before
-            # its turn began. A held message goes before the queue.
-            self._channel_turn_scheduled = False
-            self._held_channel_msg: ChannelMessage | None = None
             self._run_task: Any = None  # asyncio.Task for current _run_turn
             self._queued_messages: list[
                 str
@@ -739,9 +633,9 @@ def run_textual_interactive(
             self._active_command: object | None = None
             # The token of a command that is waiting for the agent to load.
             self._command_awaiting_agent: object | None = None
-            from ..commands.base import ChannelRuntime
+            from ..commands.base import SessionRuntime
 
-            self._channel_runtime = ChannelRuntime()
+            self._session_runtime = SessionRuntime()
             self._quit_pending: bool = False
             self._exiting: bool = False
             self._current_model: str | None = model
@@ -780,8 +674,6 @@ def run_textual_interactive(
             widget.update_server(server, state, detail)
 
         def _on_agent_load_success(self, agent: Any) -> None:
-            if _channels_is_running():
-                self._channel_runtime.bind(agent, self._conversation_tid)
             self._finish_loader_widget()
             self._render_status()
             # The start-up refresh ran without an agent: read the thread's
@@ -964,7 +856,7 @@ def run_textual_interactive(
 
             Raises ``WorkspaceMismatchError`` when another metasci-scribe process owns
             the server for other folders, so the caller leaves the session as
-            it is and command UIs (including channels) report the failure.
+            it is and the command UI reports the failure.
             Returns False when the sync failed otherwise: the session can
             continue locally, but background work may be unavailable.
             """
@@ -1011,7 +903,6 @@ def run_textual_interactive(
                     style="yellow",
                 )
 
-            _ch_mod.forget_channel_origin(self._conversation_tid)
             self._dirs = new_dirs
             self._conversation_tid = (
                 await self._runtime_gateways.graph_gateway.create_thread(
@@ -1049,13 +940,7 @@ def run_textual_interactive(
                         style="yellow",
                     )
                 self._dirs = dirs
-                _ch_mod._set_channels_media_dir(dirs.workspace.media_dir)
 
-            if thread_id != self._conversation_tid:
-                # Only drop the origin on a real thread change — resuming the
-                # already-active thread must keep its live origin so a later
-                # async-notifier turn still forwards to the channel.
-                _ch_mod.forget_channel_origin(self._conversation_tid)
             self._conversation_tid = thread_id
             # Background reload: history renders immediately; next turn awaits.
             self._start_background_agent_load(self._dirs)
@@ -1147,21 +1032,21 @@ def run_textual_interactive(
                 self._check_agent_shell, exclusive=True, group="agent-shell"
             )
 
-            # Auto-start channels — needs the agent, so defer to after load
-            async def _deferred_start_channels():
+            # Start the notification poll once the agent has loaded.
+            async def _deferred_start_notification_poll():
                 try:
                     await self._await_agent_ready()
                 except Exception:
-                    _channel_logger.debug(
-                        "Skipping channel auto-start because agent load failed",
+                    _logger.debug(
+                        "Skipping notification poll because agent load failed",
                         exc_info=True,
                     )
                     return
-                await self._start_channels()
+                self._start_notification_poll()
 
-            ch_task = asyncio.create_task(_deferred_start_channels())
-            self._background_tasks.add(ch_task)
-            ch_task.add_done_callback(self._background_tasks.discard)
+            poll_task = asyncio.create_task(_deferred_start_notification_poll())
+            self._background_tasks.add(poll_task)
+            poll_task.add_done_callback(self._background_tasks.discard)
 
         def on_resize(self, event: Any) -> None:
             """Re-window the completion popup for the new terminal height."""
@@ -1191,7 +1076,7 @@ def run_textual_interactive(
                         timeout=15,
                     )
             except Exception:
-                _channel_logger.debug("Background update check failed", exc_info=True)
+                _logger.debug("Background update check failed", exc_info=True)
 
         async def _check_agent_shell(self) -> None:
             """Notify the notices from :func:`_agent_shell_notices`."""
@@ -1201,77 +1086,20 @@ def run_textual_interactive(
                     # Paths may contain "[", which markup would eat.
                     self.notify(message, severity="warning", timeout=20, markup=False)
             except Exception:
-                _channel_logger.debug("Agent shell check failed", exc_info=True)
+                _logger.debug("Agent shell check failed", exc_info=True)
 
-        # ── Channel integration ────────────────────────────────
+        # ── Notification polling ───────────────────────────────
 
-        async def _start_channels(self) -> None:
-            """Auto-start channels if enabled in config."""
-            try:
-                from ..config import load_config
-
-                cfg = await asyncio.to_thread(load_config)
-                if cfg and cfg.channel_enabled and not _channels_is_running():
-                    results = await _auto_start_channel_in_worker(
-                        self._agent_loader.agent,
-                        self._conversation_tid,
-                        cfg,
-                        media_dir=self._dirs.workspace.media_dir,
-                        send_thinking=self._channel_send_thinking,
-                        runtime=self._channel_runtime,
-                        stop_requested=self._channel_start_stop,
-                    )
-                    if self._exiting:
-                        return
-                    current_agent = self._agent_loader.agent
-                    if current_agent is not None and _channels_is_running():
-                        self._channel_runtime.bind(
-                            current_agent,
-                            self._conversation_tid,
-                        )
-                    self._channel_start_results = results
-                    self._render_welcome()
-            except asyncio.CancelledError:
-                self._channel_start_stop.set()
-                raise
-            except Exception as e:
-                _channel_logger.debug(f"Channel auto-start failed: {e}")
-            finally:
-                if (
-                    not self._exiting
-                    and not self._channel_start_stop.is_set()
-                    and self._channel_timer is None
-                ):
-                    self._channel_timer = self.set_interval(
-                        0.1,
-                        self._poll_channel_queue,
-                    )
-
-        def _poll_channel_queue(self) -> None:
-            """Poll the channel + notification queues (every 100ms)."""
-            if self._channel_turn_scheduled:
-                # That turn has not started yet: nothing goes before it.
-                return
-            # A held message goes first. While the app is taken nothing comes
-            # off the queue, so the messages on it keep their order.
-            msg = self._held_channel_msg
-            if msg is None and not self._busy:
-                try:
-                    msg = _message_queue.get_nowait()
-                except queue.Empty:
-                    msg = None
-            if msg is not None:
-                if self._busy:
-                    return
-                self._held_channel_msg = None
-                self._channel_turn_scheduled = True
-                self.call_later(
-                    lambda m=msg: asyncio.ensure_future(
-                        self._process_channel_message(m)
-                    )
+        def _start_notification_poll(self) -> None:
+            """Start the 100ms notification poll, once."""
+            if not self._exiting and self._notification_timer is None:
+                self._notification_timer = self.set_interval(
+                    0.1,
+                    self._poll_notification_queue,
                 )
-                return
 
+        def _poll_notification_queue(self) -> None:
+            """Poll the async-task notification queue (every 100ms)."""
             # Throttled idle state read so a completion surfaces while the user
             # sits idle; the next tick's has_pending check drains what it
             # enqueues. Guarded so overlapping ticks don't stack reads.
@@ -1300,8 +1128,8 @@ def run_textual_interactive(
 
             Wraps the consume call in a swallowing try/except (Fix #4) so an
             exception inside dedup/inject doesn't bubble out of the
-            ``asyncio.ensure_future(...)`` scheduled by ``_poll_channel_queue``
-            and silently kill notification + channel dispatch.
+            ``asyncio.ensure_future(...)`` scheduled by ``_poll_notification_queue``
+            and silently kill notification dispatch.
             """
             target_tid = self._conversation_tid
             try:
@@ -1334,7 +1162,7 @@ def run_textual_interactive(
             """Throttled idle-tick state reader (preserves idle auto-notify).
 
             Best-effort: an exception here must not bubble out of the
-            ``asyncio.ensure_future(...)`` scheduled by ``_poll_channel_queue``
+            ``asyncio.ensure_future(...)`` scheduled by ``_poll_notification_queue``
             or it would silently kill the poller.
             """
             try:
@@ -1389,10 +1217,9 @@ def run_textual_interactive(
             # keyboard input path (line ~2113). Queue-triggered turns that
             # `await _run_turn` from inside a nested call_later chain don't
             # get viewport-follow during streaming (only after completion).
-            effective_tid = target_thread_id or self._conversation_tid
 
-            async def _run_and_publish() -> None:
-                response = await self._run_turn(
+            async def _run_notification_turn() -> None:
+                await self._run_turn(
                     text,
                     skip_user_message=True,
                     resolve_mentions=False,
@@ -1400,19 +1227,9 @@ def run_textual_interactive(
                     # A notifier turn only finishes a grading the thread deferred.
                     rubric_mode="followup",
                 )
-                if _ch_mod.publish_to_channel_origin(effective_tid, response or ""):
-                    # Mirror a normal channel turn's closing "Replied to" line
-                    # so the forwarded notification reads as terminated.
-                    _origin = _ch_mod.get_channel_origin(effective_tid)
-                    if _origin is not None:
-                        self._append_system(
-                            f"[{_origin.channel_type}: Replied to "
-                            f"{_origin.sender or _origin.chat_id}]",
-                            style="dim",
-                        )
 
             # Taken in this step, so the next poll tick does not re-enter.
-            self._own_app(_run_and_publish())
+            self._own_app(_run_notification_turn())
 
         async def _read_async_tasks_tui(self, target_thread_id: str) -> AsyncTasksState:
             """Read async_tasks from agent state for dedup, against a frozen tid.
@@ -1436,14 +1253,6 @@ def run_textual_interactive(
                 return registry or {}
             except Exception:
                 return {}
-
-        async def _on_channel_cmd_completed(
-            self,
-            ctx: CommandContext,
-            original_agent: Any,
-            cmd: Command,
-        ) -> None:
-            await _sync_tui_command_completion(self, ctx, original_agent, cmd)
 
         # ── Widget helpers ─────────────────────────────────────
 
@@ -1672,7 +1481,7 @@ def run_textual_interactive(
                 try:
                     picker_widget.remove()
                 except Exception:
-                    _channel_logger.debug("model picker cleanup failed", exc_info=True)
+                    _logger.debug("model picker cleanup failed", exc_info=True)
                 self.query_one("#prompt", ChatTextArea).focus()
 
         def on_model_picker_widget_picked(self, event) -> None:  # type: ignore[override]
@@ -1692,23 +1501,14 @@ def run_textual_interactive(
             user_text: str,
             *,
             display_text: str | None = None,
-            on_thinking_cb: Callable[[str], None] | None = None,
-            on_todo_cb: Callable[[list[dict]], None] | None = None,
-            on_media_cb: Callable[[str], None] | None = None,
             skip_user_message: bool = False,
             file_warnings: list[str] | None = None,
-            channel_hitl_fn: Callable[..., Any] | None = None,
-            channel_ask_user_fn: Callable[[dict], dict] | None = None,
             cancel_scope: str | None = None,
             thread_id_override: str | None = None,
             rubric_mode: str | None = "thread",
-            approve_all_at_start: bool = False,
             goal_request: dict[str, Any] | None = None,
         ) -> str:
             """Stream agent events and mount widgets.  Returns response text.
-
-            Shared by ``_run_turn`` (interactive) and
-            ``_process_channel_message`` (channel).
 
             Args:
                 display_text: Text to show in UserMessage widget. When
@@ -1717,17 +1517,7 @@ def run_textual_interactive(
                     sending the resolved (e.g. @file-expanded) text to
                     the agent.
                 skip_user_message: If True, don't mount UserMessage (caller
-                    already mounted it — e.g. channel messages with labels).
-                approve_all_at_start: The channel this turn came from already
-                    has an "approve all" grant in force.
-                channel_hitl_fn: Optional channel-based HITL approval function.
-                    When provided (channel messages), this is called instead
-                    of mounting the ApprovalWidget. It receives
-                    ``(action_requests, human_budget_exhausted=...)`` and
-                    returns an :class:`ApprovalOutcome`.
-                channel_ask_user_fn: Optional channel-based ask_user function.
-                    When provided (channel messages), this is called instead
-                    of mounting the AskUserWidget.
+                    already mounted it).
             """
             from ..stream.display import (
                 is_stream_cancel_requested,
@@ -1791,9 +1581,6 @@ def run_textual_interactive(
             completed_tool_order: list[str] = []  # tool_ids in completion order
             collapse_summary_w: Static | None = None
 
-            _thinking_sent = False
-            _todo_sent = False
-            _media_sent: set[str] = set()
             _MIN_THINKING_LEN = 200
 
             metadata = build_metadata(self._dirs, self._current_model)
@@ -1988,7 +1775,7 @@ def run_textual_interactive(
                     )
                 except Exception:
                     # The close has logged why; the turn ends either way.
-                    _channel_logger.debug(
+                    _logger.debug(
                         "Parked HITL checkpoint close failed on thread %s",
                         _tid,
                         exc_info=True,
@@ -2024,8 +1811,7 @@ def run_textual_interactive(
             # where each answer is built, never from the flag at a round's top.
             from ..backends import approve_all_configurable_extra
 
-            _turn_granted = approve_all_at_start
-            _approve_all_carry = _turn_granted or self._hitl_auto_approve
+            _approve_all_carry = self._hitl_auto_approve
             while True:
                 if is_stream_cancel_requested(cancel_scope):
                     response = await _mark_cancelled_response()
@@ -2053,7 +1839,7 @@ def run_textual_interactive(
                 events = None
                 try:
                     _anchor_engaged = False
-                    _active_teams = list(self._channel_runtime.active_teams)
+                    _active_teams = list(self._session_runtime.active_teams)
                     _configurable_extra = merge_configurable_extra(
                         {"active_teams": _active_teams} if _active_teams else None,
                         self._rubric_configurable_extra(
@@ -2119,50 +1905,6 @@ def run_textual_interactive(
 
                         if _should_finalize_active_summarization(event_type):
                             _finalize_active_summarization()
-
-                        # -- Channel callbacks (thinking, todo, media) --
-                        if (
-                            on_thinking_cb
-                            and not _thinking_sent
-                            and state.thinking_text
-                            and event_type != "thinking"
-                            and len(state.thinking_text) >= _MIN_THINKING_LEN
-                        ):
-                            on_thinking_cb(state.thinking_text.rstrip())
-                            _thinking_sent = True
-
-                        if (
-                            on_todo_cb
-                            and not _todo_sent
-                            and event_type == "tool_call"
-                            and event.get("name") == "write_todos"
-                            and state.todo_items
-                        ):
-                            if (
-                                on_thinking_cb
-                                and not _thinking_sent
-                                and state.thinking_text
-                                and len(state.thinking_text) >= _MIN_THINKING_LEN
-                            ):
-                                on_thinking_cb(state.thinking_text.rstrip())
-                                _thinking_sent = True
-                            on_todo_cb(state.todo_items)
-                            _todo_sent = True
-
-                        if (
-                            on_media_cb
-                            and event_type == "tool_result"
-                            and event.get("success")
-                        ):
-                            tool_name = event.get("name", "")
-                            if tool_name in ("write_file", "read_file"):
-                                _forward_media_to_channel(
-                                    state,
-                                    tool_name,
-                                    _media_sent,
-                                    on_media_cb,
-                                    str(self._dirs.work_dir),
-                                )
 
                         # -- Remove loading spinner on first content event --
                         if not loading_removed and event_type in (
@@ -2568,53 +2310,36 @@ def run_textual_interactive(
                                     _hitl_budget_exhausted = True
                                     break
                                 _human_rounds += 1  # ask_user always prompts a human
-                                # Channel messages: use channel-based text prompt
-                                if channel_ask_user_fn is not None:
-                                    self._append_system(
-                                        "Waiting for channel user input...",
-                                        style="dim italic",
-                                    )
-                                    _ask_fn = channel_ask_user_fn
-                                    result = await asyncio.to_thread(
-                                        lambda f=_ask_fn, e=event: f(e),
-                                    )
-                                    if is_stream_cancel_requested(cancel_scope):
-                                        state.pending_ask_user = None
-                                        response = await _mark_cancelled_response()
-                                        break
-                                else:
-                                    # Interactive TUI: display widget, collect via arrow keys
-                                    from .widgets.ask_user_widget import AskUserWidget
+                                # Display widget, collect via arrow keys
+                                from .widgets.ask_user_widget import AskUserWidget
 
-                                    _prompt = self.query_one("#prompt", ChatTextArea)
-                                    _prompt.disabled = True
-                                    await _remove_w(drafting_w)
-                                    drafting_w = None
-                                    if not loading_removed:
-                                        await loading.cleanup()
-                                        loading_removed = True
-                                    ask_w = AskUserWidget(questions)
-                                    await container.mount(ask_w)
-                                    self.call_after_refresh(ask_w.focus_active)
-                                    # The question can be a turn's first
-                                    # content, when nothing follows the chat yet.
-                                    self.call_after_refresh(
-                                        container.scroll_end, animate=False
-                                    )
-                                    result = await self._wait_for_ask_user(ask_w)
-                                    try:
-                                        await ask_w.remove()
-                                    except Exception:
-                                        pass
-                                    _prompt.disabled = False
+                                _prompt = self.query_one("#prompt", ChatTextArea)
+                                _prompt.disabled = True
+                                await _remove_w(drafting_w)
+                                drafting_w = None
+                                if not loading_removed:
+                                    await loading.cleanup()
+                                    loading_removed = True
+                                ask_w = AskUserWidget(questions)
+                                await container.mount(ask_w)
+                                self.call_after_refresh(ask_w.focus_active)
+                                # The question can be a turn's first
+                                # content, when nothing follows the chat yet.
+                                self.call_after_refresh(
+                                    container.scroll_end, animate=False
+                                )
+                                result = await self._wait_for_ask_user(ask_w)
+                                try:
+                                    await ask_w.remove()
+                                except Exception:
+                                    pass
+                                _prompt.disabled = False
                                 from langgraph.types import (
                                     Command,  # type: ignore[import-untyped]
                                 )
 
                                 _stream_input = Command(resume=result)
-                                _approve_all_carry = (
-                                    _turn_granted or self._hitl_auto_approve
-                                )
+                                _approve_all_carry = self._hitl_auto_approve
                                 _hitl_resuming = True
                                 break  # re-enter outer HITL loop
 
@@ -2657,75 +2382,12 @@ def run_textual_interactive(
                                 _hitl_resuming = True
                                 break  # re-enter outer HITL loop
 
-                            # Channel messages: use channel-based text approval.
-                            # The bridge owns the channel session grant, so it
-                            # applies the human budget after that fast path and
-                            # reports whether it prompted.
-                            if channel_hitl_fn is not None:
-                                self._append_system(
-                                    "Waiting for channel user approval...",
-                                    style="dim italic",
-                                )
-                                outcome = await asyncio.to_thread(
-                                    channel_hitl_fn,
-                                    action_reqs,
-                                    human_budget_exhausted=hitl_budget_stop(
-                                        human_rounds=_human_rounds,
-                                        total_rounds=_hitl_round,
-                                        needs_human=True,
-                                    ),
-                                )
-                                if outcome.budget_exhausted:
-                                    _hitl_budget_exhausted = True
-                                    break
-                                if outcome.prompted:
-                                    _human_rounds += 1
-                                decisions = outcome.decisions
-                                if is_stream_cancel_requested(cancel_scope):
-                                    # A stop while the approval was open is a
-                                    # refusal, whatever came back with it.
-                                    _hitl_declined = "rejected"
-                                    state.pending_interrupt = None
-                                    response = await _mark_cancelled_response()
-                                    break
-                                if decisions is not None:
-                                    from ..backends import (
-                                        answer_keeps_grant,
-                                        build_hitl_resume,
-                                    )
-
-                                    _stream_input = build_hitl_resume(
-                                        interrupt_id, decisions
-                                    )
-                                    _turn_granted = (
-                                        _turn_granted or outcome.grant_in_force
-                                    )
-                                    _approve_all_carry = answer_keeps_grant(
-                                        outcome.session_granted, decisions
-                                    )
-                                    _hitl_resuming = True
-                                    break  # re-enter outer HITL loop
-                                else:
-                                    # Tools still running may be siblings that
-                                    # finish; they are marked when the stream ends.
-                                    _hitl_declined = (
-                                        "rejected" if outcome.rejected else "unanswered"
-                                    )
-                                    state.pending_interrupt = None
-                                    self._append_system(
-                                        "Tool execution rejected by channel user."
-                                        if outcome.rejected
-                                        else "Channel approval left unanswered.",
-                                        style="yellow",
-                                    )
-                                continue
-
                             # Config-rule fast path (shared with CLI display):
                             # an allow-listed / auto-approvable command resolves
                             # without mounting the widget, closing the
                             # shell_allow_list gap on the attended TUI. Returns
                             # None when a human decision is genuinely needed.
-                            from ..channels.interaction import (
+                            from ..stream.interaction import (
                                 config_policy_snapshot,
                             )
 
@@ -2815,7 +2477,7 @@ def run_textual_interactive(
                                 ):
                                     self._hitl_auto_approve = True
                                 from ..backends import build_hitl_resume
-                                from ..channels.interaction import (
+                                from ..stream.interaction import (
                                     decisions_after_human_approval,
                                 )
 
@@ -3034,14 +2696,6 @@ def run_textual_interactive(
                         except asyncio.CancelledError:
                             _turn_cancelled = True
                             raise
-                        # Flush remaining thinking callback
-                        if (
-                            on_thinking_cb
-                            and not _thinking_sent
-                            and state.thinking_text
-                            and len(state.thinking_text) >= _MIN_THINKING_LEN
-                        ):
-                            on_thinking_cb(state.thinking_text.rstrip())
                         # Re-anchor so final content is visible, but only
                         # if the user hasn't scrolled away.
                         if self._chat_following:
@@ -3116,12 +2770,6 @@ def run_textual_interactive(
                         HITL_BUDGET_STOP_NOTICE,
                         style="yellow",
                     )
-                    # Channel users never see ``_append_system``. Fold the
-                    # notice into the returned response so
-                    # ``_process_channel_message`` sends it (approval,
-                    # ask_user, and total-cap stops).
-                    if channel_hitl_fn is not None or channel_ask_user_fn is not None:
-                        response = channel_response_with_budget_stop(response)
 
             # On stream close, enqueue any async-task + bg-process completions from
             # thread state; the notification poller drains + injects. Best-effort —
@@ -3148,9 +2796,8 @@ def run_textual_interactive(
             """Handle a user turn: stream agent response with widgets.
 
             Returns the final response text from ``_stream_with_widgets`` so
-            callers (notably the async-notifier path) can forward it onward —
-            e.g. push it back to the originating channel. Returns ``""`` if
-            the turn was cancelled or the agent failed to load.
+            callers can forward it onward. Returns ``""`` if the turn was
+            cancelled or the agent failed to load.
 
             Args:
                 user_text: The user's message text.
@@ -3173,7 +2820,7 @@ def run_textual_interactive(
             load_failed = False
             try:
                 # Foreground turns share the legacy default scope. Reset it at
-                # the turn boundary; scoped channel stop requests remain armed.
+                # the turn boundary; scoped stop requests remain armed.
                 from ..stream.display import clear_stream_cancel
 
                 clear_stream_cancel()
@@ -3220,7 +2867,7 @@ def run_textual_interactive(
 
                     await aclose_code_interpreters()
                 except Exception:
-                    _channel_logger.debug(
+                    _logger.debug(
                         "code interpreter cleanup after cancellation failed",
                         exc_info=True,
                     )
@@ -3242,183 +2889,6 @@ def run_textual_interactive(
                 self.query_one("#prompt", ChatTextArea).focus()
 
             return response
-
-        async def _process_channel_message(self, msg: ChannelMessage) -> None:
-            """Process a channel message: stream agent response and reply.
-
-            Display order (matches Rich CLI):
-              > message content
-              [channel: Received from sender]
-              (streaming response)
-              [channel: Replied to sender]
-            """
-            # This message is dealt with below, so the poll may take the next.
-            self._channel_turn_scheduled = False
-            if self._busy:
-                # The poll found the app free, but input handled since then
-                # took it. Held for a poll that finds it free, ahead of any
-                # message that arrived since.
-                self._held_channel_msg = msg
-                return
-            prompt_widget = None
-            if not _ch_mod._claim_or_complete_channel_request(msg):
-                return
-            _ch_mod.remember_channel_origin(self._conversation_tid, msg)
-            try:
-                # Taken in the step that checked it: nothing ran in between.
-                self._busy = True
-                self._turn_started_at = datetime.now()
-                self._status_phase = ResearchPhase.THINKING
-                await self._refresh_status_snapshot(msg.content)
-                self._render_status()
-
-                prompt_widget = self.query_one("#prompt", ChatTextArea)
-                prompt_widget.disabled = True
-
-                # Mount user message first, then "Received" label
-                container = self.query_one("#chat", VerticalScroll)
-                await container.mount(UserMessage(msg.content))
-                self._append_system(
-                    f"[{msg.channel_type}: Received from {msg.sender}]",
-                    style="dim",
-                )
-
-                # Build channel callbacks (fire-and-forget to avoid blocking UI)
-                def _send_to_channel(coro, label: str) -> None:
-                    loop = _ch_mod._bus_loop
-                    if not loop:
-                        return
-                    future = asyncio.run_coroutine_threadsafe(coro, loop)
-                    future.add_done_callback(
-                        lambda f: (
-                            _channel_logger.debug(
-                                f"{label} send failed: {f.exception()}"
-                            )
-                            if f.exception()
-                            else None
-                        )
-                    )
-
-                def _send_thinking(thinking: str) -> None:
-                    ch = msg.channel_ref
-                    if ch and ch.send_thinking:
-                        _send_to_channel(
-                            ch.send_thinking_message(
-                                sender=msg.chat_id,
-                                thinking=thinking,
-                                metadata=msg.metadata,
-                            ),
-                            "Thinking",
-                        )
-
-                def _send_todo(items: list[dict]) -> None:
-                    from ..channels.consumer import _format_todo_list
-
-                    if msg.channel_ref:
-                        _send_to_channel(
-                            msg.channel_ref.send_todo_message(
-                                sender=msg.chat_id,
-                                content=_format_todo_list(items),
-                                metadata=msg.metadata,
-                            ),
-                            "Todo",
-                        )
-
-                def _send_media(file_path: str) -> None:
-                    if msg.channel_ref:
-                        _send_to_channel(
-                            msg.channel_ref.send_media(
-                                recipient=msg.chat_id,
-                                file_path=file_path,
-                                metadata=msg.metadata,
-                            ),
-                            "Media",
-                        )
-
-                def _channel_hitl_prompt(action_requests: list, **kwargs):
-                    """Send HITL approval prompt to channel user and wait for reply.
-
-                    This runs in a thread (called via asyncio.to_thread) so it can
-                    block without freezing the Textual event loop.
-                    """
-                    return _ch_mod.channel_hitl_prompt(action_requests, msg, **kwargs)
-
-                def _channel_ask_user(ask_user_data: dict) -> dict:
-                    """Send ask_user questions to channel user and wait for reply.
-
-                    This runs in a thread (called via asyncio.to_thread) so it can
-                    block without freezing the Textual event loop.
-                    """
-                    return _ch_mod.channel_ask_user_prompt(ask_user_data, msg)
-
-                # Handle slash commands from channel via the shared
-                # dispatcher (same path Rich CLI and headless serve use).
-                # Returns True when the command was handled (or errored)
-                # and we must NOT fall through to agent streaming.
-                _slash_handled = await dispatch_channel_slash_command(
-                    msg,
-                    agent=None,  # resolved via await_agent_ready on demand
-                    thread_id=self._conversation_tid,
-                    dirs=self._dirs,
-                    checkpointer=self._checkpointer,
-                    append_system=self._append_system,
-                    start_new_session_cb=self.start_new_session,
-                    handle_session_resume_cb=self.handle_session_resume,
-                    await_agent_ready=self._await_agent_ready,
-                    on_cmd_completed=self._on_channel_cmd_completed,
-                    channel_runtime=self._channel_runtime,
-                    graph_gateway=self._runtime_gateways.graph_gateway,
-                    async_runtime=async_runtime,
-                )
-                if _slash_handled:
-                    # A channel-issued /new or /resume rotates the thread in
-                    # the dispatch above; re-bind the now-current thread to
-                    # this channel so async-notifier turns on it still forward.
-                    _ch_mod.remember_channel_origin(self._conversation_tid, msg)
-                    return  # outer finally handles _busy / widget cleanup
-
-                # Non-slash message — streams through the agent, so wait
-                # for readiness now.
-                try:
-                    await self._await_agent_ready()
-                except Exception as exc:
-                    _set_channel_response(msg.msg_id, f"Error: {exc}")
-                    return
-
-                response = ""
-                try:
-                    response = await self._stream_with_widgets(
-                        msg.content,
-                        on_thinking_cb=_send_thinking
-                        if self._channel_send_thinking
-                        else None,
-                        on_todo_cb=_send_todo,
-                        on_media_cb=_send_media,
-                        skip_user_message=True,
-                        channel_hitl_fn=_channel_hitl_prompt,
-                        channel_ask_user_fn=_channel_ask_user,
-                        cancel_scope=_ch_mod._channel_message_cancel_scope(msg),
-                        approve_all_at_start=_ch_mod.channel_session_granted(msg),
-                    )
-                except Exception as exc:
-                    response = f"Error: {exc}"
-                    self._append_system(f"Error: {exc}", style="red")
-
-                _set_channel_response(msg.msg_id, response)
-                self._append_system(
-                    f"[{msg.channel_type}: Replied to {msg.sender}]",
-                    style="dim",
-                )
-
-            finally:
-                self._busy = False
-                self._status_phase = ResearchPhase.IDLE
-                await self._refresh_status_snapshot(reset_streaming_text=True)
-                self._render_status()
-                if prompt_widget is not None:
-                    prompt_widget.disabled = False
-                    prompt_widget.focus()
-                _ch_mod._complete_channel_request(msg.msg_id)
 
         # ── Clipboard (copy on mouse select) ─────────────────
 
@@ -3975,7 +3445,7 @@ def run_textual_interactive(
                     dirs=self._dirs,
                     checkpointer=self._checkpointer,
                     input_tokens_hint=self._status_last_input_tokens,
-                    channel_runtime=self._channel_runtime,
+                    session_runtime=self._session_runtime,
                     graph_gateway=self._runtime_gateways.graph_gateway,
                     async_runtime=async_runtime,
                 )
@@ -3999,7 +3469,7 @@ def run_textual_interactive(
                     or self._approval_future is not None
                 )
                 # A command that lost its token gives the input back unless a
-                # channel turn, a command or an open question holds it off.
+                # command or an open question holds it off.
                 if not self._exiting and (
                     owner or ((not self._busy or turn) and not asking)
                 ):
@@ -4129,19 +3599,12 @@ def run_textual_interactive(
             self._do_exit()
 
         def _do_exit(self) -> None:
-            """Clean up channels, unregister callbacks, and exit."""
+            """Stop polling, unregister callbacks, and exit."""
             self._exiting = True
-            self._channel_start_stop.set()
             event_sink.set_fallback_display(None)
-            if self._channel_timer is not None:
-                self._channel_timer.stop()
-                self._channel_timer = None
-            self._channel_start_results.clear()
-            if _channels_is_running():
-                try:
-                    _channels_stop(runtime=self._channel_runtime)
-                except Exception:
-                    pass
+            if self._notification_timer is not None:
+                self._notification_timer.stop()
+                self._notification_timer = None
             self.exit()
 
         def action_request_quit(self) -> None:
@@ -4237,7 +3700,7 @@ def run_textual_interactive(
         ) -> dict[str, Any] | None:
             """The run marker and pending ``/rubric`` operations for *thread_id*."""
             return thread_run_extra(
-                self._channel_runtime.rubric,
+                self._session_runtime.rubric,
                 self._runtime_gateways.graph_gateway,
                 thread_id=thread_id,
                 current_thread_id=self._conversation_tid,
@@ -4251,7 +3714,7 @@ def run_textual_interactive(
         async def _acknowledge_rubric(self, thread_id: str | None) -> None:
             """Drop operations the thread applied; refresh its status-bar badge."""
             await acknowledge_applied(
-                self._channel_runtime.rubric,
+                self._session_runtime.rubric,
                 self._rubric_badges,
                 self._runtime_gateways.graph_gateway,
                 agent=self._agent_loader.agent,
@@ -4313,28 +3776,6 @@ def run_textual_interactive(
             self._render_status()
 
         def _render_welcome(self) -> None:
-            channels_info: list[tuple[str, bool, str]] | None = None
-            try:
-                current = get_channel_startup_results()
-                if current:
-                    self._channel_start_results = current
-                if self._channel_start_results:
-                    channels_info = self._channel_start_results
-                else:
-                    from ..config import load_config
-
-                    cfg = load_config()
-                    if cfg and cfg.channel_enabled:
-                        types = [
-                            t.strip()
-                            for t in cfg.channel_enabled.split(",")
-                            if t.strip()
-                        ]
-                        if types:
-                            channels_info = [(ct, False, "configured") for ct in types]
-            except Exception:
-                pass
-
             welcome = self.query_one("#welcome", Static)
             welcome.update(
                 _build_welcome_banner(
@@ -4344,7 +3785,6 @@ def run_textual_interactive(
                     model=self._current_model,
                     provider=self._current_provider,
                     ui_backend="tui",
-                    channels=channels_info,
                 )
             )
 
@@ -4426,57 +3866,6 @@ def run_textual_interactive(
                 case _:
                     # Fallback for busy state with no specific phase (e.g. slash commands)
                     return f"Working...{elapsed}", busy_style
-
-    # ── Media forwarding helper (module-level) ──────────────
-
-    _MEDIA_EXTENSIONS = {
-        ".png",
-        ".jpg",
-        ".jpeg",
-        ".gif",
-        ".bmp",
-        ".webp",
-        ".svg",
-        ".pdf",
-        ".mp3",
-        ".wav",
-        ".mp4",
-    }
-
-    def _forward_media_to_channel(
-        state: StreamState,
-        tool_name: str,
-        media_sent: set[str],
-        send_fn: Any,
-        work_dir: str | None,
-    ) -> None:
-        """Check tool calls for media files and forward to channel.
-
-        Virtual paths resolve against ``work_dir``, the folder the agent
-        works in.
-        """
-        import os
-
-        from ..paths import resolve_virtual_path
-
-        arg_key = "path" if tool_name == "write_file" else "file_path"
-        for tc in reversed(state.tool_calls):
-            if tc.get("name") == tool_name:
-                p = tc.get("args", {}).get(arg_key, "")
-                if not p:
-                    p = tc.get("args", {}).get("path", "")
-                if p and p not in media_sent:
-                    ext = os.path.splitext(p)[1].lower()
-                    if ext in _MEDIA_EXTENSIONS:
-                        real_path = (
-                            str(resolve_virtual_path(work_dir, p)) if work_dir else p
-                        )
-                        if not os.path.isfile(real_path) and os.path.isfile(p):
-                            real_path = p
-                        if os.path.isfile(real_path):
-                            media_sent.add(p)
-                            send_fn(real_path)
-                break
 
     # ── Entry point ─────────────────────────────────────────
 
@@ -4570,7 +3959,6 @@ def run_textual_interactive(
                 dirs=effective_dirs,
                 checkpointer=checkpointer,
                 runtime_gateways=runtime_gateways,
-                channel_send_thinking_value=channel_send_thinking,
                 resumed=resumed,
                 resume_warning=resume_warning,
             )
@@ -4586,7 +3974,7 @@ def run_textual_interactive(
 
                     await aclose_code_interpreters()
                 except Exception:
-                    _channel_logger.debug(
+                    _logger.debug(
                         "code interpreter cleanup failed",
                         exc_info=True,
                     )
@@ -4601,13 +3989,13 @@ def run_textual_interactive(
                         if await graph_gateway.thread_exists(exit_tid):
                             hint_tid = exit_tid
                     except Exception:
-                        _channel_logger.debug(
+                        _logger.debug(
                             "resume-hint thread_exists lookup failed",
                             exc_info=True,
                         )
                 try:
                     print_resume_hint(hint_tid)
                 except Exception:
-                    _channel_logger.debug("print_resume_hint failed", exc_info=True)
+                    _logger.debug("print_resume_hint failed", exc_info=True)
 
     asyncio.run(_amain())

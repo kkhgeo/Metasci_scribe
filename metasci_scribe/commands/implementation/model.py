@@ -256,8 +256,7 @@ class ModelCommand(Command):
         # be left half-switched. Apply the switch to the LIVE ``cfg`` in place
         # (the active config object) instead of rebinding ``_config`` to the
         # fresh ``temp_cfg`` — callers that hold the active config by reference
-        # (e.g. serve's ``agent_holder["config"]`` and its workspace-changing
-        # ``/resume`` reload) must observe the new model/provider. The verify
+        # (e.g. a workspace-changing ``/resume`` reload) must observe the new model/provider. The verify
         # build above used the ``temp_cfg`` copy, so a failed build never reaches
         # here and the live ``cfg`` stays untouched (failure still no-ops).
         cfg.model = model_name
@@ -270,10 +269,9 @@ class ModelCommand(Command):
         if save:
             save = await _save_model(ctx, model_name, provider)
 
-        # Propagate to the channel runtime if channels are running so the
-        # bus picks up the new agent on the next inbound message.
-        if ctx.channel_runtime is not None and ctx.channel_runtime.agent is not None:
-            ctx.channel_runtime.agent = new_agent
+        # Keep the session runtime pointing at the new agent.
+        if ctx.session_runtime is not None and ctx.session_runtime.agent is not None:
+            ctx.session_runtime.agent = new_agent
 
         # Update status bar if available
         update_model_fn = getattr(ctx.ui, "update_status_after_model_change", None)

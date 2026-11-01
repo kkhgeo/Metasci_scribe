@@ -16,7 +16,7 @@ class CompletionKind(StrEnum):
     EMPTY = "empty"
 
 
-_CATEGORY_ORDER = ["Session", "Skills", "MCP", "Channels", "Model", "General"]
+_CATEGORY_ORDER = ["Session", "Skills", "MCP", "Model", "General"]
 
 SKILL_CATEGORY = "Use a skill"
 _SKILL_DESCRIPTION_WIDTH = 80

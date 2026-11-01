@@ -179,7 +179,7 @@ def shell_drift_message(sidecar: dict) -> str | None:
 @functools.cache
 def log_setup_hint() -> None:
     """Log :func:`setup_hint` once per process where the agent is built, so
-    the Rich CLI, ``-p`` and ``metasci-scribe serve`` show it."""
+    the Rich CLI and ``-p`` show it."""
     hint = setup_hint()
     if hint is not None:
         logger.warning(hint)

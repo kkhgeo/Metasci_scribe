@@ -22,8 +22,8 @@ def _graph_gateway(ctx: CommandContext) -> GraphGateway:
 def _workspace_label(thread: dict, *, name_only: bool = False) -> str:
     """The folder a thread works in, e.g. ``projA`` or ``projA/runs/<name>``.
 
-    With *name_only* it is just the last folder, for channels. A folder at
-    the filesystem root (e.g. ``/`` in a container) has no name, so it shows
+    With *name_only* it is just the last folder, for non-interactive UIs. A
+    folder at the filesystem root (e.g. ``/`` in a container) has no name, so it shows
     as the root itself. Empty when the thread has no stored workspace.
     """
     dirs = SessionDirs.from_stored(thread.get("workspace_dir"), thread.get("run_dir"))
@@ -118,23 +118,26 @@ class ThreadsCommand(Command):
             ctx.ui.append_system("No saved sessions.", style="yellow")
             return
 
-        # Use protocol property to adapt output for non-interactive UIs (channels)
-        is_channel = not ctx.ui.supports_interactive
+        # Use protocol property to adapt output for non-interactive UIs (non-interactive)
+        non_interactive = not ctx.ui.supports_interactive
 
         table = Table(title="Sessions", show_header=True, header_style="bold cyan")
         table.add_column("ID", style="bold", no_wrap=True)
         table.add_column(
-            "Preview", style="dim", max_width=40 if is_channel else 50, no_wrap=True
+            "Preview",
+            style="dim",
+            max_width=40 if non_interactive else 50,
+            no_wrap=True,
         )
-        table.add_column("Msgs" if is_channel else "Messages", justify="right")
-        if not is_channel:
+        table.add_column("Msgs" if non_interactive else "Messages", justify="right")
+        if not non_interactive:
             table.add_column("Model", style="dim")
         table.add_column("Workspace", style="dim", overflow="fold")
         table.add_column("Last Used", style="dim")
 
         # from_stored resolves paths, so keep it off the event loop.
         workspaces = await asyncio.to_thread(
-            lambda: [_workspace_label(t, name_only=is_channel) for t in threads]
+            lambda: [_workspace_label(t, name_only=non_interactive) for t in threads]
         )
 
         for thread, workspace in zip(threads, workspaces, strict=True):
@@ -146,14 +149,14 @@ class ThreadsCommand(Command):
                 thread.get("preview", "") or "",
                 str(thread.get("message_count", 0)),
             ]
-            if not is_channel:
+            if not non_interactive:
                 row.append(thread.get("model", "") or "")
             row.append(workspace)
             row.append(_format_relative_time(thread.get("updated_at")))
 
             table.add_row(*row)
         ctx.ui.mount_renderable(table)
-        if not is_channel:
+        if not non_interactive:
             ctx.ui.append_system(
                 "  /resume to continue a session  "
                 "/delete <id> to remove  /new to start fresh",
@@ -215,10 +218,10 @@ class ResumeCommand(Command):
         switched_thread = resolved != ctx.thread_id
         ctx.thread_id = resolved
 
-        # Invitations are session-scoped (see ChannelRuntime.active_teams);
+        # Invitations are session-scoped (see SessionRuntime.active_teams);
         # resuming a different thread is a session switch, so release them —
         # uniform with /new. Resuming the current thread keeps them.
-        runtime = ctx.channel_runtime
+        runtime = ctx.session_runtime
         if switched_thread and runtime is not None and runtime.active_teams:
             dismissed = list(runtime.active_teams)
             runtime.active_teams = []
@@ -263,7 +266,7 @@ class NewCommand(Command):
         # surprise. Users who want to reuse an invite in the next thread can
         # re-invite explicitly. Cleared only after the new session actually
         # exists, so a failed start leaves the current session intact.
-        runtime = ctx.channel_runtime
+        runtime = ctx.session_runtime
         dismissed: list[str] = []
         if runtime is not None and runtime.active_teams:
             dismissed = list(runtime.active_teams)

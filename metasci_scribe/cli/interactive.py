@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import queue
 import random
 import signal
 import sys
@@ -33,9 +32,7 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.text import Text
 
-import metasci_scribe.cli.channel as _ch_mod
-
-from ..commands.base import Command, CommandContext
+from ..commands.base import CommandContext
 from ..commands.manager import manager as cmd_manager
 from ..gateway import (
     GraphGateway,
@@ -62,15 +59,6 @@ from .agent import (
     _load_agent,
     _shorten_path,
 )
-from .channel import (
-    ChannelMessage,
-    _auto_start_channel,
-    _channels_is_running,
-    _message_queue,
-    _set_channel_response,
-    dispatch_channel_slash_command,
-)
-from .channel_sends import PendingChannelSends
 from .file_mentions import complete_file_mention, resolve_file_mentions
 from .rich_command_ui import RichCLICommandUI
 from .status_bar import (
@@ -99,7 +87,7 @@ from .tui_runtime import (
     run_streaming_async,
 )
 
-_channel_logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 # Keeps references to fire-and-forget coroutines so they aren't GC'd mid-flight.
 _background_tasks: set[asyncio.Task] = set()
@@ -427,7 +415,6 @@ async def _run_rich_cli_streaming_turn(**kwargs: Any) -> str:
 
 def cmd_interactive(
     show_thinking: bool = True,
-    channel_send_thinking: bool = True,
     mode: str | None = None,
     model: str | None = None,
     provider: str | None = None,
@@ -446,7 +433,6 @@ def cmd_interactive(
 
     Args:
         show_thinking: Whether to display thinking panels
-        channel_send_thinking: Whether channels should receive thinking messages
         mode: Workspace mode ('daemon' or 'run'), displayed in banner
         model: Model name to display in banner
         provider: LLM provider name to display in banner
@@ -465,7 +451,6 @@ def cmd_interactive(
         )
         run_textual_interactive(
             show_thinking=show_thinking,
-            channel_send_thinking=channel_send_thinking,
             dirs=dirs,
             mode=mode,
             model=model,
@@ -519,14 +504,14 @@ def cmd_interactive(
         width = console.size.width
         console.print(Text("\u2500" * width, style="dim"))
 
-    from ..commands.base import ChannelRuntime, active_teams_configurable_extra
+    from ..commands.base import SessionRuntime, active_teams_configurable_extra
     from ..rubric_session import (
         acknowledge_applied,
         merge_configurable_extra,
         thread_run_extra,
     )
 
-    channel_runtime = ChannelRuntime()
+    session_runtime = SessionRuntime()
 
     progress_tracker = MCPProgressTracker()
 
@@ -640,8 +625,6 @@ def cmd_interactive(
                 ) from exc
             raise
         await _refresh_status_snapshot(reset_streaming_text=True)
-        if _channels_is_running():
-            channel_runtime.bind(agent, state["thread_id"])
         return agent
 
     def _rebuild_status_snapshot() -> None:
@@ -656,9 +639,9 @@ def cmd_interactive(
     ) -> dict[str, Any] | None:
         """Invited experts plus, on the session's own thread, the rubric marker."""
         return merge_configurable_extra(
-            active_teams_configurable_extra(channel_runtime),
+            active_teams_configurable_extra(session_runtime),
             thread_run_extra(
-                channel_runtime.rubric,
+                session_runtime.rubric,
                 runtime_gateways.graph_gateway,
                 thread_id=thread_id or state["thread_id"],
                 current_thread_id=state["thread_id"],
@@ -669,7 +652,7 @@ def cmd_interactive(
     async def _acknowledge_rubric(agent: Any, thread_id: str | None) -> None:
         """Drop operations the thread applied; refresh the status-bar badge."""
         await acknowledge_applied(
-            channel_runtime.rubric,
+            session_runtime.rubric,
             state["rubric_badges"],
             runtime_gateways.graph_gateway,
             agent=agent,
@@ -863,7 +846,7 @@ def cmd_interactive(
         console.print()
 
     async def _async_main_loop():
-        """Async main loop with prompt_async and channel queue checking."""
+        """Async main loop with prompt_async and notification queue checking."""
         nonlocal model
         async with get_checkpointer() as checkpointer:
             startup = await _resolve_startup_session(
@@ -903,7 +886,6 @@ def cmd_interactive(
                     mode=mode,
                     run_name=run_name,
                 )
-                _ch_mod.forget_channel_origin(state.get("thread_id"))
                 state["dirs"] = new_dirs
                 state["thread_id"] = await graph_gateway.create_thread(
                     GraphTarget(**state["dirs"].metadata())
@@ -933,10 +915,10 @@ def cmd_interactive(
                     # so background workers and deployed sub-agents don't work
                     # in the previous ones. Restart can take 10-15s behind a
                     # spinner, in a worker thread so the event loop keeps
-                    # serving channel polls / MCP heartbeats. State changes
-                    # only after the move, so a WorkspaceMismatchError leaves
-                    # the session's folders and thread as they are, and command
-                    # UIs (including channels) report the failure.
+                    # serving MCP heartbeats. State changes only after the
+                    # move, so a WorkspaceMismatchError leaves the session's
+                    # folders and thread as they are, and the command UI
+                    # reports the failure.
                     from .commands import _move_server_or_keep_session
 
                     if not await _move_server_or_keep_session(
@@ -951,12 +933,6 @@ def cmd_interactive(
                             "EvoMemory workers may be unavailable.[/yellow]"
                         )
                     state["dirs"] = dirs
-                    _ch_mod._set_channels_media_dir(dirs.workspace.media_dir)
-                if thread_id != state.get("thread_id"):
-                    # Only drop the origin on a real thread change — resuming
-                    # the already-active thread must keep its live origin so a
-                    # later async-notifier turn still forwards to the channel.
-                    _ch_mod.forget_channel_origin(state.get("thread_id"))
                 state["thread_id"] = thread_id
                 state["resumed"] = True
                 state["status_started_at"] = datetime.now()
@@ -1026,252 +1002,9 @@ def cmd_interactive(
                 )
             _print_pending_skill_proposals_notice()
 
-            # ---- Channel queue processing (bus → main thread) ----
+            # ---- Notification queue processing ----
 
             turn_lock = asyncio.Lock()
-
-            async def _process_channel_message(msg: ChannelMessage) -> None:
-                """Process a single channel message with real-time streaming.
-
-                Clears the waiting prompt line and reprints the message as if
-                the user typed it after ❯, then streams the agent response
-                with Rich Live display.
-
-                Display:
-                  ❯ message content
-                  [channel: Received from sender]
-                  ─────────────────
-                  (real-time streaming output)
-                  [channel: Replied to sender]
-                  ─────────────────
-                """
-                if not _ch_mod._claim_or_complete_channel_request(msg):
-                    return
-
-                _ch_mod.remember_channel_origin(state["thread_id"], msg)
-
-                try:
-                    # Clear the waiting ❯ prompt line
-                    sys.stdout.write("\r\033[2K")
-                    sys.stdout.flush()
-
-                    # Reprint as if user typed it after ❯
-                    prompt_line = Text()
-                    prompt_line.append("\u276f ", style="bold blue")
-                    prompt_line.append(msg.content)
-                    console.print(prompt_line)
-                    rx = Text()
-                    rx.append(f"[{msg.channel_type}: Received from ", style="dim")
-                    rx.append(msg.sender, style="cyan")
-                    rx.append("]", style="dim")
-                    console.print(rx)
-                    _print_separator()
-
-                    pending_channel_sends = PendingChannelSends(
-                        _ch_mod._bus_loop, _channel_logger
-                    )
-
-                    def _send_to_channel(coro, label: str, timeout: int = 15) -> None:
-                        pending_channel_sends.submit(coro, label, timeout)
-
-                    def _send_thinking_to_channel(thinking: str) -> None:
-                        ch = msg.channel_ref
-                        if ch and ch.send_thinking:
-                            _send_to_channel(
-                                ch.send_thinking_message(
-                                    sender=msg.chat_id,
-                                    thinking=thinking,
-                                    metadata=msg.metadata,
-                                ),
-                                "Thinking",
-                            )
-
-                    def _send_todo_to_channel(items: list[dict]) -> None:
-                        from ..channels.consumer import _format_todo_list
-
-                        if msg.channel_ref:
-                            _send_to_channel(
-                                msg.channel_ref.send_todo_message(
-                                    sender=msg.chat_id,
-                                    content=_format_todo_list(items),
-                                    metadata=msg.metadata,
-                                ),
-                                "Todo",
-                            )
-
-                    def _send_media_to_channel(file_path: str) -> None:
-                        if msg.channel_ref:
-                            _send_to_channel(
-                                msg.channel_ref.send_media(
-                                    recipient=msg.chat_id,
-                                    file_path=file_path,
-                                    metadata=msg.metadata,
-                                ),
-                                "Media",
-                                timeout=30,
-                            )
-
-                    def _channel_hitl_outcome(
-                        action_requests: list, human_budget_exhausted: bool
-                    ):
-                        """Send HITL approval prompt to channel user and wait for reply."""
-                        return _ch_mod.channel_hitl_prompt(
-                            action_requests,
-                            msg,
-                            human_budget_exhausted=human_budget_exhausted,
-                        )
-
-                    def _channel_ask_user(ask_user_data: dict) -> dict:
-                        """Send ask_user questions to channel user and wait for reply."""
-                        return _ch_mod.channel_ask_user_prompt(ask_user_data, msg)
-
-                    # ---- Slash command dispatch (cmd_manager, not the agent) ----
-                    # Mirrors the TUI's behavior so ``/evoskills``, ``/mcp list``
-                    # etc. sent via iMessage actually execute instead of being
-                    # fed to the LLM as a plain prompt.
-                    async def _on_channel_cmd_completed(
-                        ctx: CommandContext, original_agent: Any, cmd: Command
-                    ) -> None:
-                        """Mirror the REPL adoption block at
-                        ``interactive.py:1005-1030`` so ``/model`` and similar
-                        state-mutating commands invoked via a channel actually
-                        rebind the running session and keep the status bar
-                        in sync."""
-                        nonlocal model
-                        agent_swapped = (
-                            ctx.agent is not None and ctx.agent is not original_agent
-                        )
-                        if agent_swapped:
-                            from ..agent import _ensure_config
-
-                            agent_loader.adopt(ctx.agent)
-                            cfg = _ensure_config()
-                            model = cfg.model
-                            state["status_base_snapshot"] = make_empty_status_snapshot(
-                                model
-                            )
-
-                        # Rebind the runtime whenever the agent OR
-                        # thread_id may have moved — ``/new`` and
-                        # ``/resume`` rotate ``state["thread_id"]``
-                        # without swapping the agent, and the bus
-                        # expects both to stay in sync (matches the
-                        # serve-mode hook contract).
-                        if _channels_is_running():
-                            runtime_agent = (
-                                ctx.agent
-                                if ctx.agent is not None
-                                else agent_loader.agent
-                            )
-                            if runtime_agent is not None:
-                                channel_runtime.bind(runtime_agent, state["thread_id"])
-
-                        # ``/new`` rotates ``state["thread_id"]`` / workspace,
-                        # ``/compact`` reduces token usage — both need the
-                        # status snapshot re-rendered even when the agent
-                        # didn't swap.  ``/resume`` refreshes inline in its
-                        # own async callback.
-                        if agent_swapped or cmd.name in (
-                            "/compact",
-                            "/new",
-                        ):
-                            await _refresh_status_snapshot(reset_streaming_text=True)
-
-                    _slash_handled = await dispatch_channel_slash_command(
-                        msg,
-                        agent=agent_loader.agent,
-                        thread_id=state["thread_id"],
-                        dirs=state["dirs"],
-                        checkpointer=checkpointer,
-                        append_system=lambda t, s="dim": console.print(t, style=s),
-                        start_new_session_cb=_on_start_new_session,
-                        handle_session_resume_cb=_on_handle_session_resume,
-                        await_agent_ready=_await_agent_ready,
-                        on_cmd_completed=_on_channel_cmd_completed,
-                        channel_runtime=channel_runtime,
-                        graph_gateway=runtime_gateways.graph_gateway,
-                        async_runtime=async_runtime,
-                    )
-                    if _slash_handled:
-                        # A channel-issued /new or /resume rotates the thread
-                        # inside the dispatch above; re-bind the now-current
-                        # thread to this channel so async-notifier turns on it
-                        # still forward back here.
-                        _ch_mod.remember_channel_origin(state["thread_id"], msg)
-                        _print_separator()
-                        sys.stdout.write("\033[34;1m❯\033[0m ")
-                        sys.stdout.flush()
-                        return
-
-                    try:
-                        ready_agent = await _await_agent_ready()
-                        meta = build_metadata(state["dirs"], model)
-                        await _refresh_status_snapshot(
-                            msg.content, reset_streaming_text=True
-                        )
-                        response = await run_streaming_async(
-                            ui_backend=state["ui_backend"],
-                            agent=ready_agent,
-                            message=msg.content,
-                            thread_id=state["thread_id"],
-                            show_thinking=show_thinking,
-                            interactive=True,
-                            metadata=meta,
-                            configurable_extra=_run_configurable_extra("thread"),
-                            approve_all_at_start=_ch_mod.channel_session_granted(msg),
-                            on_thinking=_send_thinking_to_channel,
-                            on_todo=_send_todo_to_channel,
-                            on_file_write=_send_media_to_channel,
-                            work_dir=str(state["dirs"].work_dir),
-                            hitl_outcome_fn=_channel_hitl_outcome,
-                            ask_user_prompt_fn=_channel_ask_user,
-                            on_stream_event=_handle_stream_status_event,
-                            status_footer_builder=_stream_status_footer,
-                            cancel_scope=_ch_mod._channel_message_cancel_scope(msg),
-                            gateway=runtime_gateways.graph_gateway,
-                            runtime=async_runtime,
-                        )
-                        # Channel turns run on the same thread as local prompts
-                        # and can launch async tasks and background processes;
-                        # without these reads their completions surface only on
-                        # the next local prompt. Same calls + args as the
-                        # local-path post-stream reads; best-effort, never
-                        # blocks the reply.
-                        _channel_target = GraphTarget(
-                            local_graph=ready_agent,
-                            **state["dirs"].metadata(),
-                        )
-                        await async_notifier.enqueue_completions_from_state(
-                            runtime_gateways.graph_gateway,
-                            _channel_target,
-                            state["thread_id"],
-                        )
-                        await async_notifier.enqueue_bg_process_completions_from_state(
-                            runtime_gateways.graph_gateway,
-                            _channel_target,
-                            state["thread_id"],
-                        )
-                        await _acknowledge_rubric(ready_agent, state["thread_id"])
-                    except Exception as e:
-                        response = f"Error: {e}"
-                        console.print(f"[red]Channel error: {e}[/red]")
-
-                    await pending_channel_sends.settle_async()
-                    _set_channel_response(msg.msg_id, response)
-                    await _refresh_status_snapshot(reset_streaming_text=True)
-
-                    tx = Text()
-                    tx.append(f"[{msg.channel_type}: Replied to ", style="dim")
-                    tx.append(msg.sender, style="cyan")
-                    tx.append("]", style="dim")
-                    console.print(tx)
-                    _print_separator()
-
-                    # Redraw the ❯ prompt on a new line after separator
-                    sys.stdout.write("\033[34;1m\u276f\033[0m ")
-                    sys.stdout.flush()
-                finally:
-                    _ch_mod._complete_channel_request(msg.msg_id)
 
             async def _inject_notification_message(
                 text: str,
@@ -1293,7 +1026,7 @@ def cmd_interactive(
                 meta = build_metadata(state["dirs"], model)
                 await _refresh_status_snapshot(text, reset_streaming_text=True)
                 ready_agent = await _await_agent_ready()
-                response = await run_streaming_async(
+                await run_streaming_async(
                     ui_backend=state["ui_backend"],
                     agent=ready_agent,
                     message=text,
@@ -1315,17 +1048,6 @@ def cmd_interactive(
                     runtime=async_runtime,
                 )
                 _notif_tid = target_thread_id or state["thread_id"]
-                if _ch_mod.publish_to_channel_origin(_notif_tid, response):
-                    # Forwarded to a channel — print the same closing
-                    # "Replied to" line a normal channel turn shows, so the
-                    # forwarded block reads as terminated on screen.
-                    _origin = _ch_mod.get_channel_origin(_notif_tid)
-                    if _origin is not None:
-                        tx = Text()
-                        tx.append(f"[{_origin.channel_type}: Replied to ", style="dim")
-                        tx.append(_origin.sender or _origin.chat_id, style="cyan")
-                        tx.append("]", style="dim")
-                        console.print(tx)
                 # Re-arm the completion reader after the notification turn: it
                 # may have launched a chained task (e.g. analysis finished ->
                 # start writing) that would otherwise sit in state with the idle
@@ -1381,24 +1103,12 @@ def cmd_interactive(
                 except Exception:
                     return {}
 
-            async def _check_channel_queue() -> None:
-                """Poll the channel + notification queues and dispatch."""
+            async def _check_notification_queue() -> None:
+                """Poll the async-task notification queue and dispatch."""
                 while True:
-                    try:
-                        msg = _message_queue.get_nowait()
-                    except queue.Empty:
-                        msg = None
-                    if msg is not None:
-                        await _run_serialized_turn(
-                            turn_lock,
-                            lambda _msg=msg: _process_channel_message(_msg),
-                        )
-                        continue  # check queues again immediately
-
-                    # Notification path (only when no channel message was pending).
                     # Wrap in try/except so an exception in dedup/inject can't
-                    # kill the poller task — channel + notification dispatch
-                    # would silently die otherwise (Fix #4).
+                    # kill the poller task — notification dispatch would
+                    # silently die otherwise (Fix #4).
                     current_tid = state.get("thread_id")
                     # Detect async-task + bg-process completions from state
                     # (throttled) so a completion surfaces while the prompt sits
@@ -1424,7 +1134,7 @@ def cmd_interactive(
                                 current_tid,
                             )
                         except Exception:
-                            _channel_logger.warning(
+                            _logger.warning(
                                 "async-notifier idle reader failed", exc_info=True
                             )
                     if async_notifier.has_pending_notifications(current_tid):
@@ -1449,14 +1159,14 @@ def cmd_interactive(
                                 current_thread_id=current_tid,
                             )
                         except Exception:
-                            _channel_logger.warning(
+                            _logger.warning(
                                 "async-notifier consume failed", exc_info=True
                             )
                         continue
 
                     await asyncio.sleep(0.1)
 
-            queue_task = asyncio.create_task(_check_channel_queue())
+            queue_task = asyncio.create_task(_check_notification_queue())
 
             # Startup hint
             console.print(
@@ -1466,43 +1176,6 @@ def cmd_interactive(
                     style="yellow",
                 )
             )
-
-            # Auto-start channel if enabled in config.  Needs the agent
-            # bound before the bus starts polling, so schedule it as a
-            # background coroutine that waits for the loader first.
-            from ..config import load_config
-
-            _channel_cfg = load_config()
-            if (
-                _channel_cfg
-                and _channel_cfg.channel_enabled
-                and not _channels_is_running()
-            ):
-
-                async def _deferred_auto_start_channel(cfg):
-                    try:
-                        agent = await _await_agent_ready()
-                    except Exception as e:
-                        console.print(
-                            f"[red]Channel auto-start skipped: agent load failed:[/red] "
-                            f"{escape(str(e))}"
-                        )
-                        return
-                    if not _channels_is_running():
-                        _auto_start_channel(
-                            agent,
-                            state["thread_id"],
-                            cfg,
-                            media_dir=state["dirs"].workspace.media_dir,
-                            send_thinking=channel_send_thinking,
-                            runtime=channel_runtime,
-                        )
-
-                _auto_start_task = asyncio.create_task(
-                    _deferred_auto_start_channel(_channel_cfg)
-                )
-                _background_tasks.add(_auto_start_task)
-                _auto_start_task.add_done_callback(_background_tasks.discard)
 
             # Update check — non-blocking, runs in background thread
             import concurrent.futures
@@ -1538,9 +1211,9 @@ def cmd_interactive(
                 await _refresh_status_snapshot(
                     message_to_send, reset_streaming_text=True
                 )
-                # Captured before waiting for the lock: a channel /resume
-                # that lands meanwhile must not move this turn, nor lend
-                # it the new thread's checklist operations.
+                # Captured before waiting for the lock: a /resume that lands
+                # meanwhile must not move this turn, nor lend it the new
+                # thread's checklist operations.
                 turn_thread_id = state["thread_id"]
                 turn_extra = _run_configurable_extra("thread", turn_thread_id)
                 try:
@@ -1590,7 +1263,7 @@ def cmd_interactive(
                 console.print()
                 _print_separator()
 
-            # Slogan — after channels, right before user input
+            # Slogan — right before user input
             console.print(
                 Text(f"  {random.choice(WELCOME_SLOGANS)}", style="dim italic")
             )
@@ -1638,7 +1311,7 @@ def cmd_interactive(
                                 checkpointer=checkpointer,
                                 config=config,
                                 input_tokens_hint=state.get("status_last_input_tokens"),
-                                channel_runtime=channel_runtime,
+                                session_runtime=session_runtime,
                                 graph_gateway=runtime_gateways.graph_gateway,
                                 async_runtime=async_runtime,
                             )
@@ -1651,7 +1324,7 @@ def cmd_interactive(
 
                             # Agent swap (e.g. /model successfully built a
                             # new agent): adopt into loader + reset status
-                            # snapshot + sync channel runtime.
+                            # snapshot.
                             agent_swapped = (
                                 ctx.agent is not None
                                 and ctx.agent is not _agent_for_ctx
@@ -1665,22 +1338,6 @@ def cmd_interactive(
                                 state["status_base_snapshot"] = (
                                     make_empty_status_snapshot(model)
                                 )
-
-                            # Rebind the runtime whenever the agent OR
-                            # thread_id may have moved — ``/new`` /
-                            # ``/resume`` rotate ``state["thread_id"]``
-                            # without swapping the agent, and the bus
-                            # expects both to stay in sync.
-                            if _channels_is_running():
-                                runtime_agent = (
-                                    ctx.agent
-                                    if ctx.agent is not None
-                                    else agent_loader.agent
-                                )
-                                if runtime_agent is not None:
-                                    channel_runtime.bind(
-                                        runtime_agent, state["thread_id"]
-                                    )
 
                             # Commands that mutate status fields need an
                             # async refresh here (/compact + /new use sync
@@ -1783,7 +1440,7 @@ def cmd_interactive(
 
                     await aclose_code_interpreters()
                 except Exception:
-                    _channel_logger.debug(
+                    _logger.debug(
                         "code interpreter cleanup failed",
                         exc_info=True,
                     )
@@ -1795,7 +1452,7 @@ def cmd_interactive(
                         if await graph_gateway.thread_exists(current_tid):
                             state["resume_hint_thread_id"] = current_tid
                     except Exception:
-                        _channel_logger.debug(
+                        _logger.debug(
                             "resume-hint thread_exists lookup failed",
                             exc_info=True,
                         )
@@ -1811,7 +1468,7 @@ def cmd_interactive(
         try:
             print_resume_hint(state.get("resume_hint_thread_id"), console=console)
         except Exception:
-            _channel_logger.debug("print_resume_hint failed", exc_info=True)
+            _logger.debug("print_resume_hint failed", exc_info=True)
 
 
 def cmd_run(

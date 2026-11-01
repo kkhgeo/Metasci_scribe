@@ -31,7 +31,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache-dependency-glob: "**/pyproject.toml"
       - name: Install dependencies
-        run: uv sync --dev --extra all-channels
+        run: uv sync --dev
       # Four workers, one per runner vCPU; worksteal evens out the slow tests.
       # The per-test timeout comes from pyproject.toml.
       - name: Run pytest

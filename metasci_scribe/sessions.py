@@ -503,7 +503,7 @@ async def get_checkpointer() -> AsyncIterator[PruningCheckpointer]:
     Also runs the legacy-bloat migration sweep synchronously *before*
     yielding the saver when needed. Sequencing sweep ahead of any agent
     ``aput()`` eliminates the SQLite file-lock contention that produced
-    "database is locked" when channel inbound raced the sweep mid-DELETE.
+    "database is locked" when another writer raced the sweep mid-DELETE.
     The sweep is gated by its bit of ``PRAGMA user_version`` so it runs at
     most once across all future launches; subsequent invocations cost
     nothing. On failure the bit is NOT set, so the next launch retries.

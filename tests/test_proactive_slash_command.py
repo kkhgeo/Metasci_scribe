@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from metasci_scribe.commands.base import ChannelRuntime
+from metasci_scribe.commands.base import SessionRuntime
 from metasci_scribe.commands.implementation.proactive import ProactiveCommand
 from metasci_scribe.commands.manager import manager
 
@@ -26,9 +26,9 @@ class _UI:
 
 def _ctx(controller=None, *, with_runtime=True):
     runtime = (
-        ChannelRuntime(thread_id="t1", proactive=controller) if with_runtime else None
+        SessionRuntime(thread_id="t1", proactive=controller) if with_runtime else None
     )
-    return SimpleNamespace(thread_id="t1", ui=_UI(), channel_runtime=runtime)
+    return SimpleNamespace(thread_id="t1", ui=_UI(), session_runtime=runtime)
 
 
 def _controller(*, armed=False):

@@ -187,13 +187,6 @@ def test_single_shot_start_runs_the_check_without_a_prompt(monkeypatch):
     assert isinstance(result.exception, _Checked)
 
 
-def test_serve_runs_the_check_without_a_prompt(monkeypatch):
-    seen, result = _run_until_the_check(monkeypatch, ["serve"])
-
-    assert seen == [("oauth", False)]
-    assert isinstance(result.exception, _Checked)
-
-
 @pytest.mark.parametrize(
     ("stored", "flag", "modes"),
     [

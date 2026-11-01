@@ -7,8 +7,8 @@ Standalone LangGraph server launcher. ``metasci-scribe deploy`` starts a
 and SDK clients.
 
 This module is intentionally separate from ``metasci_scribe.cli``:
-deploy mode does NOT load an in-process CLI agent, session DB, channel
-runtime, or TUI — those are all TUI / serve concerns. Deploy only
+deploy mode does NOT load an in-process CLI agent, session DB,
+or TUI — those are all TUI concerns. Deploy only
 manages the lifecycle of the langgraph dev subprocess (and ccproxy if
 Anthropic OAuth is configured).
 """

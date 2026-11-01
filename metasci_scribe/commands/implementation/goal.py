@@ -18,7 +18,7 @@ from ..manager import manager
 from .rubric import read_thread_values
 
 if TYPE_CHECKING:
-    from ..base import ChannelRuntime, CommandContext
+    from ..base import CommandContext, SessionRuntime
 
 _USAGE = (
     "Usage: /goal <objective>        set a goal; you review the drafted criteria",
@@ -47,7 +47,7 @@ def _refusal(kind: str, status: str) -> str:
 
 
 def _note_replaced(
-    ctx: CommandContext, runtime: ChannelRuntime, kind: str, values: dict | None
+    ctx: CommandContext, runtime: SessionRuntime, kind: str, values: dict | None
 ) -> None:
     """Say which ``/rubric`` checklist the goal is about to take the place of."""
     if kind not in ("create", "amend", "resume"):
@@ -89,7 +89,7 @@ class GoalCommand(Command):
         return " ".join(args).strip().lower() not in _SHOW_WORDS
 
     async def execute(self, ctx: CommandContext, args: list[str]) -> None:
-        runtime = ctx.channel_runtime
+        runtime = ctx.session_runtime
         if runtime is None or not ctx.ui.supports_interactive:
             ctx.ui.append_system(
                 "/goal is available in the terminal session only.", style="yellow"
@@ -165,7 +165,7 @@ class GoalCommand(Command):
             kind, feedback=feedback, target=goal["rubric_id"]
         )
 
-    async def _show(self, ctx: CommandContext, runtime: ChannelRuntime) -> None:
+    async def _show(self, ctx: CommandContext, runtime: SessionRuntime) -> None:
         from ...rubric_session import thread_goal
 
         values = await read_thread_values(ctx, "/goal show")

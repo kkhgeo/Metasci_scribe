@@ -4,11 +4,11 @@ Hosts the fully-equipped Metasci Scribe main agent (MCP + async sub-agents)
 for consumption by external LangChain-compatible UIs (deep-agents-ui,
 agent-chat-ui, LangSmith Studio) and SDK clients.
 
-Differs from ``metasci-scribe`` / ``metasci-scribe serve``: no in-process CLI agent,
-no session DB, no channel runtime, no TUI. The terminal only shows
+Differs from ``metasci-scribe``: no in-process CLI agent,
+no session DB, no TUI. The terminal only shows
 startup progress, the Ready banner, and then blocks until Ctrl+C.
 
-The server is the same one ``metasci-scribe`` / ``metasci-scribe serve`` start in the
+The server is the same one ``metasci-scribe`` starts in the
 background.
 
 ``--json`` is for a program that starts the server (the desktop app): JSON
@@ -160,7 +160,7 @@ def deploy(
                     )
                 else:
                     console.print(
-                        "[dim]Stop the existing metasci-scribe/serve session first, or use "
+                        "[dim]Stop the existing metasci-scribe session first, or use "
                         "[bold]--port[/bold] to deploy on a different port.[/dim]"
                     )
             else:
@@ -303,7 +303,7 @@ def deploy(
         )
     )
 
-    # 10. Block on signal — mirror serve's dual-gate (threading.Event +
+    # 10. Block on signal — dual-gate (threading.Event +
     # explicit SIGINT/SIGTERM handlers) so SIGTERM (no default raise) also
     # triggers clean shutdown.
     shutdown_event = threading.Event()
@@ -383,8 +383,8 @@ def _load_config(debug: bool, host: str | None = None, port: int | None = None) 
     """The effective config, applied to the environment, with ``--debug``
     logging switched on.
 
-    ``--host`` and ``--port`` are overrides, as ``metasci-scribe --host`` and ``metasci-scribe
-    serve --host`` pass theirs, so the config fingerprint matches a server
+    ``--host`` and ``--port`` are overrides, as ``metasci-scribe --host``
+    passes its, so the config fingerprint matches a server
     started with the same bind.
     """
     from ..config import apply_config_to_env, get_effective_config
@@ -430,7 +430,7 @@ def _invalid_port_message(port: int) -> str:
 def _resolve_host(host: str | None, config: Any) -> str:
     """``--host``, else the configured host, else loopback.
 
-    A blank ``--host`` means "not passed" (matching serve), so it can never
+    A blank ``--host`` means "not passed" (matching the CLI), so it can never
     discard the configured bind. Both branches strip: whitespace reaching
     socket.bind() surfaces as an opaque gaierror, and duck-typed configs
     handed to this function never ran ``__post_init__`` normalization.

@@ -289,18 +289,6 @@ def _quickjs_snapshots_without_diffs(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _no_health_server(monkeypatch):
-    """Channel runners start no health server unless a test asks for a port.
-
-    The default binds ``0.0.0.0:8080``: open to the LAN while tests run, and
-    shared by every test that starts a runner at the same time.
-    """
-    from metasci_scribe.channels.channel_manager import ChannelManager
-
-    monkeypatch.setitem(ChannelManager.__init__.__kwdefaults__, "health_port", 0)
-
-
-@pytest.fixture(autouse=True)
 def _fresh_process_workspace():
     """``process_workspace()`` is read once per process; tests change env/cwd."""
     from metasci_scribe.paths import process_session_dirs, process_workspace

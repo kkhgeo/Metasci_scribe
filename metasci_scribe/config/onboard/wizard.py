@@ -26,7 +26,6 @@ from ..store import (
     remove_config_file,
     write_config_bytes,
 )
-from .channels import _step_channels
 from .steps import (
     _asks_reasoning_effort,
     _step_anthropic_auth_mode,
@@ -72,7 +71,6 @@ STEPS = [
     "Skills",
     "MCP Servers",
     "LaTeX",
-    "Channels",
 ]
 
 
@@ -379,7 +377,6 @@ _SECTION_LABELS: list[tuple[str, str]] = [
     ("skills", "Skills"),
     ("mcp", "MCP servers"),
     ("latex", "LaTeX (TinyTeX)"),
-    ("channels", "Channels"),
 ]
 _ALL_SECTIONS: frozenset[str] = frozenset(s for s, _ in _SECTION_LABELS)
 
@@ -545,9 +542,8 @@ def _run_onboard(
         only_sections: If given, restrict the wizard to exactly these section
             ids — the Keep/Modify/Reset prompt is skipped. Used by ``metasci-scribe
             configure <section>`` to re-run a single phase.
-        runtime: Optional application-scoped async runtime used by channel
-            login and credential probes. Direct callers may omit it; the
-            channel step then owns a runtime for the duration of that step.
+        runtime: Optional application-scoped async runtime. Direct callers
+            may omit it.
 
     Returns:
         True if configuration was saved, False if cancelled.
@@ -564,8 +560,7 @@ def _run_onboard(
         Revert covers **the YAML config file only**. Sections with filesystem
         side effects — ``_step_skills`` (downloads + ``npm`` installs),
         ``_step_mcp_servers`` (writes to ``mcp.yaml``), ``_step_tinytex``
-        (installs TinyTeX), and ``_step_channels`` (may ``pip install``
-        channel deps) — execute their side effects *before* the final
+        (installs TinyTeX) — execute their side effects *before* the final
         confirmation and are **not** rolled back when the user declines to
         save. "No" thus restores the YAML but does not uninstall packages,
         delete skill files, or remove MCP server entries.
@@ -659,7 +654,7 @@ def _run_onboard(
                 sections_to_run = sections_to_run - p.skip_set
 
             # In strict --non-interactive mode, optional sections that have
-            # no flag-driven equivalent (skills / mcp / latex / channels)
+            # no flag-driven equivalent (skills / mcp / latex)
             # would otherwise still open their interactive pickers — that
             # breaks the "no prompts" contract advertised by the flag.
             # Auto-skip them unless the caller explicitly opted in by NOT
@@ -670,7 +665,6 @@ def _run_onboard(
                     "skills",
                     "mcp",
                     "latex",
-                    "channels",
                 }
 
             console.print(
@@ -942,11 +936,6 @@ def _run_onboard(
 
             if "latex" in sections_to_run:
                 _step_tinytex()
-
-            if "channels" in sections_to_run:
-                for key, value in _step_channels(config, runtime=runtime).items():
-                    setattr(config, key, value)
-                _autosave(config)
 
             # Final confirmation — opportunity to revert. In strict
             # non-interactive mode, skip the prompt and commit silently.

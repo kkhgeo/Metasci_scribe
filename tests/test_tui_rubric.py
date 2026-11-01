@@ -29,7 +29,7 @@ async def test_typed_turn_carries_the_thread_marker_and_acknowledges(
 ):
     app = await capture_app(monkeypatch, workspace)
     async with app.run_test() as pilot:
-        session = app._channel_runtime.rubric
+        session = app._session_runtime.rubric
         tid = app._conversation_tid
         op = session.record(tid, sticky="- s")
         gateway = rubric_gateway(
@@ -180,7 +180,7 @@ async def test_rubric_command_updates_the_badge_before_the_next_message(
                 break
             await pilot.pause()
         assert app._rubric_badges.get(app._conversation_tid) == "on"
-        assert app._channel_runtime.rubric.changes_for(app._conversation_tid)
+        assert app._session_runtime.rubric.changes_for(app._conversation_tid)
 
 
 async def test_show_uses_the_loaded_agent_without_waiting(monkeypatch, workspace):

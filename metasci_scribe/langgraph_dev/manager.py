@@ -262,7 +262,7 @@ class WorkspaceMismatchError(RuntimeError):
     workspace differs from the workspace the caller requested.
 
     Surfaced by ``ensure_langgraph_dev`` on the cross-process reuse path so
-    callers (CLI / serve) can print a clear refuse-with-hint message instead
+    callers (CLI) can print a clear refuse-with-hint message instead
     of silently routing async sub-agent calls to a process pinned to a
     different workspace.
     """
@@ -420,7 +420,7 @@ _TUNNEL_URL_RE = re.compile(r"https://[A-Za-z0-9.-]+\.trycloudflare\.com")
 
 # Whether async sub-agents are usable in this process.
 #
-# - CLI / serve parent process: starts False; flipped True after
+# - CLI parent process: starts False; flipped True after
 #   ``ensure_langgraph_dev`` confirms the subprocess is healthy. Stays False
 #   on startup failure so ``_maybe_swap_async_subagents`` can fall back to
 #   in-process sync delegation instead of routing tool calls at a dead URL.
@@ -692,8 +692,8 @@ def _kill_owned_stale_process(port: int) -> bool:
 
 
 # Config fields that provably never reach the langgraph dev subprocess:
-# the channel stack + STT run in the CLI process, display/workspace/frontend
-# knobs shape the CLI itself, and keepalive is a lifecycle flag. Everything
+# display/workspace/frontend knobs shape the CLI itself, and keepalive is a
+# lifecycle flag. Everything
 # NOT listed here counts toward the drift fingerprint, so a newly added
 # config field defaults to "affects the server" — the failure mode is a
 # spurious restart hint, never silent staleness.
@@ -701,28 +701,9 @@ def _kill_owned_stale_process(port: int) -> bool:
 # tests can redirect it.
 _SUBAGENTS_DIR = Path(__file__).resolve().parent.parent / "subagents"
 
-_FINGERPRINT_EXCLUDED_PREFIXES = (
-    "channel_",
-    "imessage_",
-    "telegram_",
-    "discord_",
-    "slack_",
-    "feishu_",
-    "wechat_",
-    "dingtalk_",
-    "email_",
-    "qq_",
-    "signal_",
-    "stt_",
-    "gateway_backend",
-)
+_FINGERPRINT_EXCLUDED_PREFIXES = ("gateway_backend",)
 _FINGERPRINT_EXCLUDED_FIELDS = frozenset(
     {
-        "require_mention",
-        "text_chunk_limit",
-        "allowed_channels",
-        "dm_policy",
-        "shared_webhook_port",
         "show_thinking",
         "ui_backend",
         "log_level",
@@ -1421,7 +1402,7 @@ def _mismatch_message(
             "session first."
         )
     return running + (
-        "Stop the other metasci-scribe session (deploy / TUI / serve) "
+        "Stop the other metasci-scribe session (deploy / TUI) "
         f"or rerun with --workdir {recorded[0]}."
     )
 
@@ -1490,13 +1471,13 @@ def ensure_langgraph_dev(
 
     # Two layers of locking:
     #   1. ``FileLock`` — cross-process coordination. Without it, two CLI
-    #      shells (TUI + ``-p`` + ``serve``) racing on the cold-start window
+    #      shells (TUI + ``-p``) racing on the cold-start window
     #      can SIGKILL each other's still-booting subprocesses via
     #      ``_kill_owned_stale_process`` (Shell A's PID is in the file and
     #      bound to the port, but ``/ok`` isn't responding yet, so Shell B
     #      thinks it's stale).
     #   2. ``_LOCK`` (in-process RLock) — serializes intra-process callers
-    #      (rapid ``/resume`` in succession, channel threads). Reentrant so
+    #      (rapid ``/resume`` in succession, worker threads). Reentrant so
     #      the workspace-restart path can call ``stop_langgraph_dev`` from
     #      inside the critical section.
     RUNTIME.pid_dir.mkdir(parents=True, exist_ok=True)

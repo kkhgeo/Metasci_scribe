@@ -42,19 +42,19 @@ class TestNewCommand:
 
     async def test_clears_invited_experts_and_announces(self):
         """/new dismisses invited experts uniformly with channel-shutdown clear."""
-        from metasci_scribe.commands.base import ChannelRuntime, CommandContext
+        from metasci_scribe.commands.base import CommandContext, SessionRuntime
         from metasci_scribe.commands.implementation.session import NewCommand
 
         ui = MagicMock()
         ui.start_new_session = AsyncMock()
-        runtime = ChannelRuntime()
+        runtime = SessionRuntime()
         runtime.active_teams = ["idea-brainstorm"]
         ctx = CommandContext(
             dirs=SessionDirs(TEST_WORKSPACE),
             agent=None,
             thread_id="tid",
             ui=ui,
-            channel_runtime=runtime,
+            session_runtime=runtime,
         )
         await NewCommand().execute(ctx, [])
         assert runtime.active_teams == []
@@ -66,24 +66,24 @@ class TestNewCommand:
 
     async def test_no_announcement_when_no_experts_invited(self):
         """No noise on ``/new`` when the invite list is already empty."""
-        from metasci_scribe.commands.base import ChannelRuntime, CommandContext
+        from metasci_scribe.commands.base import CommandContext, SessionRuntime
         from metasci_scribe.commands.implementation.session import NewCommand
 
         ui = MagicMock()
         ui.start_new_session = AsyncMock()
-        runtime = ChannelRuntime()
+        runtime = SessionRuntime()
         ctx = CommandContext(
             dirs=SessionDirs(TEST_WORKSPACE),
             agent=None,
             thread_id="tid",
             ui=ui,
-            channel_runtime=runtime,
+            session_runtime=runtime,
         )
         await NewCommand().execute(ctx, [])
         ui.append_system.assert_not_called()
 
-    async def test_no_announcement_without_channel_runtime(self):
-        """Runs cleanly when no ChannelRuntime is attached."""
+    async def test_no_announcement_without_session_runtime(self):
+        """Runs cleanly when no SessionRuntime is attached."""
         from metasci_scribe.commands.base import CommandContext
         from metasci_scribe.commands.implementation.session import NewCommand
 
@@ -94,7 +94,7 @@ class TestNewCommand:
             agent=None,
             thread_id="tid",
             ui=ui,
-            channel_runtime=None,
+            session_runtime=None,
         )
         await NewCommand().execute(ctx, [])
         ui.append_system.assert_not_called()
@@ -103,19 +103,19 @@ class TestNewCommand:
         """A raising start_new_session leaves the current session's invites."""
         import pytest
 
-        from metasci_scribe.commands.base import ChannelRuntime, CommandContext
+        from metasci_scribe.commands.base import CommandContext, SessionRuntime
         from metasci_scribe.commands.implementation.session import NewCommand
 
         ui = MagicMock()
         ui.start_new_session = AsyncMock(side_effect=RuntimeError("gateway down"))
-        runtime = ChannelRuntime()
+        runtime = SessionRuntime()
         runtime.active_teams = ["idea-brainstorm"]
         ctx = CommandContext(
             dirs=SessionDirs(TEST_WORKSPACE),
             agent=None,
             thread_id="tid",
             ui=ui,
-            channel_runtime=runtime,
+            session_runtime=runtime,
         )
         with pytest.raises(RuntimeError):
             await NewCommand().execute(ctx, [])

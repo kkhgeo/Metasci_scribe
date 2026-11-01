@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from metasci_scribe.commands.base import ChannelRuntime, CommandContext
+from metasci_scribe.commands.base import CommandContext, SessionRuntime
 from metasci_scribe.paths import SessionDirs
 from tests.fakes.common import TEST_WORKSPACE
 
@@ -25,7 +25,7 @@ class _StubApp:
     def __init__(self) -> None:
         self._agent_loader = _Loader()
         self._conversation_tid = "thread-1"
-        self._channel_runtime = ChannelRuntime()
+        self._session_runtime = SessionRuntime()
         self._exiting = False
         self.model_updates: list[tuple[str, str | None]] = []
         self.refresh_calls: list[bool] = []
@@ -63,16 +63,12 @@ async def test_sync_tui_command_completion_adopts_agent_swap(monkeypatch):
         "_ensure_config",
         lambda: SimpleNamespace(model="gpt-5.5", provider="openai"),
     )
-    monkeypatch.setattr(tui_mod, "_channels_is_running", lambda: True)
-    app._channel_runtime.bind("old-agent", "old-thread")
 
     await tui_mod._sync_tui_command_completion(app, ctx, "old-agent", cmd)
 
     assert app._agent_loader.adopt_calls == ["new-agent"]
     assert app.model_updates == [("gpt-5.5", "openai")]
     assert app.refresh_calls == [True]
-    assert app._channel_runtime.agent == "new-agent"
-    assert app._channel_runtime.thread_id == "thread-1"
 
 
 async def test_sync_tui_command_completion_refreshes_without_agent_swap(monkeypatch):
@@ -86,8 +82,6 @@ async def test_sync_tui_command_completion_refreshes_without_agent_swap(monkeypa
         ui=SimpleNamespace(),
     )
     cmd = SimpleNamespace(name="/compact")
-
-    monkeypatch.setattr(tui_mod, "_channels_is_running", lambda: False)
 
     await tui_mod._sync_tui_command_completion(app, ctx, "same-agent", cmd)
 
@@ -109,40 +103,8 @@ async def test_sync_tui_command_completion_skips_unmounted_app(monkeypatch):
     )
     cmd = SimpleNamespace(name="/exit")
 
-    monkeypatch.setattr(tui_mod, "_channels_is_running", lambda: True)
-
     await tui_mod._sync_tui_command_completion(app, ctx, "old-agent", cmd)
 
     assert app._agent_loader.adopt_calls == []
     assert app.model_updates == []
     assert app.refresh_calls == []
-    assert app._channel_runtime.agent is None
-    assert app._channel_runtime.thread_id is None
-
-
-async def test_sync_tui_rebinds_runtime_on_thread_rotation_without_agent_swap(
-    monkeypatch,
-):
-    """Regression: ``/new`` and ``/resume`` rotate ``app._conversation_tid``
-    without swapping the agent.  The runtime must still pick up the new
-    thread id so the bus contract stays consistent with serve mode."""
-    import metasci_scribe.cli.tui_interactive as tui_mod
-
-    app = _StubApp()
-    app._conversation_tid = "rotated-thread"
-    app._agent_loader.agent = "same-agent"
-    app._channel_runtime.bind("same-agent", "old-thread")
-    ctx = CommandContext(
-        dirs=SessionDirs(TEST_WORKSPACE),
-        agent="same-agent",
-        thread_id="rotated-thread",
-        ui=SimpleNamespace(),
-    )
-    cmd = SimpleNamespace(name="/new")
-
-    monkeypatch.setattr(tui_mod, "_channels_is_running", lambda: True)
-
-    await tui_mod._sync_tui_command_completion(app, ctx, "same-agent", cmd)
-
-    assert app._channel_runtime.agent == "same-agent"
-    assert app._channel_runtime.thread_id == "rotated-thread"

@@ -467,7 +467,7 @@ def test_post_policy_resolves_off_the_event_loop(monkeypatch):
     runs with no running loop."""
     import asyncio
 
-    import metasci_scribe.channels.interaction as interaction_mod
+    import metasci_scribe.stream.interaction as interaction_mod
 
     on_loop_thread = []
 

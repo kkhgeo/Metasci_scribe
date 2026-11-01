@@ -11,7 +11,7 @@ User-facing verbs match the WebUI gallery: **invite** to add an expert,
 **dismiss** to remove one. Internal state field stays ``active_teams``
 for wire compatibility.
 
-Backing store is ``ChannelRuntime.active_teams`` (see
+Backing store is ``SessionRuntime.active_teams`` (see
 ``metasci_scribe/commands/base.py``). WebUI users get the same effect via
 its gallery + langgraph-sdk ``config.configurable``; these commands are
 the TUI-side equivalent.
@@ -180,7 +180,7 @@ class ExpertCommand(Command):
         return matches
 
     async def execute(self, ctx: CommandContext, args: list[str]) -> None:
-        runtime = ctx.channel_runtime
+        runtime = ctx.session_runtime
         if runtime is None:
             ctx.ui.append_system(
                 "/expert requires a session runtime; not available in this context.",
@@ -259,7 +259,7 @@ class ExpertCommand(Command):
 
 
 def _current_active_teams(ctx: CommandContext) -> list[str]:
-    runtime = ctx.channel_runtime
+    runtime = ctx.session_runtime
     return list(runtime.active_teams) if runtime is not None else []
 
 

@@ -26,7 +26,7 @@ from . import store
 
 # Tools that run shell commands and need manual HITL approval (subject to
 # shell_allow_list). Single source of truth for every interrupt consumer
-# (stream/display.py, channels/interaction.py) — keep aligned with the agent's
+# (stream/display.py, stream/interaction.py) — keep aligned with the agent's
 # `interrupt_on` set in agent.py.
 HITL_SHELL_TOOLS = ("execute", "run_in_background")
 
@@ -169,7 +169,6 @@ class GatewaySurface(StrEnum):
     surface resolves its backend once at startup and threads it explicitly.
     """
 
-    SERVE = "serve"
     SINGLE_SHOT = "single_shot"
     INTERACTIVE = "interactive"
     TUI = "tui"
@@ -338,7 +337,7 @@ class ScribeConfig:
 
     # Per-surface overrides of ``gateway_backend``. Each production surface can
     # pick its own backend; ``"inherit"`` defers to the global ``gateway_backend``
-    # above. The fixed-workspace surfaces (serve, single-shot, standalone) default
+    # above. The fixed-workspace surfaces (single-shot, standalone) default
     # to ``inherit``, so the global flag moves them. The interactive CLI and TUI
     # default to ``local`` instead: the server path is still lossy there (the
     # per-session workspace is not applied server-side, #413, and per-run config
@@ -346,7 +345,6 @@ class ScribeConfig:
     # them - reaching the server backend on those surfaces takes an explicit
     # ``langgraph_server`` here. Resolve with :func:`resolve_gateway_backend`;
     # never read these fields directly for a routing decision.
-    gateway_backend_serve: Literal["inherit", "local", "langgraph_server"] = "inherit"
     gateway_backend_single_shot: Literal["inherit", "local", "langgraph_server"] = (
         "inherit"
     )
@@ -359,7 +357,7 @@ class ScribeConfig:
     )
 
     # Proactive pushes (#263): a conversation armed for proactive pushes in
-    # ``metasci-scribe serve`` may get one unprompted message once it has gone quiet.
+    # a served session may get one unprompted message once it has gone quiet.
     # These settings tune when; arming is per conversation, so there is no
     # global on/off switch.
     # Minutes since the conversation's last activity before a push is considered.
@@ -452,111 +450,6 @@ class ScribeConfig:
     # langchain-openrouter (its app_categories kwarg expects list[str]).
     openrouter_app_categories: str = OPENROUTER_DEFAULT_APP_CATEGORIES
 
-    # Channel Settings
-    channel_enabled: str = ""  # "imessage" | "telegram" | "discord" | "slack" | "wechat" | "dingtalk" | "feishu" | "email" | "qq" | "signal" | "" (comma-separated for multiple)
-    channel_send_thinking: bool = True  # forward thinking to any channel
-    channel_debug_tracing: bool = False  # emit extra inbound diagnostics at DEBUG
-    require_mention: str = "group"  # "always" | "group" | "off"
-    text_chunk_limit: int = 0  # 0 = use capability default
-    allowed_channels: str = ""  # comma-separated channel IDs, empty = allow all
-
-    # iMessage Settings
-    imessage_enabled: bool = False  # legacy compat
-    imessage_allowed_senders: str = ""
-
-    # Telegram Settings
-    telegram_bot_token: str = ""
-    telegram_allowed_senders: str = ""
-    telegram_proxy: str = ""
-
-    # Discord Settings
-    discord_bot_token: str = ""
-    discord_allowed_senders: str = ""
-    discord_allowed_channels: str = ""
-    discord_proxy: str = ""
-
-    # Slack Settings
-    slack_bot_token: str = ""
-    slack_app_token: str = ""
-    slack_allowed_senders: str = ""
-    slack_allowed_channels: str = ""
-    slack_proxy: str = ""
-
-    # Feishu Settings
-    feishu_app_id: str = ""
-    feishu_app_secret: str = ""
-    feishu_verification_token: str = ""
-    feishu_encrypt_key: str = ""
-    feishu_webhook_port: int = 9000
-    feishu_allowed_senders: str = ""
-    feishu_domain: str = "https://open.feishu.cn"
-    feishu_proxy: str = ""
-    feishu_subscription_mode: str = "webhook"  # "webhook" | "websocket"
-
-    # WeChat Settings
-    wechat_backend: str = "wecom"
-    wechat_webhook_port: int = 9001
-    wechat_allowed_senders: str = ""
-    wechat_proxy: str = ""
-    wechat_wecom_corp_id: str = ""
-    wechat_wecom_agent_id: str = ""
-    wechat_wecom_secret: str = ""
-    wechat_wecom_token: str = ""
-    wechat_wecom_encoding_aes_key: str = ""
-    wechat_mp_app_id: str = ""
-    wechat_mp_app_secret: str = ""
-    wechat_mp_token: str = ""
-    wechat_mp_encoding_aes_key: str = ""
-    # Personal WeChat (iLink Bot) — credentials obtained via QR-code login.
-    # Run: python -m metasci_scribe.channels.wechat.serve --qr-login
-    wechat_personal_account_id: str = ""
-    wechat_personal_token: str = ""
-    wechat_personal_base_url: str = ""
-    wechat_personal_cdn_base_url: str = ""
-    wechat_personal_dm_policy: str = "open"
-    wechat_personal_group_policy: str = "disabled"
-    wechat_personal_group_allowed: str = ""
-
-    # DingTalk Settings
-    dingtalk_client_id: str = ""
-    dingtalk_client_secret: str = ""
-    dingtalk_allowed_senders: str = ""
-    dingtalk_proxy: str = ""
-
-    # Email Settings
-    email_imap_host: str = ""
-    email_imap_port: int = 993
-    email_imap_username: str = ""
-    email_imap_password: str = ""
-    email_imap_mailbox: str = "INBOX"
-    email_imap_use_ssl: bool = True
-    email_smtp_host: str = ""
-    email_smtp_port: int = 587
-    email_smtp_username: str = ""
-    email_smtp_password: str = ""
-    email_smtp_use_tls: bool = True
-    email_from_address: str = ""
-    email_poll_interval: int = 30
-    email_mark_seen: bool = True
-    email_max_body_chars: int = 12000
-    email_subject_prefix: str = "Re: "
-    email_allowed_senders: str = ""
-
-    # QQ Settings
-    qq_app_id: str = ""
-    qq_app_secret: str = ""
-    qq_allowed_senders: str = ""
-
-    # Signal Settings
-    signal_phone_number: str = ""
-    signal_cli_path: str = "signal-cli"
-    signal_config_dir: str = ""
-    signal_allowed_senders: str = ""
-    signal_rpc_port: int = 7583
-
-    # Shared webhook port (0 = disabled)
-    shared_webhook_port: int = 9000
-
     # HITL (Human-in-the-Loop) Settings
     auto_approve: bool = False  # Auto-approve all tool executions without prompting
     auto_mode: bool = False  # Run unattended: imply auto_approve and disable ask_user
@@ -596,21 +489,11 @@ class ScribeConfig:
     # entirely; the one-time legacy migration sweep still runs.
     checkpoint_keep_per_thread: int = 1000
 
-    # DM access control policy
-    dm_policy: str = "allowlist"
-
     # OpenAI API mode - "" = auto, "true" = force Responses, "false" = force Completions
     use_responses_api: str = ""
 
     # ccproxy
     ccproxy_port: int = 8000
-
-    # STT (Speech-to-Text) Settings
-    stt_enabled: bool = False
-    stt_language: str = "auto"  # "auto" | "zh" | "en"
-    stt_model: str = ""  # override model id; empty = auto-select by language
-    stt_device: str = "cpu"  # "cpu" | "cuda"
-    stt_compute_type: str = "int8"  # "int8" | "float16" | "float32"
 
     def __post_init__(self) -> None:
         # A non-positive or non-int sandbox_execute_timeout (e.g. a hand-edited
@@ -841,7 +724,7 @@ def _config_to_dict(config: ScribeConfig) -> dict[str, Any]:
 
 
 # Secret fields, listed by name rather than matched on it: a name rule would
-# miss ``feishu_encrypt_key`` and catch ``mimo_token_plan_base_url``.
+# catch ``mimo_token_plan_base_url``.
 API_KEY_FIELDS: frozenset[str] = frozenset(
     {
         "anthropic_api_key",
@@ -868,36 +751,14 @@ API_KEY_FIELDS: frozenset[str] = frozenset(
         "tavily_api_key",
     }
 )
-CHANNEL_SECRET_FIELDS: frozenset[str] = frozenset(
-    {
-        "telegram_bot_token",
-        "discord_bot_token",
-        "slack_bot_token",
-        "slack_app_token",
-        "feishu_app_secret",
-        "feishu_verification_token",
-        "feishu_encrypt_key",
-        "wechat_wecom_secret",
-        "wechat_wecom_token",
-        "wechat_wecom_encoding_aes_key",
-        "wechat_mp_app_secret",
-        "wechat_mp_token",
-        "wechat_mp_encoding_aes_key",
-        "wechat_personal_token",
-        "dingtalk_client_secret",
-        "email_imap_password",
-        "email_smtp_password",
-        "qq_app_secret",
-    }
-)
-SECRET_FIELDS: frozenset[str] = API_KEY_FIELDS | CHANNEL_SECRET_FIELDS
+SECRET_FIELDS: frozenset[str] = API_KEY_FIELDS
 
 
 def secret_hint(key: str, value: str) -> str | None:
     """The last four characters of an API key longer than eight, else ``None``.
 
-    Passwords, tokens and channel secrets get no hint: it would show a large
-    part of a short password.
+    Passwords and tokens get no hint: it would show a large part of a
+    short password.
     """
     if key in API_KEY_FIELDS and len(value) > 8:
         return "…" + value[-4:]
@@ -1036,7 +897,6 @@ def _normalize_literal_fields(config: ScribeConfig) -> None:
 
 
 _GATEWAY_SURFACE_FIELDS: dict[GatewaySurface, str] = {
-    GatewaySurface.SERVE: "gateway_backend_serve",
     GatewaySurface.SINGLE_SHOT: "gateway_backend_single_shot",
     GatewaySurface.INTERACTIVE: "gateway_backend_interactive",
     GatewaySurface.TUI: "gateway_backend_tui",
@@ -1256,7 +1116,6 @@ _ENV_MAPPINGS = {
     "ui_backend": "METASCI_SCRIBE_UI_BACKEND",
     "log_level": "METASCI_SCRIBE_LOG_LEVEL",
     "gateway_backend": "METASCI_SCRIBE_GATEWAY_BACKEND",
-    "gateway_backend_serve": "METASCI_SCRIBE_GATEWAY_BACKEND_SERVE",
     "gateway_backend_single_shot": "METASCI_SCRIBE_GATEWAY_BACKEND_SINGLE_SHOT",
     "gateway_backend_interactive": "METASCI_SCRIBE_GATEWAY_BACKEND_INTERACTIVE",
     "gateway_backend_tui": "METASCI_SCRIBE_GATEWAY_BACKEND_TUI",
@@ -1277,7 +1136,6 @@ _ENV_MAPPINGS = {
     "openrouter_app_title": "METASCI_SCRIBE_OPENROUTER_APP_TITLE",
     "openrouter_app_categories": "METASCI_SCRIBE_OPENROUTER_APP_CATEGORIES",
     "dangerous_mode": "METASCI_SCRIBE_DANGEROUS_MODE",
-    "channel_debug_tracing": "METASCI_SCRIBE_CHANNEL_DEBUG_TRACING",
     "ccproxy_port": "METASCI_SCRIBE_CCPROXY_PORT",
     "use_responses_api": "METASCI_SCRIBE_USE_RESPONSES_API",
     "checkpoint_keep_per_thread": "METASCI_SCRIBE_CHECKPOINT_KEEP_PER_THREAD",

@@ -76,31 +76,6 @@ dev = [
     "build>=1.0",
     "pre-commit>=3.5.0",
 ]
-telegram = ["python-telegram-bot>=21.0"]
-discord = ["discord.py>=2.3"]
-slack = ["slack-sdk>=3.27", "aiohttp>=3.9"]
-wechat = ["pycryptodome>=3.20", "aiohttp>=3.9", "qrcode>=7.4", "certifi>=2024.0"]
-feishu = ["lark-oapi>=1.4.0"]
-qq = [
-    "qq-botpy>=1.0",
-    "cryptography>=41.0",
-    "qrcode>=7.4",
-]
-stt = ["faster-whisper>=1.0"]
-oauth = ["ccproxy-api>=0.2.10"]
-all-channels = [
-    "python-telegram-bot>=21.0",
-    "discord.py>=2.3",
-    "aiohttp>=3.9",
-    "slack-sdk>=3.27",
-    "pycryptodome>=3.20",
-    "qrcode>=7.4",
-    "certifi>=2024.0",
-    "lark-oapi>=1.4.0",
-    "qq-botpy>=1.0",
-    "cryptography>=41.0",
-    "qrcode>=7.4",
-]
 
 [project.urls]
 "Upstream (EvoScientist v0.3.8)" = "https://github.com/EvoScientist/EvoScientist"

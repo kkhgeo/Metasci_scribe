@@ -9,7 +9,6 @@ from deepagents.backends.protocol import GlobResult, GrepResult, LsResult
 from deepagents.backends.utils import file_data_to_string, validate_path
 
 from metasci_scribe import agent_shell, backends, paths
-from metasci_scribe.channels.base import Channel, RawIncoming
 from metasci_scribe.cli.file_mentions import resolve_file_mentions
 from metasci_scribe.stream.events import build_agent_stream_input
 
@@ -243,18 +242,3 @@ def test_file_mention_path_can_be_read(tmp_path, name, data, dangerous):
     assert read.error is None
     if name == "notes.txt":
         assert file_data_to_string(read.file_data) == data.decode()
-
-
-def test_channel_annotation_names_the_file_tool_path():
-    local = r"C:\project\media\paper.pdf"
-    raw = RawIncoming(
-        sender_id="u",
-        chat_id="c",
-        text="Read the paper",
-        media_files=[local],
-        content_annotations=[f"[document: {local}]"],
-    )
-    message = Channel._raw_to_inbound(SimpleNamespace(name="test"), raw)
-
-    assert message.content == "Read the paper\n[document: /C:/project/media/paper.pdf]"
-    assert message.media == [local]
