@@ -828,6 +828,41 @@ def test_the_client_prompts_for_a_skill_install_under_a_session_grant(monkeypatc
     assert resolution.decisions is None
 
 
+@pytest.mark.usefixtures("no_mcp")
+@pytest.mark.parametrize(
+    "path",
+    ["/.metasci-scribe/skills/helper/SKILL.md", "/skills/helper/SKILL.md"],
+    ids=["state folder", "skills route"],
+)
+def test_the_agent_cannot_write_a_skill_into_the_project(home, project, path):
+    """A skill is instructions the agent later follows, so writing one is an
+    install, and an install needs a person: file tools refuse it outright."""
+    calls = [
+        AIMessage(
+            "",
+            tool_calls=[_call("w1", "write_file", file_path=path, content=SKILL_MD)],
+        ),
+        AIMessage(
+            "",
+            tool_calls=[
+                _call("e1", "edit_file", file_path=path, old_string="A", new_string="B")
+            ],
+        ),
+    ]
+    agent, _model = _skill_install_agent(project, calls)
+    result = asyncio.run(
+        agent.ainvoke(
+            {"messages": [HumanMessage("go")]},
+            {"configurable": {"thread_id": "t", "hitl_suppressed": False}},
+        )
+    )
+    assert not result.get("__interrupt__")
+    answers = [str(m.content) for m in result["messages"] if m.type == "tool"]
+    assert len(answers) == 2
+    assert all("may not write" in a for a in answers), answers
+    assert not (project / ".metasci-scribe" / "skills").exists()
+
+
 def test_config_policy_never_clears_a_skill_install_on_its_own():
     from metasci_scribe.stream.interaction import resolve_config_decisions
 

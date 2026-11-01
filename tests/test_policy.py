@@ -62,23 +62,30 @@ def project(home) -> Path:
     [
         "OPENAI_API_KEY",
         "ANTHROPIC_API_KEY",
-        "ANTHROPIC_BASE_URL",
-        "MINIMAX_BASE_URL",
         "CUSTOM_OPENAI_API_KEY",
         "TAVILY_API_KEY",
         "GITHUB_TOKEN",
         "AWS_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY",
-        "AZURE_OPENAI_ENDPOINT",
     ],
 )
-def test_provider_credentials_and_endpoints_may_come_from_a_workspace_env(key):
+def test_provider_credentials_may_come_from_a_workspace_env(key):
     assert policy.dotenv_key_allowed(key)
 
 
 @pytest.mark.parametrize(
     "key",
     [
+        # Endpoints come from the global config only: a cloned paper folder
+        # must not redirect traffic and manuscript text.
+        "OPENAI_BASE_URL",
+        "ANTHROPIC_BASE_URL",
+        "MINIMAX_BASE_URL",
+        "CUSTOM_OPENAI_BASE_URL",
+        "OLLAMA_BASE_URL",
+        "OPENAI_API_BASE",
+        "OPENAI_API_URL",
+        "AZURE_OPENAI_ENDPOINT",
         "METASCI_SCRIBE_DANGEROUS_MODE",
         "METASCI_SCRIBE_LANGGRAPH_DEV_PORT",
         "metasci_scribe_dangerous_mode",
@@ -164,7 +171,7 @@ def test_the_dotenv_merge_takes_only_allowed_keys(tmp_path, monkeypatch):
     assert "GIT_CONFIG_COUNT" not in os.environ
     assert "PYTHONPATH" not in os.environ
     assert os.environ["OPENAI_API_KEY"] == "sk-from-dotenv"
-    assert os.environ["OPENAI_BASE_URL"] == "https://api.example.test/v1"
+    assert "OPENAI_BASE_URL" not in os.environ
     assert settings.env_origin("OPENAI_API_KEY") == {
         "source": "dotenv",
         "path": str(env_file),
@@ -387,6 +394,11 @@ def test_config_and_code_the_app_loads_cannot_be_written(home, project):
         project / ".metasci-scribe" / "state.db",
         project / ".metasci-scribe" / "skills" / ".installed.yaml",
         project / ".metasci-scribe" / "skills" / "helper" / ".installed.yaml",
+        # Skills are instructions the agent later follows: an unapproved
+        # write there is an unapproved install, in the project and global tiers.
+        project / ".metasci-scribe" / "skills" / "helper" / "SKILL.md",
+        project / ".metasci-scribe" / "skills" / "helper" / "scripts" / "run.py",
+        data / "skills" / "helper" / "SKILL.md",
         project / ".langgraph_api" / "store.pckl",
         data / "sessions.db",
         data / "auth" / "chatgpt.json",
@@ -432,8 +444,6 @@ def test_config_and_code_the_app_loads_cannot_be_written(home, project):
     allowed = [
         project / "paper.tex",
         project / "figures" / "f1.py",
-        project / ".metasci-scribe" / "skills" / "helper" / "SKILL.md",
-        project / ".metasci-scribe" / "skills" / "helper" / "scripts" / "run.py",
         project / "env.md",
         project / "environment.yml",
         project / "config.yaml",
@@ -441,7 +451,7 @@ def test_config_and_code_the_app_loads_cannot_be_written(home, project):
         project / ".github" / "workflows" / "ci.yml",
         project / "my.pth.md",
         data / "memories" / "profile" / "me.md",
-        data / "skills" / "helper" / "SKILL.md",
+        data / "memories" / "autoskill-proposals" / "helper" / "SKILL.md",
     ]
     assert [p for p in refused if not _refused(p)] == []
     assert [p for p in allowed if _refused(p)] == []
@@ -480,6 +490,8 @@ def test_file_tools_refuse_the_protected_files_in_every_mode(home, project):
             str(home / ".metasci-scribe" / "sessions.db"),
             str(Path(sys.prefix) / "Lib" / "site-packages" / "sitecustomize.py"),
             str(Path(policy.__file__).with_name("planted.py")),
+            str(project / ".metasci-scribe" / "skills" / "helper" / "SKILL.md"),
+            str(home / ".metasci-scribe" / "skills" / "helper" / "SKILL.md"),
         ],
     }
     for backend, keys in cases.items():
@@ -495,7 +507,52 @@ def test_file_tools_refuse_the_protected_files_in_every_mode(home, project):
     # Ordinary files still work, in both modes.
     assert not default.write("/paper.tex", "x").error
     assert not dangerous.write(str(project / "notes.md"), "x").error
-    assert not default.write("/.metasci-scribe/skills/helper/SKILL.md", "x").error
+    assert default.write("/.metasci-scribe/skills/helper/SKILL.md", "x").error
+    assert not (project / ".metasci-scribe" / "skills").exists()
+
+
+def test_the_skills_route_refuses_writes_in_the_project_tier(home, project):
+    from metasci_scribe.backends import MergedSkillsBackend
+
+    skills = project / ".metasci-scribe" / "skills"
+    skills.mkdir(parents=True)
+    (skills / "mine").mkdir()
+    (skills / "mine" / "SKILL.md").write_text("old", encoding="utf-8")
+    backend = MergedSkillsBackend(
+        primary_dir=str(skills),
+        global_dir=str(home / ".metasci-scribe" / "skills"),
+        secondary_dir=str(project / "builtin"),
+    )
+    assert backend.write("/new/SKILL.md", "x").error
+    assert backend.edit("/mine/SKILL.md", "old", "new").error
+    assert backend.upload_files([("/new/SKILL.md", b"x")])[0].error
+    assert not (skills / "new").exists()
+    assert (skills / "mine" / "SKILL.md").read_text(encoding="utf-8") == "old"
+    assert not backend.read("/mine/SKILL.md").error
+
+
+def test_autoskills_still_writes_its_proposals_and_not_the_skills(home, project):
+    from metasci_scribe.backends import build_autoskill_agent_backend
+
+    memories = home / ".metasci-scribe" / "memories"
+    proposals = memories / "autoskill-proposals"
+    skills = project / ".metasci-scribe" / "skills"
+    for folder in (proposals, skills):
+        folder.mkdir(parents=True)
+    backend = build_autoskill_agent_backend(
+        memory_dir=memories, proposals_dir=proposals, skills_dir=skills
+    )
+    # Proposals go through their own route; the sandbox root refuses raw writes
+    # by its own rule, and the skills route by the policy.
+    assert not backend.write(
+        "/autoskill-proposals/helper/SKILL.md", "---\nname: helper\n---\n"
+    ).error
+    assert (proposals / "helper" / "SKILL.md").is_file()
+    assert not backend.edit(
+        "/autoskill-proposals/helper/SKILL.md", "helper", "helper2"
+    ).error
+    assert backend.write("/skills/helper/SKILL.md", "x").error
+    assert not (skills / "helper").exists()
 
 
 def test_the_server_secret_cannot_be_read_by_file_tools(home, project):

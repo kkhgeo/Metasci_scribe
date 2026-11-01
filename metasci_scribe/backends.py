@@ -1821,13 +1821,17 @@ class MergedSkillsBackend(BackendProtocol):
     """Skills backend that merges up to three skill directories.
 
     Priority (high → low):
-    1. primary   — workspace/.metasci-scribe/skills/  (project-local, writable)
+    1. primary   — workspace/.metasci-scribe/skills/  (project-local)
     2. global    — ~/.metasci-scribe/skills/  (user global, read-only)
     3. secondary — metasci_scribe/skills/  (built-in, PyPI, read-only)
 
     Higher-priority skills override lower-priority skills with the same name.
     All directories share the same virtual path namespace (/skills/).
-    Only the workspace tier (primary) allows write and edit operations.
+    No tier takes a write from the agent: a skill is instructions it later
+    follows, so writing one is an install, and installs need a person
+    (``policy.write_refusal`` refuses every skills tier; ``writable_primary``
+    only picks the error message). Harness code (``install_skill``, approved
+    AutoSkills proposals) writes the folders directly.
     """
 
     def __init__(

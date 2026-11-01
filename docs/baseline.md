@@ -202,3 +202,29 @@ Other decisions:
   "Not ready yet" and points to `/login` (Continue with ChatGPT) or `configure provider`.
 - The `/login` warning, two lines, before the browser opens: the agent can read the paper folder; commands
   always need approval in chat and autonomous runs get no shell.
+
+## Task 7: what a workspace `.env` can no longer set
+
+A workspace `.env` (the one `find_dotenv` finds at or above the start folder) is a file the agent is
+steered to write and a file that arrives with a cloned paper folder, so `get_effective_config` now merges
+only provider credentials from it: an uppercase name ending in `_API_KEY`, `_KEY`, `_KEY_ID`, `_TOKEN`,
+`_SECRET`, `_API_VERSION`, `_ORG_ID`, `_ORGANIZATION`, `_PROJECT`, `_PROJECT_ID` or `_REGION`, plus
+`GOOGLE_APPLICATION_CREDENTIALS` (`metasci_scribe/policy.py`, `dotenv_key_allowed`). Everything else in the
+file is ignored, with no warning yet. In particular these must now come from the shell or the config file:
+
+- every `METASCI_SCRIBE_*` setting (`METASCI_SCRIBE_DANGEROUS_MODE`, `METASCI_SCRIBE_WORKSPACE_DIR`,
+  `METASCI_SCRIBE_MEMORIES_DIR`, the langgraph dev port and host, ...);
+- every endpoint: `*_BASE_URL`, `*_API_BASE`, `*_API_URL`, `*_ENDPOINT` (`OPENAI_BASE_URL`,
+  `ANTHROPIC_BASE_URL`, `MINIMAX_BASE_URL`, `CUSTOM_*_BASE_URL`, `OLLAMA_BASE_URL`, `AZURE_OPENAI_ENDPOINT`);
+  `.env.example` still lists the `*_BASE_URL` names, which T15 should move to the config-file section;
+- anything that changes how a program runs: `GIT_*`, `GCM_*`, `SSH_*`, `PYTHON*`, `NODE_*`, `NPM_*`, `LD_*`,
+  `DYLD_*`, `UV_*`, `PIP_*`, `CONDA_*`, `JAVA_*`, `PERL*`, `RUBY*`, `BASH_*`, `XDG_*`, and any name
+  containing `PATH`, `PROXY`, `SSL`, `CERT`, `CA_BUNDLE` or `TRACING` (so `HTTPS_PROXY`,
+  `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`);
+- LangSmith tracing (`LANGCHAIN_*`, `LANGSMITH_*`, `LANGGRAPH_*`);
+- lowercase or mixed-case names (Windows would map `Git_Ssh_Command` onto `GIT_SSH_COMMAND`).
+
+The same round made the agent's file tools refuse, in every mode, to write `.env`, anything under the
+project's `.metasci-scribe/` (its skills tier included: writing a skill is an install, which needs a person),
+the data and config folders, `.git`, `.ssh`, shell and Python startup files and the Python environment the
+app runs in; an agent `skill_manager install` pauses for approval and is unavailable in autonomous runs.

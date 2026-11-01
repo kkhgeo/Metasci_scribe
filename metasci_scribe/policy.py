@@ -4,8 +4,8 @@ The agent reads untrusted papers, so every rule here assumes a prompt
 injection is steering it. The rules live in one module so each check is read
 in one place and applied the same way everywhere:
 
-* a workspace ``.env`` may set provider credentials and endpoints, nothing
-  that changes the app's own settings or how programs run
+* a workspace ``.env`` may set provider credentials, not endpoints, and
+  nothing that changes the app's own settings or how programs run
   (:func:`dotenv_key_allowed`);
 * git runs for skill installs without any execution hook from the
   environment, without hooks, and over plain transports only
@@ -39,10 +39,13 @@ from . import paths
 # Workspace .env
 # =============================================================================
 
-# The names a workspace ``.env`` may set: a provider's credential or endpoint,
-# by the suffixes those use. The deny lists below win over a matching suffix.
-# Only an uppercase name counts: Windows looks environment variables up
-# without regard to case, so ``Git_Ssh_Command`` would set ``GIT_SSH_COMMAND``.
+# The names a workspace ``.env`` may set: a provider's credential, by the
+# suffixes those use. Not an endpoint: a ``.env`` that arrived with a cloned
+# paper folder must not send traffic and manuscript text elsewhere, so
+# ``*_BASE_URL`` and its kin come from the global config only. The deny lists
+# below win over a matching suffix. Only an uppercase name counts: Windows
+# looks environment variables up without regard to case, so
+# ``Git_Ssh_Command`` would set ``GIT_SSH_COMMAND``.
 _DOTENV_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
 _DOTENV_ALLOWED_SUFFIXES = (
     "_API_KEY",
@@ -50,10 +53,6 @@ _DOTENV_ALLOWED_SUFFIXES = (
     "_KEY_ID",
     "_TOKEN",
     "_SECRET",
-    "_BASE_URL",
-    "_API_BASE",
-    "_API_URL",
-    "_ENDPOINT",
     "_API_VERSION",
     "_ORG_ID",
     "_ORGANIZATION",
@@ -223,11 +222,9 @@ _PROTECTED_NAMES = frozenset(
 _PROTECTED_NAME_PREFIXES = (".env.",)
 _PROTECTED_NAME_SUFFIXES = (".pth", "_profile.ps1")
 # Folders whose whole content is such configuration or code. The workspace
-# state folder is handled apart: its ``skills`` tier stays under the skill
-# rules.
+# state folder is handled apart, because the data folder shares its name.
 _PROTECTED_DIR_NAMES = frozenset({".git", ".ssh", ".langgraph_api", ".vscode", ".idea"})
 _STATE_DIR_NAME = ".metasci-scribe"
-_STATE_SKILLS_DIR = "skills"
 
 PROTECTED_WRITE_ERROR = (
     "{name} is configuration or code that Metasci Scribe, Python, git or the "
@@ -272,22 +269,16 @@ def _protected_name(name: str) -> bool:
 
 
 def _state_dir_refuses(parts: tuple[str, ...]) -> bool:
-    """A workspace ``.metasci-scribe`` folder: only its skills tier is writable."""
-    lowered = [part.casefold() for part in parts]
-    if _STATE_DIR_NAME not in lowered:
-        return False
-    index = lowered.index(_STATE_DIR_NAME)
-    inside = lowered[index + 1 :]
-    return not (len(inside) >= 2 and inside[0] == _STATE_SKILLS_DIR)
+    """A workspace ``.metasci-scribe`` folder, its skills tier included: a
+    skill is instructions the agent later follows, so writing one is an
+    install, and installs need a person. Harness code writes there directly."""
+    return _STATE_DIR_NAME in (part.casefold() for part in parts[:-1])
 
 
 def _data_dir_refuses(real: str) -> bool:
-    """The app's data folder: only memories and the skills tier are writable."""
-    for allowed in (
-        paths.MEMORIES_DIR,
-        paths.GLOBAL_MEMORIES_DIR,
-        paths.GLOBAL_SKILLS_DIR,
-    ):
+    """The app's data folder: only the memories are writable. The global
+    skills tier is refused for the same reason as the workspace one."""
+    for allowed in (paths.MEMORIES_DIR, paths.GLOBAL_MEMORIES_DIR):
         if (
             _under(real, str(allowed))
             and real.casefold() != ospath.realpath(str(allowed)).casefold()

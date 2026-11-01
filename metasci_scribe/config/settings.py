@@ -1022,20 +1022,22 @@ def get_effective_config(
         1. CLI arguments (``cli_overrides``)
         2. Parent-process environment variables for any ``METASCI_SCRIBE_*`` key
         3. ``.env`` file at (or above) the current working directory, for
-           provider credentials and endpoints only
+           provider credentials only
         4. Parent-process environment variables for everything else
         5. Config file (``~/.config/metasci-scribe/config.yaml``)
         6. Dataclass defaults
 
     A workspace ``.env`` is the per-project credential store, by convention:
-    a provider key or endpoint there wins over a global one in the shell
-    (``.bashrc``). It is also a file in a folder the agent writes to and
-    that may have arrived with a cloned paper, so nothing else is taken from
-    it: no ``METASCI_SCRIBE_*`` setting (those come from the user's config
-    and shell; a ``.env`` could otherwise raise the agent's own mode), and
-    nothing that changes how git, Python, Node, a shell or an HTTP client
-    runs (``GIT_SSH_COMMAND``, ``PYTHONPATH``, proxies, ...). The allow
-    list is :func:`metasci_scribe.policy.dotenv_key_allowed`.
+    a provider key there wins over a global one in the shell (``.bashrc``).
+    It is also a file in a folder the agent writes to and that may have
+    arrived with a cloned paper, so nothing else is taken from it: no
+    endpoint (``*_BASE_URL`` would send traffic and manuscript text
+    elsewhere; endpoints come from the config file), no ``METASCI_SCRIBE_*``
+    setting (those come from the user's config and shell; a ``.env`` could
+    otherwise raise the agent's own mode), and nothing that changes how git,
+    Python, Node, a shell or an HTTP client runs (``GIT_SSH_COMMAND``,
+    ``PYTHONPATH``, proxies, ...). The allow list is
+    :func:`metasci_scribe.policy.dotenv_key_allowed`.
 
     Tradeoff: ``OPENAI_API_KEY=xxx metasci-scribe ...`` inline overrides
     still lose to a workspace ``.env`` containing ``OPENAI_API_KEY``,
