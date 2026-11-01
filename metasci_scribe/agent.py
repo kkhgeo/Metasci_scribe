@@ -316,6 +316,27 @@ def _load_mcp_tools_cached(
 # =============================================================================
 
 
+def _agent_routes(cfg, workspace: Workspace) -> dict:
+    """The routes beside the workspace: ``/skills/``, and ``/memories/`` only
+    when memory is on, so a session with memory off has no path to the
+    memory folder."""
+    from .backends import MemoryFilesystemBackend, MergedSkillsBackend
+
+    routes: dict = {
+        "/skills/": MergedSkillsBackend(
+            primary_dir=str(workspace.skills_dir),
+            global_dir=str(_paths_mod.GLOBAL_SKILLS_DIR),
+            secondary_dir=SKILLS_DIR,
+        )
+    }
+    if MemoryControls.from_config(cfg).memory_enabled:
+        routes["/memories/"] = MemoryFilesystemBackend(
+            root_dir=str(_paths_mod.MEMORIES_DIR),
+            virtual_mode=True,
+        )
+    return routes
+
+
 def _configured_system_prompt() -> str:
     return get_system_prompt(bash_on_windows=uses_bash())
 
@@ -728,11 +749,7 @@ def _get_default_backend(
     """
     from deepagents.backends import CompositeBackend
 
-    from .backends import (
-        CustomSandboxBackend,
-        MemoryFilesystemBackend,
-        MergedSkillsBackend,
-    )
+    from .backends import CustomSandboxBackend
     from .setup.research_env import research_env_overrides
 
     _paths_mod.require_workspace_root(workspace.root)
@@ -742,8 +759,6 @@ def _get_default_backend(
         # the run's HITL-suppression state so a mid-session flip can't go stale.
         guard_dangerous = False
     root_dir = str(work_dir if work_dir is not None else workspace.root)
-    memory_dir = str(_paths_mod.MEMORIES_DIR)
-    global_skills_dir = str(_paths_mod.GLOBAL_SKILLS_DIR)
 
     ws_backend = CustomSandboxBackend(
         root_dir=root_dir,
@@ -753,22 +768,7 @@ def _get_default_backend(
         env=research_env_overrides(),
         skills_dir=workspace.skills_dir,
     )
-    sk_backend = MergedSkillsBackend(
-        primary_dir=str(workspace.skills_dir),
-        global_dir=global_skills_dir,
-        secondary_dir=SKILLS_DIR,
-    )
-    mem_backend = MemoryFilesystemBackend(
-        root_dir=memory_dir,
-        virtual_mode=True,
-    )
-    return CompositeBackend(
-        default=ws_backend,
-        routes={
-            "/skills/": sk_backend,
-            "/memories/": mem_backend,
-        },
-    )
+    return CompositeBackend(default=ws_backend, routes=_agent_routes(cfg, workspace))
 
 
 def _model_retry_middleware(
@@ -1271,11 +1271,7 @@ def create_cli_agent(
     from deepagents.backends import CompositeBackend
 
     from . import paths as _paths
-    from .backends import (
-        CustomSandboxBackend,
-        MemoryFilesystemBackend,
-        MergedSkillsBackend,
-    )
+    from .backends import CustomSandboxBackend
     from .setup.research_env import research_env_overrides
 
     _paths.require_workspace_root(workspace.root)
@@ -1298,9 +1294,6 @@ def create_cli_agent(
 
     work_dir = str(work_dir if work_dir is not None else workspace.root)
 
-    _mem_dir = str(_paths.MEMORIES_DIR)
-    _global_skills_dir = str(_paths.GLOBAL_SKILLS_DIR)
-
     ws_backend = CustomSandboxBackend(
         root_dir=work_dir,
         timeout=cfg.sandbox_execute_timeout,
@@ -1311,22 +1304,7 @@ def create_cli_agent(
         env=research_env_overrides(),
         skills_dir=workspace.skills_dir,
     )
-    sk_backend = MergedSkillsBackend(
-        primary_dir=str(workspace.skills_dir),
-        global_dir=_global_skills_dir,
-        secondary_dir=SKILLS_DIR,
-    )
-    mem_backend = MemoryFilesystemBackend(
-        root_dir=_mem_dir,
-        virtual_mode=True,
-    )
-    be = CompositeBackend(
-        default=ws_backend,
-        routes={
-            "/skills/": sk_backend,
-            "/memories/": mem_backend,
-        },
-    )
+    be = CompositeBackend(default=ws_backend, routes=_agent_routes(cfg, workspace))
 
     # Delegate middleware construction to the single source of truth so the
     # CLI agent never drifts from the default chain.

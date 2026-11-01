@@ -1490,9 +1490,9 @@ def guarded_path(
 ) -> Path:
     """Resolve ``key`` with ``resolve``, refusing what no agent may touch.
 
-    The one check every backend serving an agent goes through, in every mode:
-    the private state (:func:`policy.is_private_state`) for any operation,
-    and with ``write`` the configuration and code the app loads
+    The one check every backend serving an agent goes through: the private
+    state (:func:`policy.is_private_state`) and ``.env`` files
+    (:func:`policy.is_env_file`) for any operation, and with ``write`` the configuration and code the app loads
     (:func:`policy.write_refusal`). ``PermissionError`` because every file
     operation reports an ``OSError`` as a failed call, and some let a
     ``ValueError`` through.
@@ -1509,6 +1509,8 @@ def guarded_path(
         raise PermissionError(policy.ODD_NAME_ERROR.format(name=odd))
     if policy.is_private_state(resolved):
         raise PermissionError(policy.PRIVATE_STATE_ERROR)
+    if policy.is_env_file(key) or policy.is_env_file(resolved):
+        raise PermissionError(policy.ENV_FILE_ERROR.format(name=Path(key).name))
     if write:
         refusal = policy.write_refusal(resolved)
         if refusal is not None:
@@ -1519,7 +1521,8 @@ def guarded_path(
 class _GuardedFiles:
     """File operations for agents: :func:`guarded_path` on every path, the
     write check on every operation that changes a file, and no trace of the
-    private state in a listing or search from a parent folder."""
+    private state or a ``.env`` file in a listing or search from a parent
+    folder."""
 
     def _resolve_path(self, key: str) -> Path:
         return guarded_path(self._sanitized_path, key)
@@ -1592,7 +1595,10 @@ class _GuardedFiles:
             if location not in hidden:
                 # A virtual path is rooted at cwd; a real one replaces it here.
                 host = location.lstrip("/") if self.virtual_mode else location
-                hidden[location] = policy.is_private_state(self.cwd / host)
+                full = self.cwd / host
+                hidden[location] = policy.is_private_state(full) or policy.is_env_file(
+                    full
+                )
             if not hidden[location]:
                 visible.append(item)
         return visible

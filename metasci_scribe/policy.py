@@ -10,8 +10,8 @@ in one place and applied the same way everywhere:
 * git runs for skill installs without any execution hook from the
   environment, without hooks, and over plain transports only
   (:func:`git_env`, :data:`GIT_SAFE_ARGS`, :data:`GIT_CLONE_ARGS`);
-* the saved sign-in and the server secret are never readable through a tool
-  (:func:`is_private_state`);
+* the saved sign-in, the server secret and ``.env`` files are never readable
+  through a tool (:func:`is_private_state`, :func:`is_env_file`);
 * configuration and code the app, Python, git or a shell loads at startup is
   never writable through a tool, in any mode (:func:`write_refusal`);
 * a path with a name Windows would rewrite on open (a trailing dot or
@@ -226,6 +226,30 @@ def is_private_state(path: str | Path) -> bool:
         return paths.is_auth_path(path) or paths._is_inside(path, paths.SERVER_HOME)
     except (OSError, ValueError, RuntimeError):
         return True
+
+
+ENV_FILE_ERROR = (
+    "{name} can hold API keys, so file tools do not open it. "
+    "Metasci Scribe reads it itself when it starts."
+)
+
+
+def _env_name(name: str) -> bool:
+    lowered = name.casefold()
+    return lowered == ".env" or lowered.startswith(".env.")
+
+
+def is_env_file(path: str | Path) -> bool:
+    """Whether *path*, as given or with links followed, is named ``.env`` or
+    ``.env.*``. The app's own loader opens these files directly; a tool, which
+    a prompt injection in a paper can steer, does not.
+    """
+    given = Path(path).name
+    try:
+        real = Path(ospath.realpath(path)).name
+    except (OSError, ValueError, RuntimeError):
+        return True
+    return _env_name(given) or _env_name(real)
 
 
 # =============================================================================

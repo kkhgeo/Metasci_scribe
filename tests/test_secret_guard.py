@@ -495,3 +495,148 @@ def test_no_human_gate_settings(monkeypatch):
     for setting in ("auto_mode", "auto_approve"):
         with_config(**{setting: True})
         assert no_human_gate(attended) is True, setting
+
+
+# ---------------------------------------------------------------- .env files
+
+ENV_SECRET = "sk-env-file-secret"
+
+
+def _tool_answers(result) -> str:
+    return " ".join(str(m.content) for m in result["messages"] if m.type == "tool")
+
+
+@pytest_mark_no_mcp
+@pytest.mark.parametrize("suppressed", [False, True], ids=["attended", "unattended"])
+@pytest.mark.parametrize(
+    "name", [".env", ".env.local", ".env.example", ".ENV", "sub/.env.production"]
+)
+def test_agent_tools_never_show_a_dotenv_file(tmp_path, name, suppressed):
+    project = tmp_path / "paper"
+    target = project / name
+    target.parent.mkdir(parents=True)
+    target.write_text(f"OPENAI_API_KEY={ENV_SECRET}\n", encoding="utf-8")
+    (project / "notes.md").write_text(f"not the key: {ENV_SECRET[:6]}\n", "utf-8")
+    calls = [
+        _call("r", "read_file", file_path=f"/{name}"),
+        _call("ls", "ls", path=f"/{Path(name).parent.as_posix()}".replace("/.", "/")),
+        _call("g", "grep", pattern=ENV_SECRET, path="/", output_mode="content"),
+        _call("c", "grep", pattern="OPENAI_API_KEY", output_mode="files_with_matches"),
+        _call("h", "grep", pattern="KEY", path=f"/{name}"),
+        _call("f", "glob", pattern="**/.*"),
+        _call("e", "edit_file", file_path=f"/{name}", old_string="a", new_string="b"),
+    ]
+    agent, _model = _agent(project, [AIMessage("", tool_calls=calls)])
+
+    result = _run(agent, suppressed=suppressed)
+
+    assert ENV_SECRET not in _tool_answers(result)
+    by_call = {
+        m.tool_call_id: str(m.content) for m in result["messages"] if m.type == "tool"
+    }
+    assert "Error" in by_call["r"]
+    assert "can hold API keys" in by_call["e"]
+    # The name shows up only where the agent asked for it by name.
+    for listing in ("ls", "g", "c", "f"):
+        assert Path(name).name not in by_call[listing]
+    assert target.read_text(encoding="utf-8").endswith(f"{ENV_SECRET}\n")
+
+
+@pytest_mark_no_mcp
+def test_agent_tools_keep_the_other_files(tmp_path):
+    (tmp_path / ".env").write_text("X=1\n", encoding="utf-8")
+    (tmp_path / ".envrc").write_text("marker-envrc\n", encoding="utf-8")
+    (tmp_path / "env.md").write_text("marker-env\n", encoding="utf-8")
+    calls = [
+        _call("l", "ls", path="/"),
+        _call("r", "read_file", file_path="/env.md"),
+        _call("s", "read_file", file_path="/.envrc"),
+    ]
+    agent, _model = _agent(tmp_path, [AIMessage("", tool_calls=calls)])
+
+    answers = _tool_answers(_run(agent, suppressed=True))
+
+    assert "/env.md" in answers
+    assert "marker-env" in answers
+    assert "marker-envrc" in answers
+
+
+def test_a_link_to_a_dotenv_file_is_refused_and_hidden(tmp_path):
+    (tmp_path / ".env").write_text(f"KEY={ENV_SECRET}\n", encoding="utf-8")
+    try:
+        (tmp_path / "notes.txt").symlink_to(tmp_path / ".env")
+    except OSError:
+        pytest.skip("this account may not create symlinks")
+    backend = CustomSandboxBackend(root_dir=str(tmp_path))
+    assert backend.read("/notes.txt").error
+    assert not backend.ls("/").entries
+    assert not backend.glob("*").matches
+
+
+def test_every_file_operation_refuses_a_dotenv_file(tmp_path):
+    (tmp_path / ".env").write_text(f"KEY={ENV_SECRET}\n", encoding="utf-8")
+    backend = CustomSandboxBackend(root_dir=str(tmp_path))
+    assert backend.read("/.env").error
+    assert backend.download_files(["/.env"])[0].error
+    assert backend.write("/.env", "x").error
+    assert backend.edit("/.env", "KEY", "x").error
+    assert backend.upload_files([("/.env", b"x")])[0].error
+    assert backend.delete("/.env").error
+    assert not backend.ls("/").entries
+    assert not backend.glob("**/*").matches
+    assert not backend.grep("KEY", "/").matches
+    assert not backend.grep("KEY", "/.env").matches
+
+
+def test_the_apps_own_loader_still_reads_a_dotenv_file(tmp_path, monkeypatch):
+    from metasci_scribe.config import settings
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=sk-from-dotenv\n", encoding="utf-8")
+    monkeypatch.setattr(settings, "find_dotenv", lambda *a, **k: str(env_file))
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(settings, "_ENV_ORIGINS", {})
+
+    settings.get_effective_config()
+
+    assert settings.os.environ["OPENAI_API_KEY"] == "sk-from-dotenv"
+    settings.os.environ.pop("OPENAI_API_KEY")
+
+
+# ---------------------------------------------------------------- /memories/
+
+
+@pytest_mark_no_mcp
+@pytest.mark.parametrize("enabled", [False, True], ids=["off", "on"])
+def test_memories_route_follows_the_memory_setting(tmp_path, enabled):
+    memory = paths.MEMORIES_DIR / "profile"
+    memory.mkdir(parents=True, exist_ok=True)
+    (memory / "note.md").write_text("marker-memory\n", encoding="utf-8")
+    calls = [
+        _call("r", "read_file", file_path="/memories/profile/note.md"),
+        _call("d", "delete", file_path="/memories/profile/note.md"),
+    ]
+    agent, _model = _agent(
+        tmp_path / "paper",
+        [AIMessage("", tool_calls=calls)],
+        memory_profile_enabled=enabled,
+        memory_observations_enabled=enabled,
+    )
+
+    answers = _tool_answers(_run(agent, suppressed=True))
+
+    assert ("marker-memory" in answers) is enabled
+    assert (memory / "note.md").is_file()
+
+
+def test_default_backend_mounts_memories_only_when_memory_is_on(tmp_path, monkeypatch):
+    from metasci_scribe import agent as agent_mod
+
+    for enabled in (False, True):
+        cfg = ScribeConfig(
+            memory_profile_enabled=enabled, memory_observations_enabled=enabled
+        )
+        monkeypatch.setattr(agent_mod, "_ensure_config", lambda *a, _c=cfg: _c)
+        backend = agent_mod._get_default_backend(Workspace(tmp_path))
+        assert ("/memories/" in backend.routes) is enabled
+        assert "/skills/" in backend.routes
