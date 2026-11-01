@@ -1406,6 +1406,7 @@ def _resolve_hitl_approval(
     """
     global _session_auto_approve
 
+    from ..config.settings import HITL_SHELL_TOOLS
     from .interaction import (
         config_policy_snapshot,
         decisions_after_human_approval,
@@ -1416,9 +1417,13 @@ def _resolve_hitl_approval(
         return _HitlResolution([{"type": "approve"}], human_prompted=False)
 
     # Session "approve all" is an explicit human opt-in → blanket-approve
-    # everything (dangerous set included), unlike unattended auto_approve below.
-    # Read here, before any prompt: the prompt is where the grant gets set.
-    if _session_auto_approve:
+    # everything but shell commands, each of which a person still sees (see
+    # ``agent._batch_has_shell``). Read here, before any prompt: the prompt is
+    # where the grant gets set.
+    if _session_auto_approve and not any(
+        isinstance(req, dict) and req.get("name") in HITL_SHELL_TOOLS
+        for req in action_requests
+    ):
         return _HitlResolution(
             [{"type": "approve"} for _ in action_requests],
             human_prompted=False,
@@ -1515,7 +1520,7 @@ def _prompt_hitl_approval(
     else:
         approve_label = f"Approve all {n}"
         reject_label = f"Reject all {n}"
-    auto_label = "Approve all (session)"
+    auto_label = "Approve, and stop asking this session except for commands"
 
     try:
         question = questionary.select(

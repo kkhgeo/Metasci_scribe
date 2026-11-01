@@ -1069,7 +1069,8 @@ def _hitl_when(request) -> bool:
 
     A call skips the interrupt when its config carries
     ``configurable.hitl_suppressed`` (an unattended run, backend-guarded) or
-    ``configurable.hitl_approve_all`` (the session's human "approve all").
+    ``configurable.hitl_approve_all`` (the session's human "approve all"),
+    which does not reach the shell: see :func:`_batch_has_shell`.
     Both are read off the run's own config, carried on
     ``request.runtime.config`` — langchain builds the runtime for both its
     batch (``tool=None``) and per-call request shapes, so the request always
@@ -1087,7 +1088,33 @@ def _hitl_when(request) -> bool:
     from .backends import is_hitl_approve_all
 
     config = getattr(getattr(request, "runtime", None), "config", None)
-    return _hitl_when_served(request) and not is_hitl_approve_all(config)
+    if not _hitl_when_served(request):
+        return False
+    return _batch_has_shell(request) or not is_hitl_approve_all(config)
+
+
+def _batch_has_shell(request) -> bool:
+    """Whether this call's model message includes a shell command.
+
+    Every command is shown to the person, grant or no grant: a command runs
+    with their full rights, and nothing else stops one that text the agent
+    read asked for. The whole message counts, not just this call, because the
+    predicate runs again at resume and a resume may lose the grant: if a
+    ``delete`` beside a command paused only on the second pass, the answers
+    would no longer line up with the calls.
+    """
+    from langchain_core.messages import AIMessage
+
+    from .config.settings import HITL_SHELL_TOOLS
+
+    call = getattr(request, "tool_call", None) or {}
+    if call.get("name") in HITL_SHELL_TOOLS:
+        return True
+    state = getattr(request, "state", None) or {}
+    for message in reversed(state.get("messages") or []):
+        if isinstance(message, AIMessage):
+            return any(c["name"] in HITL_SHELL_TOOLS for c in message.tool_calls)
+    return False
 
 
 def _hitl_when_served(request) -> bool:

@@ -26,6 +26,13 @@ from tests.fakes.common import attended_config as _attended_config
 from tests.fakes.common import interrupt_event as _interrupt_event
 
 
+def _delete_interrupt_event(index: int) -> dict:
+    """A pause a session grant answers: it does not cover shell commands."""
+    event = _interrupt_event(index)
+    event["action_requests"] = [{"name": "delete", "args": {"file_path": "/x.txt"}}]
+    return event
+
+
 class TestRichCliHitlRoundBudget:
     """Rich CLI ``_run_streaming`` resume-loop budgeting."""
 
@@ -42,7 +49,7 @@ class TestRichCliHitlRoundBudget:
             nonlocal stream_calls
             stream_calls += 1
             if stream_calls <= 60:
-                yield _interrupt_event(stream_calls)
+                yield _delete_interrupt_event(stream_calls)
                 return
             yield {"type": "text", "content": "All sixty rounds done"}
             yield {"type": "done", "content": "All sixty rounds done"}
@@ -221,7 +228,7 @@ class TestRichCliHitlRoundBudget:
         async def _fake_stream(_request):
             nonlocal stream_calls
             stream_calls += 1
-            yield _interrupt_event(stream_calls)
+            yield _delete_interrupt_event(stream_calls)
 
         agent = FakeCheckpointAgent()
         gateway = FakeGraphGateway(stream=_fake_stream, checkpoint=agent)
@@ -276,7 +283,7 @@ class TestRichCliHitlRoundBudget:
             nonlocal stream_calls
             stream_calls += 1
             if stream_calls <= 3:
-                yield _interrupt_event(stream_calls)
+                yield _delete_interrupt_event(stream_calls)
                 return
             yield {"type": "text", "content": "kept going"}
             yield {"type": "done", "content": "kept going"}
@@ -408,6 +415,22 @@ def _interrupts_then_done(interrupts: int):
     return _fake_stream
 
 
+def _deletes_then_done(interrupts: int):
+    """``_interrupts_then_done`` with pauses a session grant answers."""
+    calls = 0
+
+    async def _fake_stream(_request):
+        nonlocal calls
+        calls += 1
+        if calls <= interrupts:
+            yield _delete_interrupt_event(calls)
+            return
+        yield {"type": "text", "content": "finished"}
+        yield {"type": "done", "content": "finished"}
+
+    return _fake_stream
+
+
 class TestRichCliSessionGrantReachesTheGraph:
     """Which calls of a turn carry ``hitl_approve_all`` (the graph then skips the pause).
 
@@ -435,7 +458,7 @@ class TestRichCliSessionGrantReachesTheGraph:
 
     def test_a_turn_under_the_grant_is_keyed_from_its_first_call(self, monkeypatch):
         monkeypatch.setattr(display_mod, "_session_auto_approve", True)
-        gateway = FakeGraphGateway(stream=_interrupts_then_done(2))
+        gateway = FakeGraphGateway(stream=_deletes_then_done(2))
         assert self._run(gateway) == "finished"
         assert self._extras(gateway) == [GRANT, GRANT, GRANT]
 
@@ -449,7 +472,7 @@ class TestRichCliSessionGrantReachesTheGraph:
             display_mod._session_auto_approve = True
             return [{"type": "approve"}]
 
-        gateway = FakeGraphGateway(stream=_interrupts_then_done(3))
+        gateway = FakeGraphGateway(stream=_deletes_then_done(3))
         assert self._run(gateway, hitl_prompt_fn=_grant) == "finished"
         assert self._extras(gateway) == [None, None, GRANT, GRANT]
 
@@ -727,7 +750,7 @@ def test_resolver_reports_the_grant_only_on_its_fast_path(monkeypatch):
     import metasci_scribe.stream.interaction as interaction_mod
     from metasci_scribe.stream.interaction import ApprovalOutcome
 
-    pending = _interrupt_event(1)
+    pending = _delete_interrupt_event(1)
     monkeypatch.setattr(
         "metasci_scribe.agent._ensure_config",
         lambda: SimpleNamespace(

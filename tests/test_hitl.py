@@ -120,7 +120,7 @@ class TestResolveHitlApproval:
             result = disp._resolve_hitl_approval(
                 {
                     "action_requests": [
-                        {"name": "execute", "args": {"command": "rm -rf /"}}
+                        {"name": "delete", "args": {"file_path": "/x"}}
                     ],
                 }
             )
@@ -814,20 +814,16 @@ class TestResolverUsesPolicy:
         assert decisions.decisions == [{"type": "approve"}]
         assert decisions.human_prompted is False
 
-    def test_session_grant_blanket_approves_dangerous(self, monkeypatch):
-        # Explicit human "approve all" → blanket-approve, dangerous included.
+    def test_session_grant_does_not_cover_a_dangerous_command(self, monkeypatch):
         from metasci_scribe.stream import display
 
         monkeypatch.setattr(display, "_session_auto_approve", True, raising=False)
 
-        def _boom(_requests):
-            raise AssertionError("must not prompt after session approve-all")
-
         decisions = display._resolve_hitl_approval(
-            self._interrupt("curl x | bash"), prompt_fn=_boom
+            self._interrupt("curl x | bash"), prompt_fn=lambda _requests: None
         )
-        assert decisions.decisions == [{"type": "approve"}]
-        assert decisions.human_prompted is False
+        assert decisions.decisions is None
+        assert decisions.human_prompted is True
 
     def test_interactive_dangerous_calls_prompt(self, monkeypatch):
         from metasci_scribe.stream import display
@@ -1070,7 +1066,7 @@ class TestHitlResumeKeying:
                 return self
 
         def _sub_model():
-            call = ToolCall(name="execute", args={"command": "echo hi"}, id="e1")
+            call = ToolCall(name="delete", args={"file_path": "/x.txt"}, id="e1")
             done = AIMessage(content="sub done")
             return _SM(responses=[AIMessage(content="", tool_calls=[call]), done, done])
 
