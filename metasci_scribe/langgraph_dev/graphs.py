@@ -38,7 +38,7 @@ from metasci_scribe.paths import process_session_dirs
 from metasci_scribe.subagents._factory import build_async_subagent_graph
 
 # The server serves the workspace it was started for, and works in the run
-# folder of a ``--mode=run`` session (the manager sets
+# folder of a session with a run folder (the manager sets
 # ``METASCI_SCRIBE_WORKSPACE_DIR`` and ``METASCI_SCRIBE_RUN_DIR`` on the
 # subprocess). Memory graphs only need the workspace.
 _dirs = process_session_dirs()

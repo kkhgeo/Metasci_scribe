@@ -48,7 +48,7 @@ def build_metadata(dirs: SessionDirs, model: str | None) -> dict:
     """Build metadata dict for LangGraph checkpoint persistence.
 
     ``workspace_dir`` is the workspace root; ``run_dir`` is added only for a
-    ``--mode=run`` session.
+    thread stored with a run folder.
     """
     return {
         "agent_name": _agent_name(),

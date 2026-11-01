@@ -91,7 +91,7 @@ class GraphTarget:
     """Identifies the graph/workspace a thread operation targets.
 
     ``workspace_dir`` is the workspace root and ``run_dir`` the run folder a
-    ``--mode=run`` session works in (``SessionDirs.metadata()`` fills both).
+    session works in, if any (``SessionDirs.metadata()`` fills both).
     ``local_graph`` is the in-process execution handle required only by the
     local backend. Server backends select execution via ``graph_id``.
     """

@@ -157,3 +157,48 @@ def test_slash_commands_have_no_removed_entries():
     assert "/update" not in names
     # The rubric and goal workflows stay.
     assert {"/rubric", "/goal"} <= names
+
+
+@pytest.mark.parametrize(
+    "flag",
+    ["--dangerous", "--mode", "-m", "--name", "-n", "--host", "--workspace-mode"],
+)
+def test_removed_flags_are_refused(flag):
+    from typer.testing import CliRunner
+
+    from metasci_scribe.cli.commands import app
+
+    args = ["onboard", flag] if flag == "--workspace-mode" else [flag]
+    result = CliRunner().invoke(app, [*args, "x"])
+    assert result.exit_code == 2
+
+
+def test_the_help_describes_a_paper_writing_agent():
+    from typer.testing import CliRunner
+
+    from metasci_scribe.cli.commands import app
+
+    result = CliRunner().invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "paper" in result.output
+    assert "code execution" not in result.output
+
+
+def test_old_config_values_are_ignored(tmp_path, monkeypatch):
+    from metasci_scribe.config import settings
+
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        "dangerous_mode: true\ndefault_mode: run\nshow_thinking: false\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "get_config_path", lambda: config_file)
+    monkeypatch.setenv("METASCI_SCRIBE_DANGEROUS_MODE", "true")
+    monkeypatch.setenv("METASCI_SCRIBE_DEFAULT_MODE", "run")
+
+    config = settings.get_effective_config()
+
+    assert config.show_thinking is False
+    assert config.auto_approve is False
+    assert not hasattr(config, "dangerous_mode")
+    assert not hasattr(config, "default_mode")

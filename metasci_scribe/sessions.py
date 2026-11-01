@@ -1372,7 +1372,7 @@ async def _run_migration_sweep(
 # ---------------------------------------------------------------------------
 
 # ``user_version`` bit set once stored ``workspace_dir`` values name the
-# workspace root, with a ``--mode=run`` session's folder in ``run_dir``.
+# workspace root, with a run folder in ``run_dir``.
 _STORED_DIRS_VERSION = 2
 
 
@@ -1447,7 +1447,7 @@ async def _upgrade_stored_dirs() -> None:
     """Rewrite the folders stored before ``run_dir`` existed, once per DB.
 
     Run-mode sessions stored their run folder as ``workspace_dir``. Rows
-    whose folder has the name ``--mode=run`` generates get the workspace
+    whose folder has the generated run folder name get the workspace
     root plus ``run_dir``; no other row is rewritten, since readers
     normalise the stored folder themselves. Rows whose metadata is not
     valid JSON, or whose folder cannot be resolved, are skipped. AutoSkills
@@ -1625,7 +1625,7 @@ def _api_session_dirs() -> SessionDirs:
     """The workspace and run folder this langgraph dev server serves.
 
     ``start_langgraph_dev`` sets ``METASCI_SCRIBE_WORKSPACE_DIR`` (and
-    ``METASCI_SCRIBE_RUN_DIR`` for a ``--mode=run`` session) on the subprocess.
+    ``METASCI_SCRIBE_RUN_DIR`` for a session with a run folder) on the subprocess.
 
     NOTE: the first call resolves paths, a blocking syscall. Call this from a
     sync context or via :func:`_api_session_dirs_async` — never directly from

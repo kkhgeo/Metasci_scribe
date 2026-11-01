@@ -16,7 +16,6 @@ __all__ = [
     "StreamState",
     "SubAgentState",
     "_build_todo_stats",
-    "_deduplicate_run_name",
     "_parse_todo_items",
     "app",
     "main",
@@ -31,7 +30,6 @@ _LAZY_EXPORTS: dict[str, tuple[str, str]] = {
     "_build_todo_stats": ("..stream.state", "_build_todo_stats"),
     "_parse_todo_items": ("..stream.state", "_parse_todo_items"),
     "WELCOME_SLOGANS": ("._constants", "WELCOME_SLOGANS"),
-    "_deduplicate_run_name": (".agent", "_deduplicate_run_name"),
     "run_streaming": (".stream_runtime", "run_streaming"),
 }
 

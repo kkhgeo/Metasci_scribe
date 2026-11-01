@@ -2,8 +2,8 @@
 
 The interactive ``_step_*`` functions in ``steps.py`` use these for ``Choice``
 construction (or are checked against them by tests). The CLI ``onboard``
-command in ``cli/commands.py`` uses them to validate ``--provider`` /
-``--ui`` / ``--workspace-mode`` flag inputs.
+command in ``cli/commands.py`` uses them to validate ``--provider`` flag
+inputs.
 
 Single source of truth — adding a new provider here AND to the corresponding
 ``Choice(value=...)`` in ``steps.py`` is required; a drift test in
@@ -14,10 +14,7 @@ from __future__ import annotations
 
 VALID_PROVIDERS: frozenset[str] = frozenset({"openai", "anthropic"})
 
-VALID_WORKSPACE_MODES: frozenset[str] = frozenset({"daemon", "run"})
-
 
 __all__ = [
     "VALID_PROVIDERS",
-    "VALID_WORKSPACE_MODES",
 ]

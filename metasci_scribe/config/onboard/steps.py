@@ -471,41 +471,6 @@ def _step_reasoning_effort(config: ScribeConfig, provider: str) -> str:
     return effort
 
 
-def _step_workspace(config: ScribeConfig) -> str:
-    """Step 5: Configure workspace mode.
-
-    Args:
-        config: Current configuration.
-
-    Returns:
-        Selected mode ("daemon" or "run").
-    """
-    mode_choices = [
-        Choice(
-            title="Daemon (persistent workspace)",
-            value="daemon",
-        ),
-        Choice(
-            title="Run (isolated per-session)",
-            value="run",
-        ),
-    ]
-
-    mode = questionary.select(
-        "Default workspace mode:",
-        choices=mode_choices,
-        default=config.default_mode,
-        style=WIZARD_STYLE,
-        qmark=QMARK,
-        use_indicator=True,
-    ).ask()
-
-    if mode is None:
-        raise KeyboardInterrupt()
-
-    return mode
-
-
 def _step_thinking(config: ScribeConfig) -> bool:
     """Step 6: Configure thinking panel visibility.
 

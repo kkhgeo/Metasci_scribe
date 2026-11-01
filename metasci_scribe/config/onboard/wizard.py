@@ -45,7 +45,6 @@ from .steps import (
     _step_skills,
     _step_thinking,
     _step_tinytex,
-    _step_workspace,
 )
 from .style import (
     CONFIRM_STYLE,
@@ -313,7 +312,6 @@ _SECTION_LABELS: list[tuple[str, str]] = [
     ("provider", "LLM provider + API key"),
     ("model", "Model + reasoning effort"),
     ("auxiliary_model", "Auxiliary model (optional)"),
-    ("workspace", "Workspace mode"),
     ("thinking", "Thinking panel"),
     ("skills", "Skills"),
     ("mcp", "MCP servers"),
@@ -331,7 +329,6 @@ _FLAG_TO_SECTIONS: dict[str, frozenset[str]] = {
     # cascade to model for the same reason ``--provider`` does.
     "api_key": frozenset({"provider", "model"}),
     "model": frozenset({"model"}),
-    "workspace_mode": frozenset({"workspace"}),
     "show_thinking": frozenset({"thinking"}),
 }
 
@@ -790,19 +787,6 @@ def _run_onboard(
                     # Skip: single driver — clear any prior auxiliary config.
                     config.auxiliary_provider = ""
                     config.auxiliary_model = ""
-                _autosave(config)
-
-            if "workspace" in sections_to_run:
-                _require("workspace_mode", "Workspace mode")
-                preset_ws = _preset("workspace_mode")
-                if preset_ws is not None:
-                    config.default_mode = preset_ws
-                    console.print(
-                        f"  [green]✓ Workspace: {preset_ws}[/green]"
-                        "   [dim](--workspace-mode)[/dim]"
-                    )
-                else:
-                    config.default_mode = _step_workspace(config)
                 _autosave(config)
 
             if "thinking" in sections_to_run:

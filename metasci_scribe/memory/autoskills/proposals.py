@@ -136,7 +136,7 @@ def _normalize_workspace_dir(workspace_dir: str | Path | None) -> str | None:
 def upgrade_proposal_workspaces(memory_dir: str | Path) -> int:
     """Rewrite the ``workspace_dir`` of proposals stored before ``run_dir``.
 
-    Proposals made by ``--mode=run`` sessions named the run folder; they
+    Proposals made in run folders named the run folder; they
     belong to its workspace. Other proposals, and folders that cannot be
     resolved, are left as they are. Part of the one-time upgrade of stored
     values (see ``sessions._upgrade_stored_dirs``). Returns the number

@@ -1,8 +1,7 @@
-"""A ``--mode=run`` session: the workspace root plus the run folder it works in.
+"""A thread stored with a run folder: the workspace root plus that folder.
 
-Stored ``workspace_dir`` is always the root; ``run_dir`` is added only for a
-run-mode session. Daemon sessions keep the metadata, server and sandbox they
-had before.
+Stored ``workspace_dir`` is always the root; ``run_dir`` is added only for
+such a thread. Chat no longer makes run folders; a stored one still resumes.
 """
 
 from __future__ import annotations

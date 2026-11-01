@@ -40,7 +40,6 @@ FIELD_CHANNELS: dict[str, str] = {
     "show_thinking": "UI display flag (client-side rendering)",
     "ui_backend": "client UI selection",
     "log_level": "CLI-process logging",
-    "default_mode": "client-side startup mode selection",
     "default_workdir": "client-side run-dir selection; workspace reaches the"
     " server via GraphTarget / METASCI_SCRIBE_WORKSPACE_DIR",
     "langgraph_dev_keepalive": "server lifecycle flag consumed at spawn time,"

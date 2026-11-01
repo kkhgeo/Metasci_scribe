@@ -333,8 +333,8 @@ def _inject_subagent_middleware(
 ) -> None:
     """Ensure every subagent gets error handling and context management middleware.
 
-    Memory middleware is keyed to the workspace root, so a ``--mode=run``
-    session shares its project's memory.
+    Memory middleware is keyed to the workspace root, so a session in a run
+    folder shares its project's memory.
 
     Without this, subagent tool errors are caught by LangGraph's default
     ToolNode handler which produces terse messages without tracebacks or
@@ -1241,8 +1241,8 @@ def create_cli_agent(
     dev, notebooks, and CLI startup, which pass ``config=`` only).
 
     Args:
-        work_dir: The folder the agent works in (the session's
-            ``--mode=run`` folder, or the workspace root). If ``None``,
+        work_dir: The folder the agent works in (the run folder of a thread
+            stored with one, or the workspace root). If ``None``,
             defaults to ``workspace.root``.
         workspace: The workspace whose skills and memory the
             agent uses.

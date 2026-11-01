@@ -288,7 +288,7 @@ def _write_workspace_sidecar(
     """Record the workspace + pid of the langgraph dev we just started.
 
     ``run_dir`` is recorded next to the workspace when the server was started
-    for a ``--mode=run`` session, so a reuse check compares both.
+    for a session with a run folder, so a reuse check compares both.
 
     ``config_fingerprint`` (optional) captures the launch-time config subset
     the server consumed; keepalive reuse compares it to detect drift.
@@ -399,7 +399,7 @@ _PROCESS: subprocess.Popen | None = None
 # a thread from a different workspace) and trigger a restart so the deployed
 # sub-agents' cwd / METASCI_SCRIBE_WORKSPACE_DIR env match the new workspace.
 _PROCESS_WORKSPACE: Path | None = None
-# Run folder the running subprocess works in (``--mode=run``), else None.
+# Run folder the running subprocess works in, if any, else None.
 _PROCESS_RUN_DIR: Path | None = None
 
 # Byte offset into ``RUNTIME.log_file`` captured the instant before the current
@@ -701,7 +701,6 @@ _FINGERPRINT_EXCLUDED_FIELDS = frozenset(
         "show_thinking",
         "ui_backend",
         "log_level",
-        "default_mode",
         "default_workdir",
         "langgraph_dev_keepalive",
         "shell_allow_list",
@@ -943,7 +942,7 @@ def start_langgraph_dev(
             (the server builds its graphs for ``paths.process_workspace()``,
             which reads ``METASCI_SCRIBE_WORKSPACE_DIR``). Defaults to
             ``Path.cwd()``.
-        run_dir: The run folder of a ``--mode=run`` session, passed to the
+        run_dir: The run folder of a session with a run folder, passed to the
             server as ``METASCI_SCRIBE_RUN_DIR``. The server's sandbox works
             there; skills, memory and crons stay with the workspace.
         port: TCP port to bind. Defaults to 6174 (Kaprekar's constant).
@@ -1122,7 +1121,7 @@ def start_langgraph_dev(
     sub_env["METASCI_SCRIBE_LANGGRAPH_DEV_PORT"] = str(port)
     # Same reasoning for the bind interface: the deployed agent resolves its
     # self-dispatch URL from ``cfg.langgraph_dev_host``, so a host resolved by
-    # this caller (``metasci-scribe --host X``) must reach the subprocess too,
+    # this caller (from ``langgraph_dev_host``) must reach the subprocess too,
     # or async sub-agent launches would target whatever the config file says.
     sub_env["METASCI_SCRIBE_LANGGRAPH_DEV_HOST"] = host
     # The browser boundary: which pages and host names the server accepts
@@ -1433,7 +1432,7 @@ def ensure_langgraph_dev(
             resolved workspace so deployed async sub-agents see the same files
             as the main in-process agent. If None, the subprocess uses its
             own ``Path.cwd()`` (the CLI's launch directory).
-        run_dir: The run folder of a ``--mode=run`` session. The server is
+        run_dir: The run folder of a session with a run folder. The server is
             pinned to the pair: a running server for the same workspace but
             another run folder is restarted (when owned) or refused.
         backend: The calling surface's resolved gateway backend. When ``None``,

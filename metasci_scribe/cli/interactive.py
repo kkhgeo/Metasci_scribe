@@ -54,7 +54,6 @@ from ._constants import (
     build_metadata,
 )
 from .agent import (
-    _create_run_dir,
     _load_agent,
     _shorten_path,
 )
@@ -236,7 +235,6 @@ def print_banner(
     thread_id: str,
     workspace_dir: str | None = None,
     memory_dir: str | None = None,
-    mode: str | None = None,
     model: str | None = None,
     provider: str | None = None,
 ):
@@ -250,8 +248,6 @@ def print_banner(
         parts.append(("Model: ", model))
     if provider:
         parts.append(("Provider: ", provider))
-    if mode:
-        parts.append(("Mode: ", mode))
     for i, (label, value) in enumerate(parts):
         if i > 0:
             info.append("  ", style="dim")
@@ -425,30 +421,22 @@ async def _new_session_dirs(
     *,
     config: Any,
     backend: str | None,
-    mode: str | None,
-    run_name: str | None,
 ) -> SessionDirs:
     """The folders ``/new`` starts in, with the background agent server moved there.
 
-    ``--mode=run`` starts every session in a fresh run folder of the current
-    workspace; daemon mode works in its root. The server moves first, so the
-    new session's background work lands in its folder. Raises
+    A new session works in the workspace root. The server moves first, so
+    the new session's background work lands in its folder. Raises
     ``WorkspaceMismatchError`` when another session holds the server: the
-    session stays as it is and the fresh run folder is removed.
+    session stays as it is.
     """
     from .commands import _move_server_or_keep_session
 
-    workspace = current.workspace
-    new_dirs = SessionDirs(
-        workspace,
-        _create_run_dir(workspace, run_name) if mode == "run" else None,
-    )
+    new_dirs = SessionDirs(current.workspace)
     if not await _move_server_or_keep_session(
         config,
         target=new_dirs,
         current=current,
         backend=backend,
-        new_run_dir=True,
         status_message="[dim]Moving background agent server to the new session...[/dim]",
     ):
         console.print(
@@ -507,10 +495,8 @@ async def _run_rich_cli_streaming_turn(**kwargs: Any) -> str:
 
 def cmd_interactive(
     show_thinking: bool = True,
-    mode: str | None = None,
     model: str | None = None,
     provider: str | None = None,
-    run_name: str | None = None,
     thread_id: str | None = None,
     config=None,
     async_runtime: "AsyncRuntime | None" = None,
@@ -524,13 +510,10 @@ def cmd_interactive(
 
     Args:
         show_thinking: Whether to display thinking panels
-        mode: Workspace mode ('daemon' or 'run'), displayed in banner
         model: Model name to display in banner
         provider: LLM provider name to display in banner
-        run_name: Optional run name for /new session deduplication
         thread_id: Optional thread ID to resume a previous session
-        dirs: The session's workspace, and its run folder under
-            ``--mode=run`` (``/new`` then moves to a fresh run folder)
+        dirs: The session's workspace
     """
     from ..config import GatewaySurface, resolve_gateway_backend
     from .commands import warn_server_backend_hitl_caveats
@@ -938,8 +921,8 @@ def cmd_interactive(
             # at the outer function level.
 
             async def _on_start_new_session() -> None:
-                """NewCommand callback — move to a fresh run folder (run mode),
-                issue a new thread id, reset session-scoped status fields,
+                """NewCommand callback — return to the workspace root, issue a
+                new thread id, reset session-scoped status fields,
                 and kick off background agent reload. The dispatch block
                 refreshes the status bar post-execute (symmetric with
                 /compact)."""
@@ -947,8 +930,6 @@ def cmd_interactive(
                     state["dirs"],
                     config=config,
                     backend=gateway_backend,
-                    mode=mode,
-                    run_name=run_name,
                 )
                 state["dirs"] = new_dirs
                 state["thread_id"] = await graph_gateway.create_thread(
@@ -1043,7 +1024,6 @@ def cmd_interactive(
                     state["thread_id"],
                     str(state["dirs"].work_dir),
                     memory_dir,
-                    mode,
                     model,
                     provider,
                 )
@@ -1056,7 +1036,6 @@ def cmd_interactive(
                     state["thread_id"],
                     str(state["dirs"].work_dir),
                     memory_dir,
-                    mode,
                     model,
                     provider,
                 )

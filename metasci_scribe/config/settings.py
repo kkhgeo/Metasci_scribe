@@ -156,7 +156,6 @@ class ScribeConfig:
         model: Default model name (short name or full ID).
         auxiliary_provider: Provider for auxiliary_model (empty = use main provider).
         auxiliary_model: Model for memory workers + tool selector (empty = use main model).
-        default_mode: Default workspace mode ('daemon' or 'run').
         default_workdir: Default workspace directory (empty = use current working directory).
         show_thinking: Whether to show thinking panels in CLI.
     """
@@ -321,7 +320,6 @@ class ScribeConfig:
     memory_observation_cache_max_files: int = 2048
 
     # Workspace Settings
-    default_mode: Literal["daemon", "run"] = "daemon"
     default_workdir: str = ""
 
     # UI Settings
@@ -875,7 +873,6 @@ _ENV_MAPPINGS = {
     "anthropic_base_url": "ANTHROPIC_BASE_URL",
     "openai_api_key": "OPENAI_API_KEY",
     "openai_auth_mode": "METASCI_SCRIBE_OPENAI_AUTH_MODE",
-    "default_mode": "METASCI_SCRIBE_DEFAULT_MODE",
     "default_workdir": "METASCI_SCRIBE_WORKSPACE_DIR",
     "ui_backend": "METASCI_SCRIBE_UI_BACKEND",
     "log_level": "METASCI_SCRIBE_LOG_LEVEL",

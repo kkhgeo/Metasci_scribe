@@ -223,35 +223,6 @@ def test_registered_graphs_check_the_folders_they_work_in(served, monkeypatch, r
             asyncio.run(factory(other_run, running))
 
 
-def test_new_run_folders_never_reuse_an_existing_one(workspace, monkeypatch):
-    """Two sessions starting in the same second get different run folders."""
-    from datetime import datetime
-
-    import metasci_scribe.cli.agent as agent
-
-    class _SameSecond(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return datetime(2026, 10, 1, 12, 0, 0)
-
-    monkeypatch.setattr(agent, "datetime", _SameSecond)
-    first = agent._create_run_dir(workspace)
-    second = agent._create_run_dir(workspace)
-
-    assert first != second
-    assert first.is_dir()
-    assert second.is_dir()
-
-
-def test_create_run_dir_skips_dangling_symlink(workspace):
-    import metasci_scribe.cli.agent as agent
-
-    workspace.runs_dir.mkdir(parents=True)
-    (workspace.runs_dir / "exp").symlink_to(workspace.root / "does-not-exist")
-
-    assert agent._create_run_dir(workspace, "exp") == workspace.runs_dir / "exp_1"
-
-
 # ---------------------------------------------------------------------------
 # Failed child runs report why
 # ---------------------------------------------------------------------------
@@ -382,87 +353,33 @@ def test_owned_server_pinned_elsewhere_compares_folder_pair(workspace, monkeypat
     assert manager.owned_server_pinned_elsewhere(workspace.root, None) is False
 
 
-def test_ensure_async_subagent_server_refused_removes_run_dir(workspace):
-    """A session refused by another one's server leaves no empty run folder."""
-    import typer
-
-    from metasci_scribe.cli import commands
-    from metasci_scribe.langgraph_dev.manager import WorkspaceMismatchError
-
-    run = workspace.runs_dir / RUN
-    run.mkdir(parents=True)
-
-    def _refuse(*_a, **_k):
-        raise WorkspaceMismatchError("held by another session")
-
-    with (
-        patch("metasci_scribe.langgraph_dev.manager.ensure_langgraph_dev", _refuse),
-        pytest.raises(typer.Exit),
-    ):
-        commands._ensure_async_subagent_server(
-            MagicMock(), dirs=SessionDirs(workspace, run)
-        )
-
-    assert not run.exists()
-    assert workspace.runs_dir.is_dir()
-
-
-async def test_restore_thread_dirs_removes_unused_run_dir(workspace, tmp_path):
-    """A ``--mode=run`` resume works in the thread's folders, so the run
-    folder made at startup goes."""
-    from unittest.mock import AsyncMock
-
-    from metasci_scribe.cli import commands
-
-    started = SessionDirs(workspace, workspace.runs_dir / RUN)
-    started.run_dir.mkdir(parents=True)
-    stored = SessionDirs(Workspace(tmp_path / "other"))
-    gateway = SimpleNamespace(
-        get_thread_metadata=AsyncMock(return_value=stored.metadata())
-    )
-
-    with patch.object(commands, "_sync_background_agent_server_workspace", AsyncMock()):
-        restored = await commands._restore_thread_dirs(
-            "t1",
-            dirs=started,
-            served=started,
-            graph_gateway=gateway,
-            config=MagicMock(),
-        )
-
-    assert restored == stored
-    assert not started.run_dir.exists()
-
-
 async def _new_session(workspace, sync) -> SessionDirs:
-    """Run the Rich CLI ``/new`` folder switch of a ``--mode=run`` session."""
+    """Run the Rich CLI ``/new`` folder switch from a thread in a run folder."""
     from metasci_scribe.cli import commands
     from metasci_scribe.cli.interactive import _new_session_dirs
 
     with patch.object(commands, "_sync_background_agent_server_workspace", sync):
         return await _new_session_dirs(
-            SessionDirs(workspace),
+            SessionDirs(workspace, workspace.runs_dir / "exp"),
             config=MagicMock(),
             backend=None,
-            mode="run",
-            run_name="exp",
         )
 
 
-async def test_new_session_dirs_move_server_to_new_run_dir(workspace):
+async def test_new_session_returns_to_the_workspace_root(workspace):
     from unittest.mock import AsyncMock
 
     sync = AsyncMock()
     new_dirs = await _new_session(workspace, sync)
 
-    assert new_dirs == SessionDirs(workspace, workspace.runs_dir / "exp")
-    assert new_dirs.run_dir.is_dir()
+    assert new_dirs == SessionDirs(workspace)
     assert sync.await_args.kwargs["dirs"] == new_dirs
+    assert not workspace.runs_dir.exists()
 
 
-async def test_new_session_dirs_refused_removes_run_dir(workspace):
+async def test_new_session_dirs_refused_keeps_the_session(workspace):
     """Another session holds the server: ``/new`` fails and the session
-    keeps its folders, with no empty run folder left behind."""
+    keeps its folders."""
     from unittest.mock import AsyncMock
 
     from metasci_scribe.langgraph_dev.manager import WorkspaceMismatchError
@@ -471,8 +388,6 @@ async def test_new_session_dirs_refused_removes_run_dir(workspace):
     with pytest.raises(WorkspaceMismatchError):
         await _new_session(workspace, sync)
 
-    assert not (workspace.runs_dir / "exp").exists()
-
 
 async def test_new_session_dirs_survive_failed_sync(workspace):
     """Any other sync failure starts the new session without background work."""
@@ -480,5 +395,4 @@ async def test_new_session_dirs_survive_failed_sync(workspace):
 
     new_dirs = await _new_session(workspace, AsyncMock(side_effect=OSError("down")))
 
-    assert new_dirs == SessionDirs(workspace, workspace.runs_dir / "exp")
-    assert new_dirs.run_dir.is_dir()
+    assert new_dirs == SessionDirs(workspace)

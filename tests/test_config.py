@@ -44,7 +44,6 @@ def temp_config_dir(tmp_path, monkeypatch):
         "OPENAI_API_KEY",
         "ATLASCLOUD_API_KEY",
         "TAVILY_API_KEY",
-        "METASCI_SCRIBE_DEFAULT_MODE",
         "METASCI_SCRIBE_WORKSPACE_DIR",
         "METASCI_SCRIBE_UI_BACKEND",
         "METASCI_SCRIBE_GATEWAY_BACKEND",
@@ -82,7 +81,6 @@ def clean_env(monkeypatch):
         "OPENAI_API_KEY",
         "ATLASCLOUD_API_KEY",
         "TAVILY_API_KEY",
-        "METASCI_SCRIBE_DEFAULT_MODE",
         "METASCI_SCRIBE_WORKSPACE_DIR",
         "METASCI_SCRIBE_UI_BACKEND",
         "METASCI_SCRIBE_GATEWAY_BACKEND",
@@ -125,7 +123,6 @@ class TestScribeConfig:
         assert config.openai_api_key == ""
         assert config.provider == "openai"
         assert config.model == "gpt-6.1-sol"
-        assert config.default_mode == "daemon"
         assert config.default_workdir == ""
         assert config.show_thinking is True
         assert config.ui_backend == "cli"
@@ -149,7 +146,7 @@ class TestScribeConfig:
 
         The backend is an unauthenticated API whose agent can run shell
         commands, so it is not a safe default to publish;
-        ``--host 0.0.0.0`` / ``config set`` opts in to LAN exposure.
+        ``config set langgraph_dev_host`` opts in to LAN exposure.
         """
         config = ScribeConfig()
 
@@ -198,13 +195,13 @@ class TestScribeConfig:
             anthropic_api_key="sk-ant-test",
             provider="openai",
             model="gpt-4o",
-            default_mode="run",
+            log_level="debug",
         )
 
         assert config.anthropic_api_key == "sk-ant-test"
         assert config.provider == "openai"
         assert config.model == "gpt-4o"
-        assert config.default_mode == "run"
+        assert config.log_level == "debug"
 
     def test_literal_field_invalid_value_falls_back_with_warning(self, caplog):
         """A typo'd Literal (config file / direct construction) never lands.
@@ -597,7 +594,6 @@ class TestPriorityChain:
             "ANTHROPIC_API_KEY",
             "OPENAI_API_KEY",
             "TAVILY_API_KEY",
-            "METASCI_SCRIBE_DEFAULT_MODE",
             "METASCI_SCRIBE_WORKSPACE_DIR",
             "METASCI_SCRIBE_UI_BACKEND",
             "METASCI_SCRIBE_GATEWAY_BACKEND",
@@ -608,7 +604,6 @@ class TestPriorityChain:
             monkeypatch.delenv(key, raising=False)
         config = get_effective_config()
         assert config.provider == "openai"
-        assert config.default_mode == "daemon"
 
     def test_file_overrides_defaults(self, temp_config_dir, clean_env):
         """Test file config overrides defaults."""
@@ -619,18 +614,18 @@ class TestPriorityChain:
 
     def test_env_overrides_file(self, temp_config_dir, monkeypatch):
         """Test environment variables override file config."""
-        save_config(ScribeConfig(default_mode="run"))
-        monkeypatch.setenv("METASCI_SCRIBE_DEFAULT_MODE", "daemon")
+        save_config(ScribeConfig(log_level="debug"))
+        monkeypatch.setenv("METASCI_SCRIBE_LOG_LEVEL", "error")
 
         config = get_effective_config()
-        assert config.default_mode == "daemon"
+        assert config.log_level == "error"
 
     def test_cli_overrides_env(self, temp_config_dir, monkeypatch):
         """Test CLI arguments override environment variables."""
-        monkeypatch.setenv("METASCI_SCRIBE_DEFAULT_MODE", "daemon")
+        monkeypatch.setenv("METASCI_SCRIBE_LOG_LEVEL", "error")
 
-        config = get_effective_config(cli_overrides={"default_mode": "run"})
-        assert config.default_mode == "run"
+        config = get_effective_config(cli_overrides={"log_level": "debug"})
+        assert config.log_level == "debug"
 
     def test_cli_overrides_file(self, temp_config_dir, clean_env):
         """Test CLI arguments override file config."""

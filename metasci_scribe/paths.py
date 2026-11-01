@@ -158,7 +158,7 @@ class Workspace:
 
     @property
     def runs_dir(self) -> Path:
-        """Parent folder of ``--mode=run`` session folders (``<root>/runs``)."""
+        """Parent folder of stored threads' run folders (``<root>/runs``)."""
         return self.root / "runs"
 
     @property
@@ -167,13 +167,15 @@ class Workspace:
         return self.root.as_posix()
 
 
-# Name ``--mode=run`` gives a run folder when the user passes no ``--name``.
+# The name run folders had. Chat no longer makes them: new sessions work in
+# the workspace root, where `metasci-scribe run` works too. A stored thread
+# may still name one, so a resume can reach it.
 RUN_NAME_FORMAT = "%Y%m%d_%H%M%S"
 _RUN_NAME_SHAPE = re.compile(r"\d{8}_\d{6}")
 
 
 def is_generated_run_name(name: str) -> bool:
-    """True if *name* is a run folder name ``--mode=run`` generates."""
+    """True if *name* has the form of a generated run folder name."""
     if not _RUN_NAME_SHAPE.fullmatch(name):
         return False
     try:
@@ -187,8 +189,8 @@ def is_generated_run_name(name: str) -> bool:
 class SessionDirs:
     """Where a session lives: its workspace, and the run folder it works in.
 
-    ``run_dir`` is set only in ``--mode=run``, where the session works in a
-    folder under ``<root>/runs``. Skills, media, the memory project and crons
+    ``run_dir`` is set only for a thread stored with a run folder, which works
+    in a folder under ``<root>/runs``. Skills, media, the memory project and crons
     always come from the workspace; the sandbox works in :attr:`work_dir`.
     """
 
@@ -247,8 +249,8 @@ class SessionDirs:
         """Read a ``workspace_dir`` stored before ``run_dir`` existed.
 
         Run-mode sessions stored their run folder as ``workspace_dir``. A
-        folder ``<root>/runs/<name>`` whose name has the form ``--mode=run``
-        generates is split into the workspace and ``run_dir``. Named runs are
+        folder ``<root>/runs/<name>`` whose name has the generated form
+        is split into the workspace and ``run_dir``. Named runs are
         left as they are, because a project folder can itself live in a
         folder called ``runs``. Only the one-time upgrade of stored values
         uses this; new values carry ``run_dir`` themselves.
@@ -288,7 +290,7 @@ def process_session_dirs() -> SessionDirs:
     """:func:`process_workspace` plus the run folder the process works in.
 
     The langgraph dev manager sets ``METASCI_SCRIBE_RUN_DIR`` when it starts the
-    server for a ``--mode=run`` session. Read once per process, like the
+    server for a session with a run folder. Read once per process, like the
     workspace.
     """
     return SessionDirs(process_workspace(), _env_path("METASCI_SCRIBE_RUN_DIR"))

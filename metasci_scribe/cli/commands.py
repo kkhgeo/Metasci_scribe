@@ -4,7 +4,6 @@ import copy
 import json
 import logging
 import os
-import re
 import sys
 from contextlib import contextmanager, nullcontext
 from importlib.metadata import version as _pkg_version
@@ -40,9 +39,7 @@ from . import (
 from ._app import app, config_app, configure_app, mcp_app, sessions_app
 from ._constants import build_metadata
 from .agent import (
-    _create_run_dir,
     _load_agent,
-    _remove_unused_run_dir,
 )
 from .mcp_ui import (
     _mcp_add_server_from_kwargs,
@@ -99,11 +96,6 @@ def onboard(
     api_key: str | None = typer.Option(
         None, "--api-key", help="Pre-set API key for the chosen --provider"
     ),
-    workspace_mode: str | None = typer.Option(
-        None,
-        "--workspace-mode",
-        help="Pre-set workspace mode (daemon | run)",
-    ),
     show_thinking: bool | None = typer.Option(
         None,
         "--show-thinking/--no-show-thinking",
@@ -136,7 +128,6 @@ def onboard(
     """
     from ..config.onboard.constants import (
         VALID_PROVIDERS,
-        VALID_WORKSPACE_MODES,
     )
     from ..config.onboard.prompter import NonInteractivePrompter
 
@@ -145,11 +136,6 @@ def onboard(
     # ``metasci_scribe/config/onboard/constants.py``; a drift test in
     # ``tests/test_onboard.py`` keeps them aligned with the interactive
     # ``Choice(value=...)`` lists in ``steps.py``.
-    if workspace_mode is not None and workspace_mode not in VALID_WORKSPACE_MODES:
-        raise typer.BadParameter(
-            f"--workspace-mode must be one of {sorted(VALID_WORKSPACE_MODES)}",
-            param_hint="--workspace-mode",
-        )
     if provider is not None and provider not in VALID_PROVIDERS:
         raise typer.BadParameter(
             f"--provider must be one of {sorted(VALID_PROVIDERS)}",
@@ -174,8 +160,6 @@ def onboard(
         answers["model"] = model
     if api_key is not None:
         answers["api_key"] = api_key
-    if workspace_mode is not None:
-        answers["workspace_mode"] = workspace_mode
     if show_thinking is not None:
         answers["show_thinking"] = show_thinking
 
@@ -303,7 +287,6 @@ _CONFIGURE_SECTIONS = {
     "port": "LangGraph server port",
     "provider": "LLM provider + API key",
     "model": "Model + reasoning effort",
-    "workspace": "Workspace mode",
     "thinking": "Thinking panel",
     "skills": "Skills",
     "mcp": "MCP servers",
@@ -377,12 +360,6 @@ def configure_provider(
 def configure_model():
     """Re-run model selection (and reasoning effort for OpenAI)."""
     _configure_section("model")
-
-
-@configure_app.command("workspace")
-def configure_workspace():
-    """Re-run workspace mode (daemon/run) selection."""
-    _configure_section("workspace")
 
 
 @configure_app.command("thinking")
@@ -546,7 +523,6 @@ def _ensure_async_subagent_server(
             _reconcile_autoskill_schedule(config, workspace=dirs.workspace)
     except WorkspaceMismatchError as exc:
         console.print(f"[red]{exc}[/red]")
-        _remove_unused_run_dir(dirs.run_dir)
         raise typer.Exit(1) from exc
 
     from ..langgraph_dev import manager as _lg_manager
@@ -573,8 +549,8 @@ def _ensure_async_subagent_server(
         console.print(
             "[bold white on red] ⚠ PUBLIC BIND [/bold white on red] "
             f"[bold red]Agent server listening on {bind_host} — no auth, and "
-            f"the agent can run shell. Use --host 127.0.0.1 on untrusted "
-            f"networks.[/bold red]"
+            f"the agent can run shell. Set langgraph_dev_host to 127.0.0.1 on "
+            f"untrusted networks.[/bold red]"
         )
 
 
@@ -737,7 +713,6 @@ async def _move_server_or_keep_session(
     target: SessionDirs,
     current: SessionDirs | None,
     backend: str | None = None,
-    new_run_dir: bool = False,
     status_message: str = _RESUME_SYNC_STATUS,
 ) -> bool:
     """Move the background agent server to *target* before a session goes there.
@@ -749,9 +724,8 @@ async def _move_server_or_keep_session(
     the two are the same.
 
     Raises ``WorkspaceMismatchError`` when another metasci-scribe session holds the
-    server for other folders: the caller keeps its session as it is, and the
-    run folder made for *target* (``new_run_dir``) is removed. Returns False
-    when the move failed otherwise: the session can go to *target*, but
+    server for other folders: the caller keeps its session as it is. Returns
+    False when the move failed otherwise: the session can go to *target*, but
     async sub-agents and EvoMemory workers may be unavailable.
     """
     if target == current:
@@ -764,8 +738,6 @@ async def _move_server_or_keep_session(
             config, dirs=target, backend=backend, status_message=status_message
         )
     except WorkspaceMismatchError:
-        if new_run_dir:
-            _remove_unused_run_dir(target.run_dir)
         raise
     except Exception:
         logging.getLogger(__name__).warning(
@@ -801,8 +773,7 @@ async def _restore_thread_dirs(
     A thread resumes in the workspace and run folder it was stored with,
     wherever the CLI was started; a thread stored without folders resumes in
     *dirs*, the folders the session started in. *served* are the folders the
-    server was started for, ``None`` when it was not started yet. A run
-    folder made for *dirs* that the thread does not use is removed. Raises
+    server was started for, ``None`` when it was not started yet. Raises
     ``typer.Exit(1)`` when another session holds the server.
     """
     from ..langgraph_dev.manager import WorkspaceMismatchError
@@ -811,27 +782,22 @@ async def _restore_thread_dirs(
     # Refuse a network folder by its stored spelling, before anything resolves
     # it (which would touch the share), then again once resolved: a local
     # looking link can lead to one.
-    try:
-        with _local_folders_only():
-            project.require_local_stored(
+    with _local_folders_only():
+        project.require_local_stored(
+            metadata.get("workspace_dir"), metadata.get("run_dir")
+        )
+        restored = (
+            SessionDirs.from_stored(
                 metadata.get("workspace_dir"), metadata.get("run_dir")
             )
-            restored = (
-                SessionDirs.from_stored(
-                    metadata.get("workspace_dir"), metadata.get("run_dir")
-                )
-                or dirs
-            )
-            project.require_local_path(restored.workspace.root)
-    except typer.Exit:
-        _remove_unused_run_dir(dirs.run_dir)
-        raise
+            or dirs
+        )
+        project.require_local_path(restored.workspace.root)
     try:
         synced = await _move_server_or_keep_session(
             config, target=restored, current=served, backend=backend
         )
     except WorkspaceMismatchError as exc:
-        _remove_unused_run_dir(dirs.run_dir)
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(1) from exc
     if not synced:
@@ -839,8 +805,6 @@ async def _restore_thread_dirs(
             "[yellow]Background agent server sync failed; async subagents and "
             "EvoMemory workers may be unavailable.[/yellow]"
         )
-    if restored != dirs:
-        _remove_unused_run_dir(dirs.run_dir)
     return restored
 
 
@@ -1637,18 +1601,6 @@ def _main_callback(
         is_eager=True,
         help="Show version and exit.",
     ),
-    mode: str | None = typer.Option(
-        None,
-        "-m",
-        "--mode",
-        help="Workspace mode: 'daemon' (persistent, default) or 'run' (isolated per-session)",
-    ),
-    name: str | None = typer.Option(
-        None,
-        "-n",
-        "--name",
-        help="Name for this run (used as directory name instead of timestamp; requires --mode run)",
-    ),
     prompt: str | None = typer.Option(
         None, "-p", "--prompt", help="Query to execute (single-shot mode)"
     ),
@@ -1683,13 +1635,6 @@ def _main_callback(
         "--ask-user",
         help="Enable agent to ask clarifying questions about your research preferences",
     ),
-    host: str | None = typer.Option(
-        None,
-        "--host",
-        help="Interface to bind the background agent server to (default: "
-        "127.0.0.1). Sets langgraph_dev_host. Pass 0.0.0.0 to reach it from "
-        "another machine (the server has no auth).",
-    ),
     output_format: str | None = typer.Option(
         None,
         "--output-format",
@@ -1715,7 +1660,7 @@ def _main_callback(
         ),
     ] = None,
 ):
-    """Metasci Scribe Agent - AI-powered research & code execution CLI"""
+    """Metasci Scribe: a terminal agent that writes a scientific paper with you."""
     # If a subcommand was invoked, don't run the default behavior
     if ctx.invoked_subcommand is not None:
         return
@@ -1760,14 +1705,10 @@ def _main_callback(
 
     # Build CLI overrides dict
     cli_overrides = {}
-    if mode:
-        cli_overrides["default_mode"] = mode
     if workdir:
         cli_overrides["default_workdir"] = workdir
     if no_thinking:
         cli_overrides["show_thinking"] = False
-    if host is not None and host.strip():
-        cli_overrides["langgraph_dev_host"] = host.strip()
     if auto_approve:
         cli_overrides["auto_approve"] = True
     if effective_auto_mode:
@@ -1805,40 +1746,14 @@ def _main_callback(
     if workdir and use_cwd:
         raise typer.BadParameter("Use either --workdir or --use-cwd, not both.")
 
-    if mode and (workdir or use_cwd):
-        raise typer.BadParameter(
-            "--mode cannot be combined with --workdir or --use-cwd"
-        )
-
-    if mode and mode not in ("run", "daemon"):
-        raise typer.BadParameter("--mode must be 'run' or 'daemon'")
-
-    # --name only makes sense in run mode
-    if name and not (
-        mode == "run"
-        or (not mode and not workdir and not use_cwd and config.default_mode == "run")
-    ):
-        raise typer.BadParameter("--name can only be used with --mode run")
-
-    # Sanitize run name: allow alphanumeric, hyphens, underscores
-    if name:
-        if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
-            raise typer.BadParameter(
-                "--name may only contain letters, digits, hyphens, and underscores"
-            )
-
-    # Resolve the session's workspace and the folder the agent works in.
-    # Priority: --use-cwd / --workdir > default_workdir > cwd. ``--mode``
-    # (or ``default_mode``) only decides whether the agent works in the
-    # workspace root (daemon) or in a fresh ``runs/<name>`` folder (run).
-    effective_mode: str | None = None  # None means explicit --workdir/--use-cwd
+    # Resolve the session's workspace, which is also the paper folder ``run``
+    # writes in. Priority: --use-cwd / --workdir > default_workdir > cwd.
     if use_cwd:
         workspace_root = start_workspace_path()
     elif workdir:
         workspace_root = start_workspace_path(workdir)
     else:
         workspace_root = start_workspace_path(default_workdir=config.default_workdir)
-        effective_mode = mode or config.default_mode
     # Before the path is resolved (a mapped drive resolves to a UNC path) or
     # created: network folders are not supported.
     with _local_folders_only():
@@ -1860,10 +1775,7 @@ def _main_callback(
     # Ensure memory and skills subdirs exist in workspace
     ensure_dirs()
 
-    # ``--mode=run`` works in a fresh ``runs/<name>`` folder of the workspace;
-    # ``/new`` then moves to another one.
-    run_dir = _create_run_dir(workspace, name) if effective_mode == "run" else None
-    dirs = SessionDirs(workspace, run_dir)
+    dirs = SessionDirs(workspace)
 
     # Resolve the gateway backend for whichever surface this callback launches:
     # single-shot when a prompt is given, else the interactive CLI (the
@@ -2039,10 +1951,8 @@ def _main_callback(
         cmd_interactive(
             show_thinking=show_thinking,
             dirs=dirs,
-            mode=effective_mode,
             model=config.model,
             provider=config.provider,
-            run_name=name,
             thread_id=thread_id,
             config=config,
             async_runtime=async_runtime,

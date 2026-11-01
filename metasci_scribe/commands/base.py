@@ -99,7 +99,7 @@ class CommandContext:
     thread_id: str
     ui: CommandUI
     # The session's workspace (skills, memory), and the run
-    # folder it works in under ``--mode=run``.
+    # folder it works in, if its thread was stored with one.
     dirs: SessionDirs
     checkpointer: Any = None
     config: Any = None

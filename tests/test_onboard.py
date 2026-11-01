@@ -130,11 +130,6 @@ class TestSharedConstantsAlignment:
             f"only-in-choices: {actual_provider_ids - set(VALID_PROVIDERS)}"
         )
 
-    def test_workspace_mode_constants_match_step_choices(self):
-        from metasci_scribe.config.onboard.constants import VALID_WORKSPACE_MODES
-
-        assert VALID_WORKSPACE_MODES == frozenset({"daemon", "run"})
-
     def test_valid_providers_aligns_with_provider_table(self):
         """The provider table in ``provider_keys`` has exactly one row per
         provider in ``VALID_PROVIDERS``: an unknown provider is an error, not
@@ -567,32 +562,6 @@ class TestStepModel:
             mock_q.select.return_value.ask.return_value = None
             with pytest.raises(KeyboardInterrupt):
                 _step_model(config, "anthropic")
-
-
-class TestStepWorkspace:
-    def test_returns_daemon_mode(self):
-        """Test workspace step returns selected mode."""
-        from metasci_scribe.config.onboard.steps import _step_workspace
-
-        config = ScribeConfig()
-
-        with patch("metasci_scribe.config.onboard.steps.questionary") as mock_q:
-            mock_q.select.return_value.ask.return_value = "daemon"
-            result = _step_workspace(config)
-
-        assert result == "daemon"
-
-    def test_returns_run_mode(self):
-        """Test workspace step returns run mode."""
-        from metasci_scribe.config.onboard.steps import _step_workspace
-
-        config = ScribeConfig()
-
-        with patch("metasci_scribe.config.onboard.steps.questionary") as mock_q:
-            mock_q.select.return_value.ask.return_value = "run"
-            result = _step_workspace(config)
-
-        assert result == "run"
 
 
 class TestPromptAndValidateApiKey:
@@ -1074,7 +1043,6 @@ class TestRunOnboard:
                 "anthropic",  # Provider
                 "claude-sonnet-4-6",  # Model
                 "skip",  # Auxiliary: Skip (single driver)
-                "daemon",  # Workspace mode
                 True,  # Show thinking
             ]
             mock_q.password.return_value.ask.side_effect = [
@@ -1100,7 +1068,6 @@ class TestRunOnboard:
         assert final_config.provider == "anthropic"
         assert final_config.model == "claude-sonnet-4-6"
         assert final_config.ui_backend == "cli"
-        assert final_config.default_mode == "daemon"
 
     def test_auxiliary_model_enabled_collects_provider_and_key(self):
         """Enabling the auxiliary step stores its provider, model, and the
@@ -1125,7 +1092,6 @@ class TestRunOnboard:
                 "assemble",  # Auxiliary: Assemble
                 "openai",  # Auxiliary provider (a different company)
                 "gpt-6-luna",  # Auxiliary model
-                "daemon",  # Workspace mode
                 True,  # Show thinking
             ]
             mock_q.password.return_value.ask.side_effect = [
@@ -1273,7 +1239,6 @@ class TestRunOnboard:
                 "anthropic",  # Provider
                 "claude-sonnet-4-6",  # Model
                 "skip",  # Auxiliary: Skip (single driver)
-                "daemon",  # Workspace mode
                 True,  # Show thinking
             ]
             mock_q.password.return_value.ask.side_effect = ["", ""]

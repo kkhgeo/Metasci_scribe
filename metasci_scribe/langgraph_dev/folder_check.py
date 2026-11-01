@@ -1,7 +1,7 @@
 """Refuse runs meant for other folders than the ones this server serves.
 
 Until the server serves several workspaces, it is pinned to one workspace and,
-for a ``--mode=run`` session, one run folder. Child runs forward the folders
+for a session with a run folder, one run folder. Child runs forward the folders
 they belong to in ``configurable``; each registered graph is wrapped in a
 factory that compares them with the server's before the run executes, so a
 run meant for another folder fails instead of working in this one.

@@ -14,10 +14,9 @@ from metasci_scribe.paths import SessionDirs, Workspace
 from tests.fakes.common import FakeGraphGateway, FakeThreadStore
 
 
-def _config(*, default_workdir: str = "", default_mode: str = "daemon"):
+def _config(*, default_workdir: str = ""):
     return SimpleNamespace(
         default_workdir=default_workdir,
-        default_mode=default_mode,
         openai_auth_mode="api_key",
         show_thinking=True,
         ui_backend="cli",
@@ -68,8 +67,6 @@ def _run(
     commands._main_callback(
         SimpleNamespace(invoked_subcommand=None),
         version=None,
-        mode=mode,
-        name=name,
         prompt=None,
         thread_id=None,
         workdir=workdir,
@@ -78,7 +75,6 @@ def _run(
         auto_approve=False,
         auto_mode=None,
         ask_user=False,
-        host=None,
         output_format=None,
     )
     return captured
@@ -99,10 +95,9 @@ def test_symlinked_start_folder_gives_one_spelling(monkeypatch, tmp_path):
     real.mkdir()
     link = tmp_path / "link"
     link.symlink_to(real)
-    daemon = _run(monkeypatch, _config(default_workdir=str(link)))
-    run = _run(monkeypatch, _config(default_workdir=str(link), default_mode="run"))
-    assert daemon["dirs"].work_dir == daemon["dirs"].workspace.root
-    assert run["dirs"].run_dir.parent == daemon["dirs"].work_dir / "runs"
+    got = _run(monkeypatch, _config(default_workdir=str(link)))
+    assert got["dirs"].work_dir == got["dirs"].workspace.root
+    assert got["dirs"].work_dir == real.resolve()
 
 
 def test_use_cwd_ignores_default_workdir(monkeypatch, tmp_path):
@@ -111,7 +106,6 @@ def test_use_cwd_ignores_default_workdir(monkeypatch, tmp_path):
         monkeypatch, _config(default_workdir=str(tmp_path / "cfg")), use_cwd=True
     )
     assert got["dirs"].workspace == Workspace(tmp_path)
-    assert got["mode"] is None
 
 
 def test_workdir_is_created_and_used(monkeypatch, tmp_path):
@@ -121,7 +115,6 @@ def test_workdir_is_created_and_used(monkeypatch, tmp_path):
     assert got["dirs"].workspace == Workspace(target)
     assert got["dirs"].work_dir == Workspace(target).root
     assert got["dirs"].run_dir is None
-    assert got["mode"] is None
 
 
 def test_default_workdir_from_config(monkeypatch, tmp_path):
@@ -132,41 +125,13 @@ def test_default_workdir_from_config(monkeypatch, tmp_path):
     assert got["dirs"].workspace == Workspace(target)
     assert got["dirs"].work_dir == Workspace(target).root
     assert got["dirs"].run_dir is None
-    assert got["mode"] == "daemon"
 
 
-def test_run_mode_uses_run_dir_under_workspace(monkeypatch, tmp_path):
+def test_chat_never_makes_a_run_folder(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    got = _run(monkeypatch, _config(), mode="run", name="exp")
-    workspace = got["dirs"].workspace
-    assert workspace == Workspace(tmp_path)
-    assert got["dirs"].run_dir == workspace.runs_dir / "exp"
-    assert got["dirs"].work_dir == got["dirs"].run_dir
-    assert got["dirs"].run_dir.is_dir()
-    assert got["server_dirs"] == got["dirs"]
-    assert got["mode"] == "run"
-
-
-def test_run_mode_deduplicates_run_names(monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / "runs" / "exp").mkdir(parents=True)
-    got = _run(monkeypatch, _config(), mode="run", name="exp")
-    assert got["dirs"].run_dir == got["dirs"].workspace.runs_dir / "exp_1"
-
-
-def test_default_mode_run_uses_default_workdir_as_root(monkeypatch, tmp_path):
-    target = tmp_path / "cfg"
-    target.mkdir()
-    got = _run(monkeypatch, _config(default_workdir=str(target), default_mode="run"))
-    assert got["dirs"].workspace == Workspace(target)
-    assert got["dirs"].run_dir.parent == target.resolve() / "runs"
-
-
-def test_mode_cannot_combine_with_workdir(monkeypatch, tmp_path):
-    import typer
-
-    with pytest.raises(typer.BadParameter):
-        _run(monkeypatch, _config(), mode="run", workdir=str(tmp_path))
+    got = _run(monkeypatch, _config())
+    assert got["dirs"].run_dir is None
+    assert not (tmp_path / "runs").exists()
 
 
 def _run_prompt(
@@ -238,8 +203,6 @@ def _run_prompt(
     commands._main_callback(
         SimpleNamespace(invoked_subcommand=None),
         version=None,
-        mode=None,
-        name=None,
         prompt="hello",
         thread_id=thread_id,
         workdir=None,
@@ -248,7 +211,6 @@ def _run_prompt(
         auto_approve=False,
         auto_mode=None,
         ask_user=False,
-        host=None,
         output_format=None,
     )
     return captured
