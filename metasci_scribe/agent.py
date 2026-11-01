@@ -729,6 +729,7 @@ def _get_default_backend(
     )
     from .setup.research_env import research_env_overrides
 
+    _paths_mod.require_workspace_root(workspace.root)
     cfg = _ensure_config()
     if guard_dangerous is None:
         # Not baked from cfg.auto_approve: the backend derives it per call from
@@ -1250,6 +1251,8 @@ def create_cli_agent(
         MergedSkillsBackend,
     )
     from .setup.research_env import research_env_overrides
+
+    _paths.require_workspace_root(workspace.root)
 
     # Pure path only when BOTH config and chat_model are explicit: build from
     # locals and write no module globals. Otherwise keep the legacy

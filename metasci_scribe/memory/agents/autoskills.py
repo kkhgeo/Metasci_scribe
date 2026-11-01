@@ -22,7 +22,9 @@ from ._factory import (
     resolve_memory_agent_paths,
 )
 
-_AUTOSKILLS_EXCLUDED_TOOLS = frozenset({"delete", "task", "write_todos"})
+_AUTOSKILLS_EXCLUDED_TOOLS = frozenset(
+    {"delete", "execute", "run_in_background", "task", "write_todos"}
+)
 
 
 def _autoskills_system_prompt() -> str:
@@ -59,10 +61,6 @@ def _autoskills_system_prompt() -> str:
         "skill concise and operational. Update proposals overlay the existing "
         "workspace/global skill: proposal files replace files with the same "
         "relative path, and omitted installed files are preserved.\n\n"
-        "Use `execute` for lightweight validation when useful. Shell commands "
-        "run from the autoskill proposal root; keep generated files and logs "
-        "under `/autoskill-proposals/`. Do not shell into `/skills` or "
-        "`/memories`; read those through file tools instead.\n\n"
         "Do not create a skill for one-off project facts, ordinary summaries, "
         "raw logs, weakly related observations, or clusters dominated by "
         "semantic facts without a reusable procedure. Do not manually edit "

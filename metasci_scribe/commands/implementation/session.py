@@ -8,7 +8,7 @@ from typing import ClassVar
 from rich.table import Table
 
 from ...gateway import GraphGateway, GraphTarget
-from ...paths import SessionDirs
+from ...paths import SessionDirs, WorkspaceRootError, require_workspace_root
 from ..base import Argument, Command, CommandContext
 from ..manager import manager
 
@@ -213,6 +213,11 @@ class ResumeCommand(Command):
             metadata.get("workspace_dir"), metadata.get("run_dir")
         )
         if restored is not None:
+            try:
+                require_workspace_root(restored.workspace.root)
+            except WorkspaceRootError as exc:
+                ctx.ui.append_system(str(exc), style="red")
+                return
             ctx.dirs = restored
 
         ctx.thread_id = resolved

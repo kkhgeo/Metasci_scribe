@@ -22,6 +22,7 @@ MEMORY_MAINTENANCE_EXCLUDED_TOOLS = frozenset(
         "delete",
         "edit_file",
         "execute",
+        "run_in_background",
         "task",
         "write_file",
         "write_todos",
@@ -41,6 +42,7 @@ def resolve_memory_agent_paths(
     memory_dir: str | Path | None = None,
 ) -> MemoryAgentPaths:
     """Resolve the workspace and memory roots for a memory graph."""
+    _paths.require_workspace_root(workspace.root)
     resolved_memory_dir = Path(
         _paths.MEMORIES_DIR if memory_dir is None else memory_dir
     ).expanduser()

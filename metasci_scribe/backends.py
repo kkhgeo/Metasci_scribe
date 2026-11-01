@@ -10,6 +10,7 @@ import sys
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -1500,7 +1501,84 @@ def convert_virtual_paths_in_command(
     return converted
 
 
-class ReadOnlyFilesystemBackend(FilesystemBackend):
+# A UNC or device path. On Windows it reaches files under names the auth check
+# sees only by identity, and a remote one would send the user's credentials.
+_DEVICE_PATH = re.compile(r"^[\\/]{2}")
+
+
+def guarded_path(resolve: Callable[[str], Path], key: str) -> Path:
+    """Resolve ``key`` with ``resolve``, refusing what no agent may touch.
+
+    The one check every backend serving an agent goes through, in every mode.
+    ``PermissionError`` because every file operation reports an ``OSError`` as
+    a failed call, and some let a ``ValueError`` through.
+    """
+    if _DEVICE_PATH.match(key):
+        raise PermissionError("UNC and device paths are not available to file tools.")
+    resolved = resolve(key)
+    if paths.is_auth_path(resolved):
+        raise PermissionError(
+            "Metasci Scribe's saved sign-in is not available to file tools."
+        )
+    return resolved
+
+
+class _GuardedFiles:
+    """File operations for agents: :func:`guarded_path` on every path, and no
+    trace of the saved sign-in in a listing or search from a parent folder."""
+
+    def _resolve_path(self, key: str) -> Path:
+        return guarded_path(self._sanitized_path, key)
+
+    def _sanitized_path(self, key: str) -> Path:
+        return super()._resolve_path(key)
+
+    def _tool_paths(self, items: list | None) -> list | None:
+        if not items:
+            return items
+        hidden: dict[str, bool] = {}
+        visible = []
+        for item in items:
+            location = item["path"]
+            if location not in hidden:
+                # A virtual path is rooted at cwd; a real one replaces it here.
+                host = location.lstrip("/") if self.virtual_mode else location
+                hidden[location] = paths.is_auth_path(self.cwd / host)
+            if not hidden[location]:
+                visible.append(item)
+        return visible
+
+    def ls(self, path: str) -> LsResult:
+        result = super().ls(path)
+        result.entries = self._tool_paths(result.entries)
+        return result
+
+    def glob(self, pattern: str, path: str | None = None) -> GlobResult:
+        result = super().glob(pattern, path)
+        result.matches = self._tool_paths(result.matches)
+        return result
+
+    def grep(
+        self,
+        pattern: str,
+        path: str | None = None,
+        glob: str | None = None,
+        *,
+        max_count: int | None = None,
+        context_lines: int = 0,
+    ) -> GrepResult:
+        result = super().grep(
+            pattern, path, glob, max_count=max_count, context_lines=context_lines
+        )
+        result.matches = self._tool_paths(result.matches)
+        return result
+
+
+class GuardedFilesystemBackend(_GuardedFiles, FilesystemBackend):
+    """The ``FilesystemBackend`` for anything that serves an agent."""
+
+
+class ReadOnlyFilesystemBackend(GuardedFilesystemBackend):
     """
     Read-only filesystem backend.
 
@@ -1540,7 +1618,7 @@ class ReadOnlyFilesystemBackend(FilesystemBackend):
         )
 
 
-class MemoryFilesystemBackend(FilesystemBackend):
+class MemoryFilesystemBackend(GuardedFilesystemBackend):
     """Filesystem backend for memory files with structured-write enforcement.
 
     Agents may read memory files and edit existing profile notes, but raw file
@@ -1598,7 +1676,9 @@ def build_memory_agent_backend(
     from deepagents.backends import CompositeBackend
 
     return CompositeBackend(
-        default=FilesystemBackend(root_dir=str(workspace_dir), virtual_mode=True),
+        default=GuardedFilesystemBackend(
+            root_dir=str(workspace_dir), virtual_mode=True
+        ),
         routes={
             "/memories/": MemoryFilesystemBackend(
                 root_dir=str(memory_dir),
@@ -1644,20 +1724,15 @@ def build_autoskill_agent_backend(
     """Build the AutoSkills backend.
 
     AutoSkills has a different security model from ordinary memory
-    maintenance: it can read memories and installed skills, write proposal
-    folders, and run shell validation from the proposal root.
+    maintenance: it can read memories and installed skills, and write
+    proposal folders.
     """
     from deepagents.backends import CompositeBackend
-
-    from .setup.research_env import research_env_overrides
 
     return CompositeBackend(
         default=AutoskillProposalSandboxBackend(
             root_dir=str(proposals_dir),
             timeout=sandbox_timeout,
-            # Its prompt validates proposals with `execute`; same python as
-            # the other agents.
-            env=research_env_overrides(),
             skills_dir=skills_dir,
         ),
         routes={
@@ -1671,7 +1746,7 @@ def build_autoskill_agent_backend(
                 secondary_dir=str(_BUILTIN_SKILLS_DIR),
                 writable_primary=False,
             ),
-            "/autoskill-proposals/": FilesystemBackend(
+            "/autoskill-proposals/": GuardedFilesystemBackend(
                 root_dir=str(proposals_dir),
                 virtual_mode=True,
             ),
@@ -1700,7 +1775,7 @@ class MergedSkillsBackend(BackendProtocol):
         writable_primary: bool = True,
     ):
         primary_backend = (
-            FilesystemBackend if writable_primary else ReadOnlyFilesystemBackend
+            GuardedFilesystemBackend if writable_primary else ReadOnlyFilesystemBackend
         )
         self._primary = primary_backend(root_dir=primary_dir, virtual_mode=True)
         self._global = (
@@ -1892,21 +1967,7 @@ def prepare_sandbox_command(
     return _restore_spans(command, ssh_replacements), None
 
 
-def _is_auth_path(path: str | Path) -> bool:
-    """Whether ``path``, symlinks followed, is the auth folder or lies inside it.
-
-    Compared without regard to case: Windows and macOS file systems ignore it.
-    A path that cannot be resolved counts as inside.
-    """
-    try:
-        target = os.path.realpath(path).casefold()
-        auth = os.path.realpath(paths.DATA_DIR / "auth").casefold()
-    except (OSError, ValueError):
-        return True
-    return target == auth or target.startswith(auth + os.sep)
-
-
-class CustomSandboxBackend(LocalShellBackend):
+class CustomSandboxBackend(_GuardedFiles, LocalShellBackend):
     """
     Custom sandbox backend - inherits LocalShellBackend with added safety.
 
@@ -1985,19 +2046,6 @@ class CustomSandboxBackend(LocalShellBackend):
         # Ensure working directory exists
         os.makedirs(str(self.cwd), exist_ok=True)
 
-    def _resolve_path(self, key: str) -> Path:
-        """Resolve a tool path, refusing the saved sign-in in every mode.
-
-        ``PermissionError`` because every file operation reports an ``OSError``
-        as a failed call, and some let a ``ValueError`` through.
-        """
-        resolved = self._sanitized_path(key)
-        if _is_auth_path(resolved):
-            raise PermissionError(
-                "Metasci Scribe's saved sign-in is not available to file tools."
-            )
-        return resolved
-
     def _sanitized_path(self, key: str) -> Path:
         """Resolve path with sanitization to prevent nested directories.
 
@@ -2013,7 +2061,7 @@ class CustomSandboxBackend(LocalShellBackend):
         """
         key = paths.host_file_tool_path(key)
         if self._dangerous:
-            return super()._resolve_path(key)
+            return super()._sanitized_path(key)
 
         cwd_str = self.cwd.as_posix().rstrip("/")
         ws_name = Path(cwd_str).name  # e.g. "workspace", "my-project"
@@ -2029,7 +2077,7 @@ class CustomSandboxBackend(LocalShellBackend):
                 pass
             else:
                 virtual = relative.as_posix()
-                return super()._resolve_path("/" if virtual == "." else "/" + virtual)
+                return super()._sanitized_path("/" if virtual == "." else "/" + virtual)
 
         # Auto-strip /<ws_name>/ prefix to prevent nesting
         ws_prefix = f"/{ws_name}/"
@@ -2054,7 +2102,7 @@ class CustomSandboxBackend(LocalShellBackend):
                     key = "/" + Path(key).name
                 break
 
-        return super()._resolve_path(key)
+        return super()._sanitized_path(key)
 
     _DELETE_APPROVAL_ERROR = (
         "Delete blocked: needs approval. Report it to the orchestrator, which "
@@ -2073,50 +2121,13 @@ class CustomSandboxBackend(LocalShellBackend):
         return super().delete(file_path)
 
     def _tool_paths(self, items: list | None) -> list | None:
-        """Drop the saved sign-in, which a search from a parent folder walks
-        into, and spell dangerous-mode paths the way the file tools accept them."""
-        if not items:
-            return items
-        hidden: dict[str, bool] = {}
-        visible = []
-        for item in items:
-            location = item["path"]
-            if location not in hidden:
-                # A virtual path is rooted at cwd; a real one replaces it here.
-                host = location.lstrip("/") if self.virtual_mode else location
-                hidden[location] = _is_auth_path(self.cwd / host)
-            if not hidden[location]:
-                visible.append(item)
-        if not self._dangerous:
+        """Spell dangerous-mode result paths the way the file tools accept them."""
+        visible = super()._tool_paths(items)
+        if not self._dangerous or not visible:
             return visible
         return [
             {**item, "path": paths.file_tool_path(item["path"])} for item in visible
         ]
-
-    def ls(self, path: str) -> LsResult:
-        result = super().ls(path)
-        result.entries = self._tool_paths(result.entries)
-        return result
-
-    def glob(self, pattern: str, path: str | None = None) -> GlobResult:
-        result = super().glob(pattern, path)
-        result.matches = self._tool_paths(result.matches)
-        return result
-
-    def grep(
-        self,
-        pattern: str,
-        path: str | None = None,
-        glob: str | None = None,
-        *,
-        max_count: int | None = None,
-        context_lines: int = 0,
-    ) -> GrepResult:
-        result = super().grep(
-            pattern, path, glob, max_count=max_count, context_lines=context_lines
-        )
-        result.matches = self._tool_paths(result.matches)
-        return result
 
     def execute(self, command: str, *, timeout: int | None = None) -> ExecuteResponse:
         """

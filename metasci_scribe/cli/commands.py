@@ -24,8 +24,10 @@ from ..llm.context_window import DEFAULT_CONTEXT_WINDOW_FALLBACK, resolve_contex
 from ..paths import (
     SessionDirs,
     Workspace,
+    WorkspaceRootError,
     ensure_dirs,
     reload_env_dirs,
+    require_workspace_root,
     start_workspace_path,
 )
 from ..runtime import AsyncRuntime
@@ -1820,6 +1822,11 @@ def _main_callback(
         workspace_root = start_workspace_path(default_workdir=config.default_workdir)
         effective_mode = mode or config.default_mode
     workspace = Workspace(workspace_root)
+    try:
+        require_workspace_root(workspace.root)
+    except WorkspaceRootError as exc:
+        console.print(f"[red]\u2717 {escape(str(exc))}[/red]")
+        raise typer.Exit(code=1) from exc
 
     # The project .env was merged into os.environ by get_effective_config().
     reload_env_dirs()

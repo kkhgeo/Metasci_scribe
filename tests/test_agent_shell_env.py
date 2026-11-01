@@ -49,13 +49,3 @@ def test_cli_agent_backend_gets_the_overrides(overrides, tmp_path, workspace):
         )
     assert backends[0].default._env["METASCI_SCRIBE_SHELL_PROBE"] == "venv"
 
-
-def test_autoskill_backend_gets_the_overrides(overrides, tmp_path, workspace):
-    from metasci_scribe.backends import build_autoskill_agent_backend
-
-    backend = build_autoskill_agent_backend(
-        memory_dir=tmp_path / "memories",
-        proposals_dir=tmp_path / "proposals",
-        skills_dir=workspace.skills_dir,
-    )
-    assert backend.default._env["METASCI_SCRIBE_SHELL_PROBE"] == "venv"

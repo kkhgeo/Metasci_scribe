@@ -38,6 +38,7 @@ import logging
 import os
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 import time
@@ -878,6 +879,40 @@ def _looks_like_path(source: str) -> bool:
     return source.startswith((".", "~")) or "/" in source or os.sep in source
 
 
+_REFUSED_SOURCE = {
+    "success": False,
+    "error": "This folder holds Metasci Scribe's saved sign-in; it cannot be installed.",
+}
+_LINK_REPARSE_TAGS = (0xA000000C, 0xA0000003)  # Windows symlink, junction
+
+
+def _is_link(path: str) -> bool:
+    """A symbolic link, or a Windows junction, which ``S_ISLNK`` does not see."""
+    info = os.lstat(path)
+    return (
+        stat.S_ISLNK(info.st_mode)
+        or getattr(info, "st_reparse_tag", 0) in _LINK_REPARSE_TAGS
+    )
+
+
+def _copy_filter(ignore_fn):
+    """``ignore_fn`` plus every link and the sign-in folder.
+
+    A skill comes from outside, and a link in it would copy whatever it names,
+    so links are dropped, not followed.
+    """
+
+    def ignore(directory: str, names: list[str]) -> set[str]:
+        skipped = set(ignore_fn(directory, names)) if ignore_fn else set()
+        for name in names:
+            entry = os.path.join(directory, name)
+            if _is_link(entry) or paths.is_auth_path(entry):
+                skipped.add(name)
+        return skipped
+
+    return ignore
+
+
 def _install_from_local(source: str, dest_dir: str, *, work_dir: Path) -> dict:
     """Install a skill from a local directory path."""
     source_path = Path(source).expanduser().resolve()
@@ -890,6 +925,9 @@ def _install_from_local(source: str, dest_dir: str, *, work_dir: Path) -> dict:
             pass
         if not source_path.exists():
             return {"success": False, "error": f"Path does not exist: {source}"}
+
+    if paths.contains_auth_dir(source_path):
+        return _REFUSED_SOURCE
 
     if not source_path.is_dir():
         return {"success": False, "error": f"Not a directory: {source}"}
@@ -924,6 +962,9 @@ def _install_single_local(
     time so onboarding can compare against the current upstream and surface
     "update available" without re-cloning.
     """
+    if paths.contains_auth_dir(source_path):
+        return _REFUSED_SOURCE
+
     skill_info = _parse_skill_md(source_path / "SKILL.md")
     skill_name = _sanitize_name(skill_info.name)
     if not skill_name:
@@ -939,10 +980,24 @@ def _install_single_local(
             "error": f"Skill name escapes destination: {skill_info.name!r}",
         }
 
-    if target_path.exists():
-        shutil.rmtree(target_path)
-
-    shutil.copytree(source_path, target_path, ignore=ignore_fn)
+    # Copied aside first: a failed copy leaves nothing behind and keeps the
+    # installed version.
+    staging = Path(tempfile.mkdtemp(dir=target_path.parent, prefix=".installing-"))
+    try:
+        staged = staging / skill_name
+        shutil.copytree(
+            source_path, staged, symlinks=True, ignore=_copy_filter(ignore_fn)
+        )
+        if target_path.exists():
+            shutil.rmtree(target_path)
+        os.replace(staged, target_path)
+    except OSError as exc:
+        return {
+            "success": False,
+            "error": f"Could not copy {skill_name!r}: {type(exc).__name__}",
+        }
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
     _record_install(dest_dir, skill_name, record_as, commit=record_commit)
 
     return {

@@ -9,14 +9,14 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from deepagents.backends import FilesystemBackend
+from deepagents.backends import CompositeBackend, FilesystemBackend
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langgraph.checkpoint.memory import InMemorySaver
 
 from metasci_scribe import paths
-from metasci_scribe.agent import _get_default_backend, create_cli_agent
+from metasci_scribe.agent import create_cli_agent
 from metasci_scribe.backends import (
     CustomSandboxBackend,
     no_human_gate,
@@ -92,7 +92,7 @@ def test_home_workspace_cannot_read_it(home):
 
 
 def test_home_workspace_composite_backend_cannot_read_it(home):
-    backend = _get_default_backend(Workspace(home))
+    backend = CompositeBackend(default=_workspace_backend(home), routes={})
     _assert_refused(backend.read(f"/{TOKEN_REL}"))
 
 

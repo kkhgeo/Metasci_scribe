@@ -5,12 +5,17 @@ from __future__ import annotations
 import functools
 import logging
 import os
+import os.path as ospath
 import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+class WorkspaceRootError(ValueError):
+    """A folder that holds the app's own data cannot be a workspace."""
 
 
 def normalize_path(path: str | Path) -> Path:
@@ -50,6 +55,72 @@ def host_file_tool_path(path: str) -> str:
             path = f"{path[1:3]}/{path[4:]}"
         return path.replace("\\", "/")
     return path
+
+
+def _is_inside(path: str | Path, folder: str | Path) -> bool:
+    """Whether *path* is *folder* or lies under it.
+
+    By name, without regard to case, since Windows and macOS file systems
+    ignore it; then by file identity, up the parents, for a spelling the name
+    check cannot see: ``realpath`` keeps a ``//?/`` or ``//localhost/C$/`` prefix.
+    """
+    target = ospath.realpath(path)
+    root = ospath.realpath(folder)
+    name, root_name = target.casefold(), root.casefold()
+    if name == root_name or name.startswith(root_name.rstrip(ospath.sep) + ospath.sep):
+        return True
+    try:
+        root_stat = Path(root).stat()
+    except OSError:
+        return False
+    candidate = Path(target)
+    for ancestor in (candidate, *candidate.parents):
+        try:
+            if ospath.samestat(ancestor.stat(), root_stat):
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def is_auth_path(path: str | Path) -> bool:
+    """Whether *path*, links followed, is the sign-in folder or lies inside it.
+
+    A path that cannot be examined counts as inside.
+    """
+    try:
+        return _is_inside(path, DATA_DIR / "auth")
+    except (OSError, ValueError, RuntimeError):
+        return True
+
+
+def contains_auth_dir(path: str | Path) -> bool:
+    """Whether *path* is the sign-in folder, lies inside it, or holds it."""
+    try:
+        return is_auth_path(path) or _is_inside(DATA_DIR / "auth", path)
+    except (OSError, ValueError, RuntimeError):
+        return True
+
+
+def holds_data_dir(root: str | Path) -> bool:
+    """Whether *root* is the app's data folder or a parent of it."""
+    return _is_inside(DATA_DIR, root)
+
+
+def require_workspace_root(root: str | Path) -> None:
+    """Refuse a folder that holds the app's data, such as the home folder.
+
+    The agent reads and writes throughout its workspace, so this keeps the
+    sign-in and other app state out of its way before any guard is needed.
+    Separate from :class:`Workspace`, which also names stored folders that
+    are only compared; call it where a workspace is put to use.
+    """
+    if holds_data_dir(root):
+        raise WorkspaceRootError(
+            f"{root} cannot be a workspace: it contains Metasci Scribe's data "
+            f"folder ({DATA_DIR}), which holds your sign-in. Open a paper "
+            f"folder instead."
+        )
 
 
 @dataclass(frozen=True)

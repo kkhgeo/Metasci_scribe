@@ -52,7 +52,7 @@ except ImportError:  # pragma: no cover - without the list, no wrap-up
 logger = logging.getLogger(__name__)
 
 _MEMORY_WORKER_EXCLUDED_TOOLS = frozenset(
-    {"delete", "execute", "task", "write_file", "write_todos"}
+    {"delete", "execute", "run_in_background", "task", "write_file", "write_todos"}
 )
 MEMORY_WORKER_OBSERVATION_LIMIT = 3
 MEMORY_WORKER_RECORD_CALL_LIMIT = 6
