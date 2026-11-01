@@ -689,9 +689,15 @@ def test_report_messages_say_when_the_folder_is_busy(project):
     assert "another" in lines[0]
 
 
-def _fake_reparse_lstat(monkeypatch, target_name):
-    """lstat that gives *target_name* the reparse-point bit, as a junction
-    looks on Windows (and on 3.11, which has no os.path.isjunction)."""
+MOUNT_POINT = 0xA0000003  # a junction
+SYMLINK_TAG = 0xA000000C
+CLOUD_TAG = 0x9000701A  # a OneDrive placeholder
+
+
+def _fake_reparse_lstat(monkeypatch, target_name, tag=MOUNT_POINT):
+    """lstat that makes *target_name* a reparse point with the given tag, as
+    it looks on Windows (and on 3.11, which has no os.path.isjunction). A tag
+    of ``None`` leaves ``st_reparse_tag`` out."""
     real = os.lstat
 
     def lstat(path, *a, **kw):
@@ -703,6 +709,8 @@ def _fake_reparse_lstat(monkeypatch, target_name):
             st_mode = info.st_mode
             st_file_attributes = 0x400
 
+        if tag is not None:
+            Fake.st_reparse_tag = tag
         return Fake()
 
     monkeypatch.setattr(knowledge.os, "lstat", lstat)
@@ -718,6 +726,48 @@ def test_a_reparse_point_is_a_link_without_os_path_isjunction(project, monkeypat
     assert complete
     assert knowledge._is_link(str(project / "Knowledge" / "jump"))
     assert not knowledge._is_link(str(project / "Knowledge" / "ok.pdf"))
+
+
+@pytest.mark.parametrize("tag", [MOUNT_POINT, SYMLINK_TAG, None])
+def test_junctions_symlinks_and_unknown_reparse_points_are_links(
+    project, monkeypatch, tag
+):
+    make_text_pdf(project / "Knowledge" / "jump" / "inner.pdf")
+    _fake_reparse_lstat(monkeypatch, "jump", tag)
+    assert knowledge._is_link(str(project / "Knowledge" / "jump"))
+    assert knowledge._discover(project / "Knowledge")[0] == []
+
+
+def test_a_cloud_placeholder_folder_is_followed(project, monkeypatch):
+    """OneDrive folders carry a reparse tag that is not a link."""
+    make_text_pdf(project / "Knowledge" / "cloud" / "inner.pdf", "In the cloud")
+    make_text_pdf(project / "Knowledge" / "ok.pdf")
+    _fake_reparse_lstat(monkeypatch, "cloud", CLOUD_TAG)
+    assert not knowledge._is_link(str(project / "Knowledge" / "cloud"))
+    report = sync_knowledge(project)
+    assert sorted(p.name for p in report.extracted) == ["inner.pdf", "ok.pdf"]
+    # A later start, with the folder still there, deletes nothing.
+    again = sync_knowledge(project)
+    assert again.unchanged == 2
+    assert len(_outputs(project)) == 2
+
+
+def test_a_cloud_placeholder_file_resolving_outside_is_still_refused(
+    project, monkeypatch
+):
+    make_text_pdf(project / "Knowledge" / "cloud" / "inner.pdf", "Outside")
+    _fake_reparse_lstat(monkeypatch, "cloud", CLOUD_TAG)
+    real = os.path.realpath
+
+    def realpath(path, *a, **kw):
+        if str(path).endswith("inner.pdf"):
+            return os.path.join(os.path.dirname(real(project)), "elsewhere.pdf")
+        return real(path, *a, **kw)
+
+    monkeypatch.setattr(knowledge.os.path, "realpath", realpath)
+    report = sync_knowledge(project)
+    assert report.extracted == []
+    assert "outside" in report.failed[0][1]
 
 
 @pytest.mark.skipif(os.name != "nt", reason="junctions are a Windows thing")
@@ -1034,3 +1084,80 @@ def test_stop_sync_gives_up_after_its_time(project, monkeypatch):
         release.set()
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("attempts", ["x", None, 1e999, -3, 10**9, True, [1], {"a": 1}])
+def test_a_tampered_attempts_count_does_not_break_the_sync(
+    project, monkeypatch, attempts
+):
+    pdf = make_text_pdf(project / "Knowledge" / "a.pdf")
+    monkeypatch.setattr(knowledge, "_run_worker", lambda *a: {"status": "timeout"})
+    sync_knowledge(project)
+    index_path = extract_dir(project) / knowledge.INDEX_NAME
+    text = index_path.read_text(encoding="utf-8")
+    data = json.loads(text)
+    data["files"]["a.pdf"]["attempts"] = attempts
+    data["files"]["a.pdf"]["retry"] = True
+    # json.dumps writes Infinity for 1e999, as a tampered file may.
+    index_path.write_text(json.dumps(data), encoding="utf-8")
+    report = sync_knowledge(project)
+    assert [p for p, _ in report.failed] == [pdf]
+    # It counted as one earlier try at most, so it is remembered now.
+    entry = json.loads(index_path.read_text(encoding="utf-8"))["files"]["a.pdf"]
+    assert entry["attempts"] <= 2
+    assert not entry["retry"]
+
+
+@pytest.mark.parametrize("status", ["failed", "scanned"])
+def test_a_failed_or_scanned_entry_that_names_an_output_is_dropped(project, status):
+    know = project / "Knowledge"
+    make_text_pdf(know / "a.pdf", "Text of a")
+    make_text_pdf(know / "b.pdf", "Text of b")
+    sync_knowledge(project)
+    index_path = extract_dir(project) / knowledge.INDEX_NAME
+    data = json.loads(index_path.read_text(encoding="utf-8"))
+    files = data["files"]
+    a_out = files["a.pdf"]["out"]
+    files["b.pdf"] = {
+        "status": status,
+        "size": files["b.pdf"]["size"],
+        "mtime_ns": files["b.pdf"]["mtime_ns"],
+        "out": a_out,
+        "error": "x",
+    }
+    index_path.write_text(json.dumps(data), encoding="utf-8")
+    report = sync_knowledge(project)
+    assert [p.name for p in report.extracted] == ["b.pdf"]
+    assert (extract_dir(project) / a_out).exists()
+    assert len(_outputs(project)) == 2
+
+
+def test_an_entry_cannot_delete_the_output_of_another_source(project):
+    know = project / "Knowledge"
+    a = make_text_pdf(know / "a.pdf", "Text of a")
+    make_text_pdf(know / "b.pdf", "Text of b")
+    sync_knowledge(project)
+    index_path = extract_dir(project) / knowledge.INDEX_NAME
+    data = json.loads(index_path.read_text(encoding="utf-8"))
+    a_out = data["files"]["a.pdf"]["out"]
+    # A source that no longer exists, said to own a's output.
+    data["files"]["gone.pdf"] = {
+        "status": "ok",
+        "size": 1,
+        "mtime_ns": 1,
+        "out": a_out,
+    }
+    index_path.write_text(json.dumps(data), encoding="utf-8")
+    sync_knowledge(project)
+    assert (extract_dir(project) / a_out).exists()
+    assert a.exists()
+    assert sync_knowledge(project).unchanged == 2
+    # The guard itself, apart from the loader.
+    knowledge._remove_output(
+        extract_dir(project), "other.pdf", {"status": "ok", "out": a_out}
+    )
+    assert (extract_dir(project) / a_out).exists()
+    knowledge._remove_output(
+        extract_dir(project), "a.pdf", {"status": "ok", "out": a_out}
+    )
+    assert not (extract_dir(project) / a_out).exists()

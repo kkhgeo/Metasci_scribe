@@ -52,6 +52,7 @@ LOCK_NAME = ".lock"
 TMP_PREFIX = ".tmp-"
 _INDEX_VERSION = 1
 _SAVE_EVERY = 20
+_MAX_ATTEMPTS = 1000
 _IS_WINDOWS = os.name == "nt"
 _PATH_LIMIT = 260
 _TOO_LONG = "path too long for Windows; shorten the folder or file names"
@@ -63,7 +64,7 @@ _WORKER_GRACE = 10  # the worker stops itself this long after the parent would
 _STEM_CHARS = 60
 _HASH_CHARS = 10
 _SHOWN = 5
-_OUT_NAME = re.compile(rf".+\.[0-9a-f]{{{_HASH_CHARS}}}(?:-\d+)?\.md")
+_OUT_NAME = re.compile(rf".+\.([0-9a-f]{{{_HASH_CHARS}}})(?:-\d+)?\.md")
 _SURROGATES = re.compile("[\ud800-\udfff]")
 _BAD_CHARS = re.compile('[<>:"/\\\\|?*\x00-\x1f\x7f\ud800-\udfff]')
 _RESERVED = frozenset(
@@ -105,6 +106,13 @@ class _Source:
 # -- names -------------------------------------------------------------------
 
 
+def _digest(rel: str) -> str:
+    """The hash in the output name of the PDF at *rel*."""
+    return hashlib.sha256(rel.encode("utf-8", "surrogatepass")).hexdigest()[
+        :_HASH_CHARS
+    ]
+
+
 def _output_name(rel: str, taken: set[str]) -> str:
     """The extract's file name for the PDF at *rel* (a path inside Knowledge/).
 
@@ -120,12 +128,12 @@ def _output_name(rel: str, taken: set[str]) -> str:
     stem = stem[:_STEM_CHARS].strip(" .").lstrip(".") or "_"
     if stem.split(".")[0].rstrip(" ").casefold() in _RESERVED:
         stem = "_" + stem
-    digest = hashlib.sha256(rel.encode("utf-8", "surrogatepass")).hexdigest()
-    name = f"{stem}.{digest[:_HASH_CHARS]}.md"
+    digest = _digest(rel)
+    name = f"{stem}.{digest}.md"
     counter = 1
     while name.casefold() in taken:
         counter += 1
-        name = f"{stem}.{digest[:_HASH_CHARS]}-{counter}.md"
+        name = f"{stem}.{digest}-{counter}.md"
     return name
 
 
@@ -142,15 +150,27 @@ def _safe_out(name: object) -> bool:
     )
 
 
+def _owns(rel: str, name: object) -> bool:
+    """Whether *name* is an output name that the PDF at *rel* could have been
+    given: ours in form, with the hash of that very path."""
+    if not _safe_out(name):
+        return False
+    match = _OUT_NAME.fullmatch(name)
+    return match is not None and match.group(1) == _digest(rel)
+
+
 # -- the index ---------------------------------------------------------------
 
 
 def _load_index(out_dir: Path) -> dict[str, dict]:
     """The saved index, or an empty one when it is missing or damaged.
 
-    An entry whose output name is not one this module makes, or that a second
-    entry also claims, is dropped: its source is read again. The file is data
-    that anything with write access can change, so nothing in it is trusted.
+    An entry that does not look like one this module wrote is dropped, and
+    its source is read again: an ``ok`` entry whose output name is not the
+    one its own path gets, or that a second entry also claims; a scan or a
+    failure that names an output at all. The file is data that anything with
+    write access can change, so nothing in it is trusted, and a name taken
+    from it is never used to delete a file unless it passed this.
     """
     try:
         data = json.loads((out_dir / INDEX_NAME).read_text(encoding="utf-8"))
@@ -164,11 +184,24 @@ def _load_index(out_dir: Path) -> dict[str, dict]:
     for rel, entry in files.items():
         if not isinstance(rel, str) or not isinstance(entry, dict):
             continue
-        if entry.get("status") == "ok":
-            name = entry.get("out")
-            if not _safe_out(name) or name.casefold() in claimed:
+        if "out" in entry:
+            name = entry["out"]
+            if (
+                entry.get("status") != "ok"
+                or not _owns(rel, name)
+                or name.casefold() in claimed
+            ):
                 continue
             claimed.add(name.casefold())
+        elif entry.get("status") == "ok":
+            continue
+        attempts = entry.get("attempts")
+        if "attempts" in entry and not (
+            isinstance(attempts, int)
+            and not isinstance(attempts, bool)
+            and 0 <= attempts <= _MAX_ATTEMPTS
+        ):
+            del entry["attempts"]
         index[rel] = entry
     return index
 
@@ -185,9 +218,11 @@ def _save_index(out_dir: Path, index: dict[str, dict]) -> None:
         tmp.unlink(missing_ok=True)
 
 
-def _remove_output(out_dir: Path, entry: dict | None) -> None:
+def _remove_output(out_dir: Path, rel: str, entry: dict | None) -> None:
+    """Delete the output of *entry*, a source's index entry, if the name is
+    one that source's path gets."""
     name = entry.get("out") if entry else None
-    if _safe_out(name):
+    if _owns(rel, name):
         try:
             (out_dir / name).unlink(missing_ok=True)
         except OSError:
@@ -197,22 +232,34 @@ def _remove_output(out_dir: Path, entry: dict | None) -> None:
 # -- finding the PDFs --------------------------------------------------------
 
 
-_REPARSE_POINT = 0x400  # FILE_ATTRIBUTE_REPARSE_POINT: links, junctions, mounts
+_REPARSE_POINT = 0x400  # FILE_ATTRIBUTE_REPARSE_POINT
+# Reparse tags that send a path somewhere else. Cloud placeholders (OneDrive and
+# the like) are reparse points too, but they are the folder itself: followed.
+_LINK_TAGS = frozenset(
+    {
+        0xA000000C,  # IO_REPARSE_TAG_SYMLINK
+        0xA0000003,  # IO_REPARSE_TAG_MOUNT_POINT (a junction)
+    }
+)
 
 
 def _is_link(path: str) -> bool:
-    """A symbolic link or, on Windows, a junction or other reparse point.
+    """A symbolic link or, on Windows, a junction or mount point.
 
-    ``os.path.isjunction`` exists only from Python 3.12, so the file
-    attributes are read instead.
+    ``os.path.isjunction`` exists only from Python 3.12, so the reparse tag
+    is read instead (``st_reparse_tag``, Windows, 3.8+). A reparse point of
+    another kind is followed; a file must still resolve inside the folder.
     """
     try:
         info = os.lstat(path)
     except OSError:
         return True  # cannot be examined: not to be walked into
-    return stat.S_ISLNK(info.st_mode) or bool(
-        getattr(info, "st_file_attributes", 0) & _REPARSE_POINT
-    )
+    if stat.S_ISLNK(info.st_mode):
+        return True
+    if not getattr(info, "st_file_attributes", 0) & _REPARSE_POINT:
+        return False
+    tag = getattr(info, "st_reparse_tag", None)
+    return tag is None or tag in _LINK_TAGS  # no tag known: be careful
 
 
 def _inside(path: str, folder: str) -> bool:
@@ -439,7 +486,7 @@ def _sync(
         if complete:
             seen = {s.rel for s in found}
             for rel in [r for r in index if r not in seen]:
-                _remove_output(out_dir, index.pop(rel))
+                _remove_output(out_dir, rel, index.pop(rel))
         try:
             _save_index(out_dir, index)
         except OSError:
@@ -483,7 +530,7 @@ def _read_one(
         else:
             index[source.rel] = entry
         if not old or not entry or entry.get("out") != old.get("out"):
-            _remove_output(out_dir, old)
+            _remove_output(out_dir, source.rel, old)
 
     def fail(reason: str, *, again: bool = False) -> None:
         """Remember a failure. With *again* (the reader hung or died, which
@@ -494,7 +541,8 @@ def _read_one(
                 source.size,
                 source.mtime_ns,
             )
-            tries = (int(old.get("attempts", 1)) if same else 0) + 1
+            before = old.get("attempts") if same else 0
+            tries = (before if isinstance(before, int) else 1) + 1
             entry["attempts"] = tries
             entry["retry"] = tries < 2
         settle(entry)
@@ -539,7 +587,7 @@ def _read_one(
             for r, e in index.items()
             if r != source.rel and _safe_out(e.get("out"))
         }
-        if old and _safe_out(old.get("out")):
+        if old and _owns(source.rel, old.get("out")):
             name = old["out"]
         else:
             name = _output_name(source.rel, taken)
