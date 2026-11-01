@@ -1637,6 +1637,16 @@ def summarizing_agent(tmp_path: Path) -> Any:
     )
 
 
+def summarize_turn(agent: Any, mode: str) -> dict[str, Any]:
+    state = {"messages": long_history()}
+    if mode == "async":
+        return asyncio.run(agent.ainvoke(state))
+    return agent.invoke(state)
+
+
+UNAVAILABLE = http_error(503, structured("subscription_sharing_usage_unavailable"))
+
+
 @both_modes
 @pytest.mark.parametrize(
     ("reply", "action"),
@@ -1653,35 +1663,75 @@ def summarizing_agent(tmp_path: Path) -> Any:
             http_error(401, structured("subscription_sharing_invalid_user")),
             PlanAction.RELOGIN,
         ),
-        (
-            http_error(503, structured("subscription_sharing_usage_unavailable")),
-            PlanAction.RETRY,
-        ),
     ],
-    ids=["usage", "ineligible", "relogin", "retry"],
+    ids=["usage", "ineligible", "relogin"],
 )
-def test_a_failed_summary_call_is_sent_once_and_stays_typed(
+def test_a_stop_during_a_summary_sends_exactly_one_request(
     serve, tmp_path, mode, reply, action
 ):
-    """``model_retry`` is the one retry layer, here too."""
     server = serve(reply)
-    agent = summarizing_agent(tmp_path)
-    state = {"messages": long_history()}
-
-    def turn() -> Any:
-        if mode == "async":
-            return asyncio.run(agent.ainvoke(state))
-        return agent.invoke(state)
-
     with pytest.raises(PlanStop) as caught:
-        turn()
+        summarize_turn(summarizing_agent(tmp_path), mode)
     assert caught.value.action is action
     assert len(server.requests) == 1
 
 
+@both_modes
+def test_a_temporary_summary_failure_recovers(serve, tmp_path, mode):
+    server = serve(
+        UNAVAILABLE, sse(*text_events("the summary")), sse(*text_events("answered"))
+    )
+    result = summarize_turn(summarizing_agent(tmp_path), mode)
+    assert result["messages"][-1].text == "answered"
+    assert len(server.requests) == 3
+
+
+@both_modes
+def test_a_summary_that_stays_unavailable_ends_typed_after_three_tries(
+    serve, tmp_path, mode
+):
+    server = serve(UNAVAILABLE)
+    with pytest.raises(PlanStop) as caught:
+        summarize_turn(summarizing_agent(tmp_path), mode)
+    assert caught.value.action is PlanAction.RETRY
+    assert len(server.requests) == 3
+
+
+def test_summary_retries_nest_inside_model_retry_and_stay_bounded(serve, tmp_path):
+    """Production order: each ``model_retry`` attempt gets the summary's three."""
+    server = serve(UNAVAILABLE)
+    clock = _Clock()
+    model = build_model("gpt-6.1-sol")
+    model.profile = {"max_input_tokens": 2_000}
+    backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
+    agent = create_agent(
+        model,
+        middleware=[
+            ModelRetryMiddleware(
+                wait_budget_seconds=2.0,
+                unattended=False,
+                honor_run_key=False,
+                clock=clock,
+                sleep=clock.asleep,
+                sync_sleep=clock.sleep,
+                rng=lambda: 0.5,
+            ),
+            create_per_run_summarization_middleware(model, backend),
+        ],
+    )
+    with pytest.raises(PlanStop) as caught:
+        summarize_turn(agent, "sync")
+    assert caught.value.action is PlanAction.RETRY
+    assert clock.waits == [1.0]
+    assert len(server.requests) == 6
+
+
 @pytest.mark.parametrize("action", list(PlanAction))
-def test_runnable_retries_leave_every_plan_failure_alone(action):
-    assert default_retry_on(PlanStop(action, "text")) is False
+def test_langchain_retry_layers_retry_only_the_retry_action(action):
+    expected = action is PlanAction.RETRY
+    stop = PlanStop(action, "text")
+    assert default_retry_on(stop) is expected
+    assert stop.is_retryable is expected
 
 
 def test_the_compact_tool_that_turns_errors_into_messages_is_not_mounted():

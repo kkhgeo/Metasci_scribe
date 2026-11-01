@@ -55,14 +55,13 @@ class PlanStop(RuntimeError, ModelError):
     usage limit from other failures by ``action``.
 
     A ``ModelError`` so that langchain's own ``with_retry`` layers, such as the
-    one around the summary call, leave it alone. ``is_retryable`` is what they
-    read, so it is false for every action: ``model_retry`` goes by ``action``.
+    one around the summary call, send a stop once. They read ``is_retryable``,
+    which holds for :attr:`PlanAction.RETRY` alone. They run inside ``model_retry``,
+    so its attempts and theirs multiply, up to a bound that both set.
 
     ``headers`` holds only what sets the retry wait. No attribute may hold a
     token or a raw response body.
     """
-
-    is_retryable = False
 
     def __init__(
         self,
@@ -83,6 +82,10 @@ class PlanStop(RuntimeError, ModelError):
         self.param = param
         self.status_code = status_code
         self.headers = dict(headers or {})
+
+    @property
+    def is_retryable(self) -> bool:
+        return self.action is PlanAction.RETRY
 
     def __str__(self) -> str:
         return self.message

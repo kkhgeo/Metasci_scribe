@@ -17,9 +17,10 @@ SDK holds, so SDK and httpx exceptions cannot carry it. Text from an error body
 passes through :func:`_scrub`, since a server can echo the credential.
 
 A failure stops inference; nothing here switches to another model or billing
-path. ``model_retry`` is the one retry layer, so a retried call also drops what
-the failed one had streamed. A network failure leaves the sign-in untouched, and
-tokens are erased only by the sign-in module, after a terminal refresh refusal.
+path. ``model_retry`` retries the model call, so a retried call also drops what
+the failed one had streamed; the summary call has langchain's retries as well.
+A network failure leaves the sign-in untouched, and tokens are erased only by
+the sign-in module, after a terminal refresh refusal.
 """
 
 from __future__ import annotations
