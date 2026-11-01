@@ -1,7 +1,5 @@
 """Tests for metasci_scribe/prompts.py."""
 
-import pytest
-
 from metasci_scribe.prompts import (
     DELEGATION_STRATEGY,
     METASCI_SCRIBE_IDENTITY,
@@ -134,32 +132,9 @@ class TestShellGuidelines:
         assert "Sandbox limits" not in WRITING_WORKFLOW
 
 
-class TestDangerousShellGuidelines:
-    def test_default_uses_the_sandbox_wording(self):
-        result = get_system_prompt()
-        assert "Sandbox limits" in result
-        assert "DANGEROUS MODE" not in result
-
-    def test_dangerous_swaps_guidelines(self):
-        result = get_system_prompt(dangerous=True, cwd="/Users/me/ws/demo")
-        assert "DANGEROUS MODE" in result
-        assert "/Users/me/ws/demo" in result
-        # sandbox wording is gone
-        assert "Sandbox limits" not in result
-        assert "the author approves each command" not in result
-        # privileged-command blocklist still advertised
-        assert "sudo" in result
-        assert "rm -rf /" in result
-
-    def test_dangerous_without_cwd_falls_back(self):
-        result = get_system_prompt(dangerous=True)
-        assert "DANGEROUS MODE" in result
-
-
 class TestBashOnWindowsShellGuidelines:
     def test_off_by_default(self):
         assert "Git for Windows" not in get_system_prompt()
-        assert "Git for Windows" not in get_system_prompt(dangerous=True)
 
     def test_sandbox_names_the_shell_without_windows_paths(self):
         result = get_system_prompt(bash_on_windows=True)
@@ -168,32 +143,17 @@ class TestBashOnWindowsShellGuidelines:
         assert "C:/Users/you" not in result
         assert "Sandbox limits" in result
 
-    @pytest.mark.parametrize("dangerous", [False, True])
-    def test_both_modes_explain_git_bash_path_conversion(self, dangerous):
-        result = get_system_prompt(dangerous=dangerous, bash_on_windows=True)
+    def test_explains_git_bash_path_conversion(self):
+        result = get_system_prompt(bash_on_windows=True)
         assert "any other argument starting with `/` arrives as a path" in result
         assert "start the command with `MSYS_NO_PATHCONV=1`" in result
         assert "GNU tools (grep, sed, awk, ...) get arguments unchanged" in result
-        assert "MSYS_NO_PATHCONV" not in get_system_prompt(dangerous=dangerous)
+        assert "MSYS_NO_PATHCONV" not in get_system_prompt()
 
-    def test_dangerous_shows_windows_paths_with_forward_slashes(self):
-        result = get_system_prompt(
-            dangerous=True,
-            cwd=r"C:\Users\me\ws\demo",
-            bash_on_windows=True,
-        )
-        assert "Your current working directory is `C:/Users/me/ws/demo`" in result
-        assert "(e.g. `C:/Users/you/Documents/file.txt`)" in result
-        assert "`/Users/you/Documents/file.txt`" not in result
-        assert "The shell is bash from Git for Windows." in result
-
-    def test_agent_prompt_follows_the_shell_decision(self, monkeypatch, tmp_path):
-        from types import SimpleNamespace
-
+    def test_agent_prompt_follows_the_shell_decision(self, monkeypatch):
         from metasci_scribe import agent as evo
         from metasci_scribe import agent_shell
 
-        cfg = SimpleNamespace(dangerous_mode=False)
-        assert "Git for Windows" not in evo._configured_system_prompt(cfg, tmp_path)
+        assert "Git for Windows" not in evo._configured_system_prompt()
         monkeypatch.setattr(agent_shell, "agent_bash", lambda: object())
-        assert "Git for Windows" in evo._configured_system_prompt(cfg, tmp_path)
+        assert "Git for Windows" in evo._configured_system_prompt()

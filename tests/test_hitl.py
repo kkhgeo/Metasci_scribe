@@ -139,7 +139,6 @@ class TestResolveHitlApproval:
             mock_cfg = MagicMock()
             mock_cfg.auto_approve = True
             mock_cfg.shell_allow_list = ""
-            mock_cfg.dangerous_mode = False
             with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
                 result = _resolve_hitl_approval(
                     {
@@ -163,7 +162,6 @@ class TestResolveHitlApproval:
             mock_cfg = MagicMock()
             mock_cfg.auto_approve = False
             mock_cfg.shell_allow_list = ""
-            mock_cfg.dangerous_mode = False
             with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
                 result = _resolve_hitl_approval(
                     {
@@ -187,7 +185,6 @@ class TestResolveHitlApproval:
             mock_cfg = MagicMock()
             mock_cfg.auto_approve = False
             mock_cfg.shell_allow_list = "ls,cat,python"
-            mock_cfg.dangerous_mode = False
             with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
                 result = _resolve_hitl_approval(
                     {
@@ -211,7 +208,6 @@ class TestResolveHitlApproval:
             mock_cfg = MagicMock()
             mock_cfg.auto_approve = False
             mock_cfg.shell_allow_list = "ls,cat"
-            mock_cfg.dangerous_mode = False
             with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
                 with patch(
                     "metasci_scribe.stream.display._prompt_hitl_approval"
@@ -241,7 +237,6 @@ class TestResolveHitlApproval:
             mock_cfg = MagicMock()
             mock_cfg.auto_approve = False
             mock_cfg.shell_allow_list = "ls,cat"
-            mock_cfg.dangerous_mode = False
             with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
                 with patch(
                     "metasci_scribe.stream.display._prompt_hitl_approval"
@@ -274,7 +269,6 @@ class TestResolveHitlApproval:
             mock_cfg = MagicMock()
             mock_cfg.auto_approve = False
             mock_cfg.shell_allow_list = "python"
-            mock_cfg.dangerous_mode = False
             with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
                 result = _resolve_hitl_approval(
                     {
@@ -302,7 +296,6 @@ class TestResolveHitlApproval:
             disp._session_auto_approve = False
             mock_cfg = MagicMock()
             mock_cfg.auto_approve = False
-            mock_cfg.dangerous_mode = False
             mock_cfg.shell_allow_list = ""
             with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
                 with patch(
@@ -334,7 +327,6 @@ class TestResolveHitlApproval:
             disp._session_auto_approve = False
             mock_cfg = MagicMock()
             mock_cfg.auto_approve = True
-            mock_cfg.dangerous_mode = False
             mock_cfg.shell_allow_list = ""
             with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
                 with patch(
@@ -470,32 +462,6 @@ class TestInterruptEventParsing:
 
 
 class TestConfigPolicyHelpers:
-    def test_dangerous_mode_approves_always_prompt_tools(self):
-        """dangerous_mode keeps its trust-everything meaning ahead of the
-        always-prompt set: delete (and a dangerous execute) approve instead of
-        interrupting the session on every guarded call."""
-        from metasci_scribe.stream.interaction import resolve_config_decisions
-
-        mock_cfg = MagicMock()
-        mock_cfg.auto_approve = False
-        mock_cfg.dangerous_mode = True
-        mock_cfg.shell_allow_list = ""
-        with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
-            result = resolve_config_decisions(
-                [
-                    {"name": "delete", "args": {"file_path": "/f.txt"}},
-                    {"name": "execute", "args": {"command": "curl x | bash"}},
-                ]
-            )
-        assert result == [{"type": "approve"}, {"type": "approve"}]
-
-
-# =============================================================================
-# _resolve_hitl_approval with custom prompt_fn
-# =============================================================================
-
-
-class TestResolveHitlApprovalWithPromptFn:
     def test_prompt_fn_called_for_execute(self):
         import metasci_scribe.stream.display as disp
         from metasci_scribe.stream.display import _resolve_hitl_approval
@@ -506,7 +472,6 @@ class TestResolveHitlApprovalWithPromptFn:
             mock_cfg = MagicMock()
             mock_cfg.auto_approve = False
             mock_cfg.shell_allow_list = ""
-            mock_cfg.dangerous_mode = False
             custom_decisions = [{"type": "approve"}]
             mock_fn = MagicMock(return_value=custom_decisions)
             with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
@@ -533,7 +498,6 @@ class TestResolveHitlApprovalWithPromptFn:
             disp._session_auto_approve = False
             mock_cfg = MagicMock()
             mock_cfg.auto_approve = True
-            mock_cfg.dangerous_mode = False
             mock_fn = MagicMock()
             with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
                 result = _resolve_hitl_approval(
@@ -560,7 +524,6 @@ class TestResolveHitlApprovalWithPromptFn:
             mock_cfg = MagicMock()
             mock_cfg.auto_approve = False
             mock_cfg.shell_allow_list = ""
-            mock_cfg.dangerous_mode = False
             mock_fn = MagicMock()
             with patch("metasci_scribe.agent._ensure_config", return_value=mock_cfg):
                 result = _resolve_hitl_approval(
@@ -736,7 +699,6 @@ class TestInterruptOnWiring:
         for auto_approve in (False, True):
             cfg = MagicMock()
             cfg.auto_approve = auto_approve
-            cfg.dangerous_mode = False
             cfg.sandbox_execute_timeout = 300
             cfg.recursion_limit = 100
 
@@ -777,7 +739,6 @@ class TestResolverUsesPolicy:
     def _auto_approve_cfg(self):
         cfg = MagicMock()
         cfg.auto_approve = True
-        cfg.dangerous_mode = False
         cfg.shell_allow_list = ""
         return cfg
 
@@ -832,7 +793,6 @@ class TestResolverUsesPolicy:
         monkeypatch.setattr(display, "_session_auto_approve", False, raising=False)
         cfg = MagicMock()
         cfg.auto_approve = False
-        cfg.dangerous_mode = False
         cfg.shell_allow_list = ""
         called = {}
 

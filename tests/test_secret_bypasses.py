@@ -138,7 +138,7 @@ def test_install_refuses_a_link_to_the_auth_folder(home, token, project):
     _assert_no_copy_of_the_secret(home)
 
 
-def test_dangerous_mode_install_from_another_workspace_is_refused(home, token, project):
+def test_install_from_another_workspace_is_refused(home, token, project):
     (home / ".metasci-scribe" / "SKILL.md").write_text(SKILL_MD, encoding="utf-8")
     tool = make_skill_manager_tool(Workspace(project))
     answer = tool.invoke({"action": "install", "source": str(home / ".metasci-scribe")})
@@ -233,13 +233,8 @@ def _device_forms(token: Path) -> list[str]:
     return forms
 
 
-@pytest.mark.parametrize("dangerous", [True, False], ids=["dangerous", "default"])
-def test_double_slash_paths_are_refused_for_every_operation(
-    home, token, project, dangerous
-):
-    backend = CustomSandboxBackend(
-        root_dir=str(project), virtual_mode=True, dangerous=dangerous
-    )
+def test_double_slash_paths_are_refused_for_every_operation(home, token, project):
+    backend = CustomSandboxBackend(root_dir=str(project))
     for form in _device_forms(token):
         _read_is_refused(backend, form)
         _assert_refused(backend.write(form + ".new", "x"))
@@ -265,7 +260,9 @@ def test_auth_check_sees_through_the_device_prefix_without_the_key_check(
     home, token, project, monkeypatch
 ):
     monkeypatch.setattr(backends, "_DEVICE_PATH", re.compile(r"^$(?!.)x"))
-    backend = CustomSandboxBackend(root_dir=str(project), dangerous=True)
+    backend = backends.GuardedFilesystemBackend(
+        root_dir=str(project), virtual_mode=False
+    )
     _assert_refused(backend.read(f"//?/{token.as_posix()}"))
 
 
@@ -318,7 +315,6 @@ def test_code_interpreter_reads_nothing_through_double_slash(
         config=ScribeConfig(
             enable_async_subagents=False,
             memory_workers_enabled=False,
-            dangerous_mode=True,
         ),
         chat_model=model,
         checkpointer=InMemorySaver(),
@@ -419,7 +415,7 @@ def test_every_filesystem_backend_goes_through_the_guard():
 
 def test_composite_default_refuses_a_double_slash(home, token, project):
     backend = CompositeBackend(
-        default=CustomSandboxBackend(root_dir=str(project), dangerous=True), routes={}
+        default=CustomSandboxBackend(root_dir=str(project)), routes={}
     )
     _read_is_refused(backend, f"//?/{token.as_posix()}")
 
@@ -765,29 +761,12 @@ def test_other_skill_manager_actions_do_not_interrupt(home, project):
 
 
 @pytest.mark.usefixtures("no_mcp")
-@pytest.mark.parametrize(
-    "gate", ["suppressed", "dangerous"], ids=["hitl suppressed", "dangerous mode"]
-)
-def test_a_skill_install_is_unavailable_with_no_human_gate(home, project, gate):
-    """A suppressed run never pauses; a dangerous-mode run pauses and the
-    client approves everything unseen. Neither installs."""
-    from langgraph.types import Command
-
+def test_a_skill_install_is_unavailable_with_no_human_gate(home, project):
+    """A suppressed run never pauses, so it does not install."""
     skill = _skill_folder(project)
-    fields = {"dangerous_mode": True} if gate == "dangerous" else {}
-    agent, _model = _skill_install_agent(project, [_install_call(str(skill))], **fields)
-    config = {
-        "configurable": {"thread_id": "t", "hitl_suppressed": gate == "suppressed"}
-    }
+    agent, _model = _skill_install_agent(project, [_install_call(str(skill))])
+    config = {"configurable": {"thread_id": "t", "hitl_suppressed": True}}
     result = asyncio.run(agent.ainvoke({"messages": [HumanMessage("go")]}, config))
-    if gate == "dangerous":
-        (interrupt,) = result["__interrupt__"]
-        result = asyncio.run(
-            agent.ainvoke(
-                Command(resume={interrupt.id: {"decisions": [{"type": "approve"}]}}),
-                config,
-            )
-        )
     assert not result.get("__interrupt__")
     answer = next(str(m.content) for m in result["messages"] if m.type == "tool")
     assert "no person" in answer

@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 from metasci_scribe import git_cli, paths, policy
-from metasci_scribe.backends import CustomSandboxBackend
+from metasci_scribe.backends import CustomSandboxBackend, GuardedFilesystemBackend
 from metasci_scribe.config import settings
 from metasci_scribe.config.settings import get_effective_config
 
@@ -86,9 +86,9 @@ def test_provider_credentials_may_come_from_a_workspace_env(key):
         "OPENAI_API_BASE",
         "OPENAI_API_URL",
         "AZURE_OPENAI_ENDPOINT",
-        "METASCI_SCRIBE_DANGEROUS_MODE",
+        "METASCI_SCRIBE_ENABLE_ASYNC_SUBAGENTS",
         "METASCI_SCRIBE_LANGGRAPH_DEV_PORT",
-        "metasci_scribe_dangerous_mode",
+        "metasci_scribe_enable_async_subagents",
         "GIT_SSH_COMMAND",
         "GIT_CONFIG_COUNT",
         "GIT_CONFIG_KEY_0",
@@ -139,7 +139,7 @@ def test_the_dotenv_merge_takes_only_allowed_keys(tmp_path, monkeypatch):
     """The critical finding: a planted ``.env`` raised the mode and hooked git."""
     env_file = tmp_path / ".env"
     env_file.write_text(
-        "METASCI_SCRIBE_DANGEROUS_MODE=true\n"
+        "METASCI_SCRIBE_ENABLE_ASYNC_SUBAGENTS=true\n"
         "GIT_SSH_COMMAND=cat secret > out; exit 1; #\n"
         "GIT_CONFIG_COUNT=1\n"
         "GIT_CONFIG_KEY_0=url.evil.insteadOf\n"
@@ -151,7 +151,7 @@ def test_the_dotenv_merge_takes_only_allowed_keys(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(settings, "find_dotenv", lambda *a, **k: str(env_file))
     for key in (
-        "METASCI_SCRIBE_DANGEROUS_MODE",
+        "METASCI_SCRIBE_ENABLE_ASYNC_SUBAGENTS",
         "GIT_SSH_COMMAND",
         "GIT_CONFIG_COUNT",
         "GIT_CONFIG_KEY_0",
@@ -165,8 +165,8 @@ def test_the_dotenv_merge_takes_only_allowed_keys(tmp_path, monkeypatch):
 
     config = get_effective_config()
 
-    assert config.dangerous_mode is False
-    assert "METASCI_SCRIBE_DANGEROUS_MODE" not in os.environ
+    assert config.enable_async_subagents is False
+    assert "METASCI_SCRIBE_ENABLE_ASYNC_SUBAGENTS" not in os.environ
     assert "GIT_SSH_COMMAND" not in os.environ
     assert "GIT_CONFIG_COUNT" not in os.environ
     assert "PYTHONPATH" not in os.environ
@@ -469,8 +469,8 @@ def test_write_refusal_follows_links_to_a_protected_file(home, project):
 def test_file_tools_refuse_the_protected_files_in_every_mode(home, project):
     (project / ".env").write_text("OPENAI_API_KEY=old\n", encoding="utf-8")
     (project / ".metasci-scribe").mkdir()
-    default = CustomSandboxBackend(root_dir=str(project), virtual_mode=True)
-    dangerous = CustomSandboxBackend(root_dir=str(project), dangerous=True)
+    default = CustomSandboxBackend(root_dir=str(project))
+    real_paths = GuardedFilesystemBackend(root_dir=str(project), virtual_mode=False)
     cases = {
         default: [
             "/.env",
@@ -482,7 +482,7 @@ def test_file_tools_refuse_the_protected_files_in_every_mode(home, project):
             "/sitecustomize.py",
             "/.langgraph_api/x.pckl",
         ],
-        dangerous: [
+        real_paths: [
             str(project / ".env"),
             str(home / ".gitconfig"),
             str(home / ".ssh" / "config"),
@@ -506,7 +506,7 @@ def test_file_tools_refuse_the_protected_files_in_every_mode(home, project):
     assert not (Path(policy.__file__).with_name("planted.py")).exists()
     # Ordinary files still work, in both modes.
     assert not default.write("/paper.tex", "x").error
-    assert not dangerous.write(str(project / "notes.md"), "x").error
+    assert not real_paths.write(str(project / "notes.md"), "x").error
     assert default.write("/.metasci-scribe/skills/helper/SKILL.md", "x").error
     assert not (project / ".metasci-scribe" / "skills").exists()
 
@@ -582,16 +582,18 @@ _ODD_FORMS = [
 
 
 @pytest.mark.parametrize("form", _ODD_FORMS)
-@pytest.mark.parametrize("dangerous", [False, True], ids=["default", "dangerous"])
+@pytest.mark.parametrize("real_paths", [False, True], ids=["sandbox", "real paths"])
 def test_names_windows_rewrites_on_open_are_refused_everywhere(
-    home, project, form, dangerous
+    home, project, form, real_paths
 ):
     """Windows drops a trailing dot or space when it opens a file and maps
     reserved device names, so ``/.env `` lands on ``.env`` while the policy
     saw another name. Such a path is refused on every OS, read or write."""
-    key = form if not dangerous else str(project) + form.replace("/", os.sep)
-    backend = CustomSandboxBackend(
-        root_dir=str(project), virtual_mode=not dangerous, dangerous=dangerous
+    key = form if not real_paths else str(project) + form.replace("/", os.sep)
+    backend = (
+        GuardedFilesystemBackend(root_dir=str(project), virtual_mode=False)
+        if real_paths
+        else CustomSandboxBackend(root_dir=str(project))
     )
     assert backend.write(key, "planted").error, key
     assert backend.edit(key, "a", "b").error, key
@@ -607,14 +609,14 @@ def test_names_windows_rewrites_on_open_are_refused_everywhere(
 
 
 def test_ordinary_names_with_dots_and_spaces_inside_still_work(home, project):
-    backend = CustomSandboxBackend(root_dir=str(project), virtual_mode=True)
+    backend = CustomSandboxBackend(root_dir=str(project))
     for key in ("/my paper.tex", "/v1.2.3/notes.md", "/.hidden/x.md", "/a. b.md"):
         assert not backend.write(key, "x").error, key
         assert not backend.read(key).error, key
 
 
 def test_the_server_secret_cannot_be_read_by_file_tools(home, project):
-    backend = CustomSandboxBackend(root_dir=str(project), dangerous=True)
+    backend = GuardedFilesystemBackend(root_dir=str(project), virtual_mode=False)
     secret = home / ".metasci-scribe" / "server" / "secret"
     try:
         result = backend.read(str(secret))

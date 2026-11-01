@@ -792,10 +792,10 @@ def test_stop_recorded_server_cleans_corrupt_pid_file(
     assert not pid_file.exists()
 
 
-def test_server_config_fingerprint_tracks_dangerous_mode():
+def test_server_config_fingerprint_tracks_a_consumed_setting():
     cfg = manager.ScribeConfig()
     base = manager._server_config_fingerprint(cfg)
-    cfg.dangerous_mode = True
+    cfg.sandbox_execute_timeout += 1
     assert manager._server_config_fingerprint(cfg) != base
 
 

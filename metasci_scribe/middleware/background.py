@@ -110,7 +110,6 @@ def _make_run_in_background(
     *,
     work_dir: str | Path,
     skills_dir: str | Path | None,
-    dangerous: bool,
     guard_dangerous: bool = False,
 ):
     """Build the ``run_in_background`` tool bound to a work directory and sandbox policy.
@@ -118,8 +117,6 @@ def _make_run_in_background(
     Processes start in ``work_dir``; ``/skills/...`` paths resolve through
     ``skills_dir`` first, as they do for ``execute``.
 
-    ``dangerous`` is captured from ``cfg.dangerous_mode`` at assembly (the agent is
-    rebuilt when config changes, so the captured value never goes stale).
     ``guard_dangerous`` mirrors ``execute``'s backstop and is a construction-time
     floor; on top of it, a run with HITL suppressed (``auto_mode`` or attended
     ``auto_approve``) is guarded per call, since the spawn interrupt is disarmed
@@ -148,8 +145,6 @@ def _make_run_in_background(
         command, error = prepare_sandbox_command(
             command,
             cwd,
-            virtual_mode=not dangerous,
-            dangerous=dangerous,
             guard_dangerous=guard_dangerous or is_hitl_suppressed(),
             skills_dir=skills_dir,
         )
@@ -161,13 +156,8 @@ def _make_run_in_background(
         except agent_shell.BashMissingError as exc:
             return str(exc)
         label = f" (name={name!r})" if name else ""
-        # In dangerous mode `/` is the real root, so advertise the real log path;
-        # in virtual mode `/.bg_processes/...` correctly maps to the workspace.
-        log_path = (
-            f"{cwd}/.bg_processes/{process_id}.log"
-            if dangerous
-            else f"/.bg_processes/{process_id}.log"
-        )
+        # `/.bg_processes/...` maps to the workspace.
+        log_path = f"/.bg_processes/{process_id}.log"
         text = (
             f"Started background process {process_id}{label}. "
             f"Output -> {log_path}. "
@@ -256,7 +246,6 @@ class BackgroundExecutionMiddleware(AgentMiddleware):
         *,
         work_dir: str | Path,
         skills_dir: str | Path | None,
-        dangerous: bool = False,
         guard_dangerous: bool = False,
     ) -> None:
         super().__init__()
@@ -264,7 +253,6 @@ class BackgroundExecutionMiddleware(AgentMiddleware):
             _make_run_in_background(
                 work_dir=work_dir,
                 skills_dir=skills_dir,
-                dangerous=dangerous,
                 guard_dangerous=guard_dangerous,
             ),
             check_process,

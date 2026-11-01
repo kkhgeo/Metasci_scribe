@@ -212,7 +212,7 @@ only provider credentials from it: an uppercase name ending in `_API_KEY`, `_KEY
 `GOOGLE_APPLICATION_CREDENTIALS` (`metasci_scribe/policy.py`, `dotenv_key_allowed`). Everything else in the
 file is ignored, with no warning yet. In particular these must now come from the shell or the config file:
 
-- every `METASCI_SCRIBE_*` setting (`METASCI_SCRIBE_DANGEROUS_MODE`, `METASCI_SCRIBE_WORKSPACE_DIR`,
+- every `METASCI_SCRIBE_*` setting (`METASCI_SCRIBE_ENABLE_ASYNC_SUBAGENTS`, `METASCI_SCRIBE_WORKSPACE_DIR`,
   `METASCI_SCRIBE_MEMORIES_DIR`, the langgraph dev port and host, ...);
 - every endpoint: `*_BASE_URL`, `*_API_BASE`, `*_API_URL`, `*_ENDPOINT` (`OPENAI_BASE_URL`,
   `ANTHROPIC_BASE_URL`, `MINIMAX_BASE_URL`, `CUSTOM_*_BASE_URL`, `OLLAMA_BASE_URL`, `AZURE_OPENAI_ENDPOINT`);

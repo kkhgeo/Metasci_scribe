@@ -35,23 +35,19 @@ async def test_posix_attachment_reference_unchanged():
     assert "shell path:" not in reference
 
 
-@pytest.mark.parametrize("dangerous", [False, True])
 @pytest.mark.parametrize("drive", ["C", "c"])
-def test_windows_file_tool_alias_resolves_working_directory(
-    monkeypatch, dangerous, drive
-):
+def test_windows_file_tool_alias_resolves_working_directory(monkeypatch, drive):
     monkeypatch.setattr(paths, "os", SimpleNamespace(name="nt"))
     monkeypatch.setattr(backends, "Path", PureWindowsPath)
     monkeypatch.setattr(
         backends.LocalShellBackend, "_resolve_path", lambda _self, key: key
     )
     backend = object.__new__(backends.CustomSandboxBackend)
-    backend._dangerous = dangerous
     backend.cwd = PureWindowsPath("C:/project")
 
-    expected = f"{drive}:/project/paper.pdf" if dangerous else "/paper.pdf"
     assert (
-        backend._resolve_path(validate_path(f"/{drive}:/project/paper.pdf")) == expected
+        backend._resolve_path(validate_path(f"/{drive}:/project/paper.pdf"))
+        == "/paper.pdf"
     )
 
 
@@ -110,80 +106,15 @@ async def _query(backend, tool, asynchronous, path):
 
 
 @pytest.mark.parametrize("tool", ["ls", "glob", "grep"])
-@pytest.mark.parametrize("asynchronous", [False, True])
-@pytest.mark.parametrize(
-    "native_path",
-    [r"C:\project\paper.txt", "C:/project/paper.txt", "c:/project/paper.txt"],
-)
-async def test_dangerous_windows_query_paths_round_trip(
-    monkeypatch, tool, asynchronous, native_path
-):
-    monkeypatch.setattr(paths, "os", SimpleNamespace(name="nt"))
-    monkeypatch.setattr(backends, "Path", PureWindowsPath)
-    monkeypatch.setattr(
-        backends.LocalShellBackend,
-        "_resolve_path",
-        lambda _self, key: PureWindowsPath(key),
-    )
-    item = {"path": native_path}
-    item.update(
-        {"line_number": 2, "line": "needle"}
-        if tool == "grep"
-        else {"size": 17, "is_dir": False}
-    )
-    items = [item]
-    parent_result = _query_result(tool, items)
-    expected = asdict(parent_result)
-    field = "entries" if tool == "ls" else "matches"
-    expected[field][0]["path"] = "/" + native_path.replace("\\", "/")
-    monkeypatch.setattr(
-        backends.LocalShellBackend, tool, lambda _self, *args, **kwargs: parent_result
-    )
-    backend = object.__new__(backends.CustomSandboxBackend)
-    backend._dangerous = True
-    backend.virtual_mode = False
-    backend.cwd = PureWindowsPath("C:/project")
-
-    result = await _query(backend, tool, asynchronous, "/C:/project")
-
-    assert result is parent_result
-    assert asdict(result) == expected
-    alias = getattr(result, field)[0]["path"]
-    assert backend._resolve_path(validate_path(alias)) == PureWindowsPath(native_path)
-    assert items[0]["path"] == native_path
-
-
-@pytest.mark.parametrize("tool", ["ls", "glob", "grep"])
-@pytest.mark.parametrize("items", [None, []])
-async def test_dangerous_query_preserves_empty_results(monkeypatch, tool, items):
-    result = _query_result(tool, items)
-    expected = asdict(result)
-    monkeypatch.setattr(
-        backends.LocalShellBackend, tool, lambda _self, *args, **kwargs: result
-    )
-    backend = object.__new__(backends.CustomSandboxBackend)
-    backend._dangerous = True
-    backend.virtual_mode = False
-    backend.cwd = PureWindowsPath("C:/project")
-
-    assert await _query(backend, tool, False, "/C:/project") is result
-    assert asdict(result) == expected
-
-
-@pytest.mark.parametrize("tool", ["ls", "glob", "grep"])
-@pytest.mark.parametrize("dangerous", [False, True])
 @pytest.mark.parametrize("path", ["/project/paper.txt", "/C:/project/paper.txt"])
-async def test_query_preserves_posix_and_virtual_paths(
-    monkeypatch, tool, dangerous, path
-):
+async def test_query_preserves_posix_and_virtual_paths(monkeypatch, tool, path):
     result = _query_result(tool, [{"path": path}])
     expected = asdict(result)
     monkeypatch.setattr(
         backends.LocalShellBackend, tool, lambda _self, *args, **kwargs: result
     )
     backend = object.__new__(backends.CustomSandboxBackend)
-    backend._dangerous = dangerous
-    backend.virtual_mode = not dangerous
+    backend.virtual_mode = True
     backend.cwd = PureWindowsPath("C:/project")
 
     assert await _query(backend, tool, False, "/project") is result
@@ -192,14 +123,12 @@ async def test_query_preserves_posix_and_virtual_paths(
 
 @pytest.mark.parametrize("tool", ["ls", "glob", "grep"])
 @pytest.mark.parametrize("asynchronous", [False, True])
-@pytest.mark.parametrize("dangerous", [False, True])
-async def test_query_results_can_be_read(tmp_path, tool, asynchronous, dangerous):
+async def test_query_results_can_be_read(tmp_path, tool, asynchronous):
     content = "before\nneedle\nafter\n"
     (tmp_path / "paper.txt").write_text(content, encoding="utf-8")
-    backend = backends.CustomSandboxBackend(str(tmp_path), dangerous=dangerous)
-    root = paths.file_tool_path(tmp_path) if dangerous else "/"
+    backend = backends.CustomSandboxBackend(str(tmp_path))
 
-    result = await _query(backend, tool, asynchronous, root)
+    result = await _query(backend, tool, asynchronous, "/")
 
     assert result.error is None
     items = result.entries if tool == "ls" else result.matches
@@ -219,10 +148,9 @@ async def test_query_results_can_be_read(tmp_path, tool, asynchronous, dangerous
     ],
     ids=["inline", "too-large", "binary"],
 )
-@pytest.mark.parametrize("dangerous", [False, True])
-def test_file_mention_path_can_be_read(tmp_path, name, data, dangerous):
+def test_file_mention_path_can_be_read(tmp_path, name, data):
     (tmp_path / name).write_bytes(data)
-    backend = backends.CustomSandboxBackend(str(tmp_path), dangerous=dangerous)
+    backend = backends.CustomSandboxBackend(str(tmp_path))
 
     _, prompt, _ = resolve_file_mentions(f"read @{name}", str(tmp_path))
     file_path = validate_path(prompt.split("Path: `", 1)[1].split("`", 1)[0])

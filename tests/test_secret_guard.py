@@ -19,6 +19,7 @@ from metasci_scribe import paths
 from metasci_scribe.agent import create_cli_agent
 from metasci_scribe.backends import (
     CustomSandboxBackend,
+    GuardedFilesystemBackend,
     no_human_gate,
     prepare_sandbox_command,
     validate_command,
@@ -55,17 +56,18 @@ def token(home) -> Path:
 
 def _workspace_backend(home) -> CustomSandboxBackend:
     """The risky layout: the workspace is the home folder itself."""
-    return CustomSandboxBackend(root_dir=str(home), virtual_mode=True)
+    return CustomSandboxBackend(root_dir=str(home))
 
 
 def _subfolder_backend(home) -> CustomSandboxBackend:
     project = home / "project"
     project.mkdir(exist_ok=True)
-    return CustomSandboxBackend(root_dir=str(project), virtual_mode=True)
+    return CustomSandboxBackend(root_dir=str(project))
 
 
-def _dangerous_backend(home) -> CustomSandboxBackend:
-    return CustomSandboxBackend(root_dir=str(home), dangerous=True)
+def _real_path_backend(home) -> GuardedFilesystemBackend:
+    """The guard itself, with no virtual root: every path reaches it as given."""
+    return GuardedFilesystemBackend(root_dir=str(home), virtual_mode=False)
 
 
 def _assert_refused(result: Any) -> None:
@@ -97,12 +99,12 @@ def test_home_workspace_composite_backend_cannot_read_it(home):
 
 
 @pytest.mark.parametrize(
-    "build", [_workspace_backend, _subfolder_backend, _dangerous_backend]
+    "build", [_workspace_backend, _subfolder_backend, _real_path_backend]
 )
 def test_real_path_forms_are_refused(home, token, build):
     backend = build(home)
     _read_is_refused(backend, paths.file_tool_path(token))
-    if build is _dangerous_backend:
+    if build is _real_path_backend:
         _assert_refused(backend.read(str(token)))
 
 
@@ -123,15 +125,15 @@ def test_dot_dot_is_refused(home, key):
     _read_is_refused(_workspace_backend(home), key)
 
 
-def test_dot_dot_in_dangerous_mode_is_refused(home, token):
+def test_dot_dot_in_a_real_path_is_refused(home, token):
     project = home / "project"
     project.mkdir()
-    backend = CustomSandboxBackend(root_dir=str(project), dangerous=True)
+    backend = GuardedFilesystemBackend(root_dir=str(project), virtual_mode=False)
     _assert_refused(backend.read("../.metasci-scribe/auth/chatgpt.json"))
     _assert_refused(backend.read(f"{project.as_posix()}/../{TOKEN_REL}"))
 
 
-@pytest.mark.parametrize("build", [_workspace_backend, _dangerous_backend])
+@pytest.mark.parametrize("build", [_workspace_backend, _real_path_backend])
 def test_symlinks_are_followed_before_checking(home, token, build):
     try:
         (home / "looks-fine.txt").symlink_to(token)
@@ -156,7 +158,7 @@ def test_symlink_shows_nothing_in_listings(home, token):
     ]
 
 
-@pytest.mark.parametrize("build", [_workspace_backend, _dangerous_backend])
+@pytest.mark.parametrize("build", [_workspace_backend, _real_path_backend])
 def test_every_file_operation_is_refused(home, token, build):
     backend = build(home)
     target = f"/{TOKEN_REL}" if build is _workspace_backend else str(token)
@@ -174,7 +176,7 @@ def test_every_file_operation_is_refused(home, token, build):
     assert not token.with_name("chatgpt.json.new").exists()
 
 
-@pytest.mark.parametrize("build", [_workspace_backend, _dangerous_backend])
+@pytest.mark.parametrize("build", [_workspace_backend, _real_path_backend])
 def test_listings_hide_it_and_keep_the_rest(home, build):
     backend = build(home)
     root = "/" if build is _workspace_backend else home.as_posix()
@@ -184,12 +186,17 @@ def test_listings_hide_it_and_keep_the_rest(home, build):
         else f"{home.as_posix()}/.metasci-scribe"
     )
 
-    listed = [item["path"].rstrip("/") for item in backend.ls(data_dir).entries]
+    listed = [
+        item["path"].replace("\\", "/").rstrip("/")
+        for item in backend.ls(data_dir).entries
+    ]
     assert not [path for path in listed if path.endswith("/auth")]
     assert [path for path in listed if path.endswith("/skills")]
     assert [path for path in listed if path.endswith("/authors.md")]
 
-    found = [item["path"] for item in backend.glob("**/*", root).matches]
+    found = [
+        item["path"].replace("\\", "/") for item in backend.glob("**/*", root).matches
+    ]
     assert not [path for path in found if "/auth/" in path]
     assert [path for path in found if path.endswith("notes.txt")]
 
@@ -257,10 +264,9 @@ SHELL_FORMS = [
 ]
 
 
-@pytest.mark.parametrize("dangerous", [False, True], ids=["default", "dangerous"])
 @pytest.mark.parametrize("command", SHELL_FORMS)
-def test_validator_blocks_every_form_in_every_mode(home, command, dangerous):
-    error = validate_command(command, dangerous=dangerous)
+def test_validator_blocks_every_form(home, command):
+    error = validate_command(command)
     assert error is not None
     assert "sign-in" in error
 
@@ -268,8 +274,8 @@ def test_validator_blocks_every_form_in_every_mode(home, command, dangerous):
 def test_validator_blocks_a_relocated_data_folder(tmp_path, monkeypatch):
     data_dir = tmp_path / "somewhere"
     monkeypatch.setattr(paths, "DATA_DIR", data_dir)
-    assert validate_command(f"cat {data_dir.as_posix()}/auth/x", dangerous=True)
-    assert validate_command(f'type "{data_dir}\\auth\\x"', dangerous=True)
+    assert validate_command(f"cat {data_dir.as_posix()}/auth/x")
+    assert validate_command(f'type "{data_dir}\\auth\\x"')
 
 
 def test_ssh_argument_does_not_hide_a_local_expansion(home):
@@ -289,12 +295,11 @@ def test_ssh_argument_does_not_hide_a_local_expansion(home):
     ],
 )
 def test_validator_leaves_other_commands_alone(home, command):
-    assert validate_command(command, dangerous=True) is None
+    assert validate_command(command) is None
 
 
-@pytest.mark.parametrize("build", [_workspace_backend, _dangerous_backend])
-def test_execute_does_not_run_it(home, build):
-    result = build(home).execute(f"cat {TOKEN_REL}")
+def test_execute_does_not_run_it(home):
+    result = _workspace_backend(home).execute(f"cat {TOKEN_REL}")
     assert result.exit_code == 1
     assert SECRET not in result.output
     assert "sign-in" in result.output
@@ -302,7 +307,7 @@ def test_execute_does_not_run_it(home, build):
 
 def test_run_in_background_shares_the_check(home):
     tool = _make_run_in_background(
-        work_dir=home, skills_dir=None, dangerous=False, guard_dangerous=False
+        work_dir=home, skills_dir=None, guard_dangerous=False
     )
     result = tool.func(command=f"cat {TOKEN_REL}", runtime=None)
     assert "sign-in" in result
@@ -378,13 +383,6 @@ def test_suppressed_run_has_no_shell(tmp_path):
     assert not {"execute", "run_in_background"} & model.offered[0]
     assert "read_file" in model.offered[0]
     assert "Shell commands are off" in model.systems[0]
-
-
-@pytest_mark_no_mcp
-def test_dangerous_mode_has_no_shell_even_when_attended(tmp_path):
-    agent, model = _agent(tmp_path, dangerous_mode=True)
-    _run(agent, suppressed=False)
-    assert not {"execute", "run_in_background"} & model.offered[0]
 
 
 @pytest_mark_no_mcp
@@ -494,6 +492,6 @@ def test_no_human_gate_settings(monkeypatch):
     with_config()
     assert no_human_gate(attended) is False
     assert no_human_gate({"configurable": {"hitl_suppressed": True}}) is True
-    for setting in ("auto_mode", "auto_approve", "dangerous_mode"):
+    for setting in ("auto_mode", "auto_approve"):
         with_config(**{setting: True})
         assert no_human_gate(attended) is True, setting

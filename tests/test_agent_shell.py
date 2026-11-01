@@ -980,7 +980,7 @@ def test_run_in_background_names_a_missing_bash(scripts, tmp_path, monkeypatch):
     from metasci_scribe.middleware.background import _make_run_in_background
 
     bash = _gone_bash(monkeypatch, tmp_path)
-    tool = _make_run_in_background(work_dir=tmp_path, skills_dir=None, dangerous=False)
+    tool = _make_run_in_background(work_dir=tmp_path, skills_dir=None)
     result = tool.invoke({"command": "echo hi"})
     assert str(bash) in result
     assert "Run `metasci-scribe setup`" in result

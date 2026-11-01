@@ -787,9 +787,7 @@ def attended_config(monkeypatch) -> None:
     """A session in which no config rule answers an approval."""
     monkeypatch.setattr(
         "metasci_scribe.agent._ensure_config",
-        lambda: SimpleNamespace(
-            auto_approve=False, dangerous_mode=False, shell_allow_list=""
-        ),
+        lambda: SimpleNamespace(auto_approve=False, shell_allow_list=""),
     )
 
 

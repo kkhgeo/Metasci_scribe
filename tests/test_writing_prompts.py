@@ -20,9 +20,7 @@ from metasci_scribe.paths import Workspace
 
 MODES = [
     {},
-    {"dangerous": True, "cwd": "/work/paper"},
     {"bash_on_windows": True},
-    {"dangerous": True, "cwd": "C:/work/paper", "bash_on_windows": True},
 ]
 
 

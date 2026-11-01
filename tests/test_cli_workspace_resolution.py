@@ -78,7 +78,6 @@ def _run(
         auto_approve=False,
         auto_mode=None,
         ask_user=False,
-        dangerous=False,
         host=None,
         output_format=None,
     )
@@ -249,7 +248,6 @@ def _run_prompt(
         auto_approve=False,
         auto_mode=None,
         ask_user=False,
-        dangerous=False,
         host=None,
         output_format=None,
     )

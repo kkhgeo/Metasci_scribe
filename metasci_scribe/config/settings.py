@@ -346,11 +346,6 @@ class ScribeConfig:
     # environment variable sets it, so a workspace ``.env`` cannot widen it.
     backend_allowed_origins: str = ""
 
-    # Dangerous mode: real-filesystem access (no workspace confinement). The agent
-    # operates on real absolute paths anywhere on disk; the privileged-command
-    # blocklist (sudo/chmod/dd/...) still applies. Implies auto_approve.
-    dangerous_mode: bool = False
-
     # Agent features
     enable_ask_user: bool = True  # Enable ask_user tool for agent-initiated questions
 
@@ -424,11 +419,11 @@ class ScribeConfig:
                 str(s) for s in self.backend_allowed_origins
             )
 
-        # auto_mode and dangerous_mode both imply auto_approve regardless of
-        # source (CLI, env, config file, direct construction) — done here so the
-        # "unattended → zero prompts" contract holds even when either is set via
-        # `config set` or a config file rather than a CLI flag.
-        if self.auto_mode or self.dangerous_mode:
+        # auto_mode implies auto_approve regardless of source (CLI, env, config
+        # file, direct construction) — done here so the "unattended → zero
+        # prompts" contract holds even when it is set via `config set` or a
+        # config file rather than a CLI flag.
+        if self.auto_mode:
             self.auto_approve = True
 
         _normalize_str_enum_fields(self)
@@ -893,7 +888,6 @@ _ENV_MAPPINGS = {
     "auxiliary_provider": "METASCI_SCRIBE_AUXILIARY_PROVIDER",
     "auxiliary_model": "METASCI_SCRIBE_AUXILIARY_MODEL",
     "reasoning_effort": "METASCI_SCRIBE_REASONING_EFFORT",
-    "dangerous_mode": "METASCI_SCRIBE_DANGEROUS_MODE",
     "use_responses_api": "METASCI_SCRIBE_USE_RESPONSES_API",
     "checkpoint_keep_per_thread": "METASCI_SCRIBE_CHECKPOINT_KEEP_PER_THREAD",
     "enable_async_subagents": "METASCI_SCRIBE_ENABLE_ASYNC_SUBAGENTS",
@@ -1139,16 +1133,6 @@ def _apply_config_to_env(config: ScribeConfig) -> None:
     # Written for both values: get_chat_model reads it, and the langgraph dev
     # subprocess re-resolves config on its own.
     os.environ["METASCI_SCRIBE_OPENAI_AUTH_MODE"] = config.openai_auth_mode
-    # Round-trip dangerous_mode to env so it survives a fresh get_effective_config()
-    # (warning banner, run_in_background) and is inherited by the langgraph dev
-    # subprocess — otherwise a --dangerous CLI flag (not persisted to file/env)
-    # is invisible to those consumers while the backend is already unconfined.
-    # Bidirectional: clear it when off so a re-apply with a lower config (or a
-    # stale value) can't leave the process stuck in dangerous mode.
-    if config.dangerous_mode:
-        os.environ["METASCI_SCRIBE_DANGEROUS_MODE"] = "true"
-    else:
-        os.environ.pop("METASCI_SCRIBE_DANGEROUS_MODE", None)
     if config.use_responses_api and not os.environ.get(
         "METASCI_SCRIBE_USE_RESPONSES_API"
     ):

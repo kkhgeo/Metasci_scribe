@@ -82,11 +82,8 @@ class TestRecording:
         assert env_origin("OPENAI_API_KEY") is None
 
     def test_a_flag_override_is_cli(self):
-        apply_config_to_env(get_effective_config({"dangerous_mode": True}))
-        assert env_origin("METASCI_SCRIBE_DANGEROUS_MODE") == {"source": "cli"}
-        # Turned off again: the variable is removed, and so is its record.
-        apply_config_to_env(ScribeConfig())
-        assert env_origin("METASCI_SCRIBE_DANGEROUS_MODE") is None
+        apply_config_to_env(get_effective_config({"reasoning_effort": "high"}))
+        assert env_origin("METASCI_SCRIBE_REASONING_EFFORT") == {"source": "cli"}
 
     def test_dotenv_records_its_path(self, tmp_path, monkeypatch):
         _use_dotenv(tmp_path, monkeypatch)

@@ -1683,11 +1683,6 @@ def _main_callback(
         "--ask-user",
         help="Enable agent to ask clarifying questions about your research preferences",
     ),
-    dangerous: bool = typer.Option(
-        False,
-        "--dangerous",
-        help="DANGEROUS: real-filesystem access (no workspace confinement); implies --auto-approve",
-    ),
     host: str | None = typer.Option(
         None,
         "--host",
@@ -1787,8 +1782,6 @@ def _main_callback(
             cli_overrides["auto_mode"] = False
         if ask_user:
             cli_overrides["enable_ask_user"] = True
-    if dangerous:
-        cli_overrides["dangerous_mode"] = True
 
     config = get_effective_config(cli_overrides)
     apply_config_to_env(config)

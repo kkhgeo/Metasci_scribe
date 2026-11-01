@@ -89,9 +89,7 @@ class TestRichCliHitlRoundBudget:
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         monkeypatch.setattr(
             "metasci_scribe.agent._ensure_config",
-            lambda: SimpleNamespace(
-                auto_approve=False, dangerous_mode=False, shell_allow_list=""
-            ),
+            lambda: SimpleNamespace(auto_approve=False, shell_allow_list=""),
         )
         printed: list[str] = []
 
@@ -265,9 +263,7 @@ class TestRichCliHitlRoundBudget:
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         monkeypatch.setattr(
             "metasci_scribe.agent._ensure_config",
-            lambda: SimpleNamespace(
-                auto_approve=False, dangerous_mode=False, shell_allow_list=""
-            ),
+            lambda: SimpleNamespace(auto_approve=False, shell_allow_list=""),
         )
         prompts = 0
 
@@ -311,9 +307,7 @@ class TestRichCliHitlRoundBudget:
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         monkeypatch.setattr(
             "metasci_scribe.agent._ensure_config",
-            lambda: SimpleNamespace(
-                auto_approve=False, dangerous_mode=False, shell_allow_list=""
-            ),
+            lambda: SimpleNamespace(auto_approve=False, shell_allow_list=""),
         )
 
         async def _fake_stream(_request):
@@ -353,9 +347,7 @@ class TestRichCliHitlRoundBudget:
         monkeypatch.setattr(display_mod, "_session_auto_approve", False)
         monkeypatch.setattr(
             "metasci_scribe.agent._ensure_config",
-            lambda: SimpleNamespace(
-                auto_approve=False, dangerous_mode=False, shell_allow_list=""
-            ),
+            lambda: SimpleNamespace(auto_approve=False, shell_allow_list=""),
         )
         monkeypatch.setattr(display_mod.console, "print", lambda *a, **k: None)
         stream_calls = 0
@@ -753,9 +745,7 @@ def test_resolver_reports_the_grant_only_on_its_fast_path(monkeypatch):
     pending = _delete_interrupt_event(1)
     monkeypatch.setattr(
         "metasci_scribe.agent._ensure_config",
-        lambda: SimpleNamespace(
-            auto_approve=False, dangerous_mode=False, shell_allow_list=""
-        ),
+        lambda: SimpleNamespace(auto_approve=False, shell_allow_list=""),
     )
 
     monkeypatch.setattr(display_mod, "_session_auto_approve", True)

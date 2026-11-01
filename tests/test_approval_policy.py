@@ -5,11 +5,10 @@ from unittest.mock import MagicMock, patch
 from metasci_scribe.stream import interaction as I
 
 
-def _cfg(*, auto_approve=False, shell_allow_list="", dangerous_mode=False):
+def _cfg(*, auto_approve=False, shell_allow_list=""):
     cfg = MagicMock()
     cfg.auto_approve = auto_approve
     cfg.shell_allow_list = shell_allow_list
-    cfg.dangerous_mode = dangerous_mode
     return cfg
 
 

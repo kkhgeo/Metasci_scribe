@@ -37,7 +37,7 @@ no-runtime fallback.
 """
 
 
-def _run_bg(work_dir, *, dangerous: bool = False, guard_dangerous: bool = False):
+def _run_bg(work_dir, *, guard_dangerous: bool = False):
     """Build the ``run_in_background`` tool for direct tests.
 
     Processes start in *work_dir*. Error paths (blocked / refused commands)
@@ -48,7 +48,6 @@ def _run_bg(work_dir, *, dangerous: bool = False, guard_dangerous: bool = False)
     return _make_run_in_background(
         work_dir=work_dir,
         skills_dir=None,
-        dangerous=dangerous,
         guard_dangerous=guard_dangerous,
     )
 
@@ -194,26 +193,6 @@ def test_run_applies_virtual_path_rewriting(tmp_path, monkeypatch):
     assert captured["command"] == "python ./train.py"
 
 
-def test_run_dangerous_allows_real_path_no_rewrite(tmp_path, monkeypatch):
-    """In dangerous mode, background commands keep real absolute paths (parity with execute)."""
-    captured = {}
-
-    def _spy(command, cwd, name=None, *, origin_thread_id=None):
-        captured["command"] = command
-        return "pidX"
-
-    monkeypatch.setattr(bg, "launch", _spy)
-    # Absolute path + traversal would be BLOCKED in normal mode; allowed here.
-    out = _run_bg(tmp_path, dangerous=True).invoke(
-        {"command": "cat /etc/hosts && cat ../x"}
-    )
-    assert "blocked" not in out.lower()
-    assert captured["command"] == "cat /etc/hosts && cat ../x"  # no ./ rewrite
-    # Advertised log path is the real path, not the virtual /.bg_processes/.
-    assert f"{tmp_path}/.bg_processes/" in out
-    assert "Output -> /.bg_processes/" not in out
-
-
 def test_run_guard_dangerous_blocks_pipe_into_interpreter(tmp_path, monkeypatch):
     """guard_dangerous=True (auto_approve backstop) refuses curl|bash without launching.
 
@@ -278,8 +257,7 @@ def test_run_armed_run_does_not_guard_at_backend(monkeypatch, tmp_path):
     assert "Command blocked" not in out
 
 
-def test_run_dangerous_still_blocks_privileged_command(tmp_path, monkeypatch):
-    """Dangerous mode must NOT relax the privileged-command blocklist."""
+def test_run_blocks_privileged_command(tmp_path, monkeypatch):
     launched = {"called": False}
 
     def _spy(*args, **kwargs):
@@ -287,7 +265,7 @@ def test_run_dangerous_still_blocks_privileged_command(tmp_path, monkeypatch):
         return "should-not-happen"
 
     monkeypatch.setattr(bg, "launch", _spy)
-    out = _run_bg(tmp_path, dangerous=True).invoke({"command": "sudo rm x"})
+    out = _run_bg(tmp_path).invoke({"command": "sudo rm x"})
     assert launched["called"] is False
     assert "blocked" in out.lower()
 

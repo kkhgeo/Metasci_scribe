@@ -45,9 +45,8 @@ class ShellGateMiddleware(AgentMiddleware):
     """Remove the shell tools and skill installs from any run with no human gate.
 
     Args:
-        closed: Keep the gate shut for every run of this graph: dangerous
-            mode, which is fixed at assembly and approves everything, and
-            async sub-agents, which have no approval path at all.
+        closed: Keep the gate shut for every run of this graph: async
+            sub-agents, which have no approval path at all.
     """
 
     def __init__(self, *, closed: bool = False) -> None:

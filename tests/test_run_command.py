@@ -302,16 +302,13 @@ def test_the_config_the_agent_is_built_from_is_unattended(monkeypatch):
         auto_approve=False,
         enable_ask_user=True,
         enable_async_subagents=True,
-        dangerous_mode=True,
     )
     cfg = autonomous_config(user)
     assert cfg.auto_mode
     assert cfg.auto_approve
     assert not cfg.enable_ask_user
     assert not cfg.enable_async_subagents
-    assert not cfg.dangerous_mode
     # the user's own config is not changed
-    assert user.dangerous_mode
     assert not user.auto_mode
 
 

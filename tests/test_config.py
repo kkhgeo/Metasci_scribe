@@ -65,7 +65,6 @@ def temp_config_dir(tmp_path, monkeypatch):
         "METASCI_SCRIBE_OPENROUTER_HTTP_REFERER",
         "METASCI_SCRIBE_OPENROUTER_APP_TITLE",
         "METASCI_SCRIBE_OPENROUTER_APP_CATEGORIES",
-        "METASCI_SCRIBE_DANGEROUS_MODE",
         "METASCI_SCRIBE_MAX_CACHED_FILES",
         "METASCI_SCRIBE_PROACTIVE_IDLE_MINUTES",
         "METASCI_SCRIBE_PROACTIVE_QUIET_HOURS",
@@ -104,7 +103,6 @@ def clean_env(monkeypatch):
         "METASCI_SCRIBE_OPENROUTER_HTTP_REFERER",
         "METASCI_SCRIBE_OPENROUTER_APP_TITLE",
         "METASCI_SCRIBE_OPENROUTER_APP_CATEGORIES",
-        "METASCI_SCRIBE_DANGEROUS_MODE",
         "METASCI_SCRIBE_MAX_CACHED_FILES",
         "METASCI_SCRIBE_PROACTIVE_IDLE_MINUTES",
         "METASCI_SCRIBE_PROACTIVE_QUIET_HOURS",
@@ -207,18 +205,6 @@ class TestScribeConfig:
         assert config.provider == "openai"
         assert config.model == "gpt-4o"
         assert config.default_mode == "run"
-
-    def test_dangerous_mode_default(self):
-        """dangerous_mode defaults off and does not force auto_approve."""
-        config = ScribeConfig()
-        assert config.dangerous_mode is False
-        assert config.auto_approve is False
-
-    def test_dangerous_mode_implies_auto_approve(self):
-        """Enabling dangerous_mode forces auto_approve via __post_init__."""
-        config = ScribeConfig(dangerous_mode=True)
-        assert config.dangerous_mode is True
-        assert config.auto_approve is True
 
     def test_literal_field_invalid_value_falls_back_with_warning(self, caplog):
         """A typo'd Literal (config file / direct construction) never lands.
@@ -878,44 +864,6 @@ class TestApplyConfigToEnv:
         assert os.environ.get("ANTHROPIC_API_KEY") is None
         assert os.environ.get("OPENAI_API_KEY") is None
 
-    def test_dangerous_mode_round_trips_to_env(self, clean_env, monkeypatch):
-        """dangerous_mode set via CLI override must survive a fresh re-read.
-
-        Regression: a --dangerous CLI flag is never persisted to file/env, so a
-        fresh get_effective_config() (warning banner, run_in_background, the
-        langgraph dev subprocess) would read it back as False while the backend
-        is already unconfined. apply_config_to_env round-trips it to env.
-        """
-        from metasci_scribe.config import get_effective_config
-
-        monkeypatch.delenv("METASCI_SCRIBE_DANGEROUS_MODE", raising=False)
-        cfg = get_effective_config({"dangerous_mode": True})
-        assert cfg.dangerous_mode is True
-
-        apply_config_to_env(cfg)
-        assert os.environ.get("METASCI_SCRIBE_DANGEROUS_MODE") == "true"
-        # The fresh, no-override read now agrees with the backend.
-        assert get_effective_config().dangerous_mode is True
-
-    def test_dangerous_mode_not_applied_when_off(self, clean_env, monkeypatch):
-        """dangerous_mode=False must not write the env var."""
-        monkeypatch.delenv("METASCI_SCRIBE_DANGEROUS_MODE", raising=False)
-        apply_config_to_env(ScribeConfig())
-        assert os.environ.get("METASCI_SCRIBE_DANGEROUS_MODE") is None
-
-    def test_dangerous_mode_off_clears_stale_env(self, clean_env, monkeypatch):
-        """Re-applying a non-dangerous config clears a previously-set env var.
-
-        Regression: the round-trip used to be set-only, so once dangerous mode
-        was applied in a process it could never be lowered — leaking unconfined
-        access into later non-dangerous reads.
-        """
-        monkeypatch.delenv("METASCI_SCRIBE_DANGEROUS_MODE", raising=False)
-        apply_config_to_env(ScribeConfig(dangerous_mode=True))
-        assert os.environ.get("METASCI_SCRIBE_DANGEROUS_MODE") == "true"
-        apply_config_to_env(ScribeConfig())  # dangerous off
-        assert os.environ.get("METASCI_SCRIBE_DANGEROUS_MODE") is None
-
     def test_openai_auth_mode_chatgpt_plan_is_exported(self, clean_env):
         apply_config_to_env(ScribeConfig(openai_auth_mode="chatgpt_plan"))
 
@@ -1184,22 +1132,21 @@ class TestDotenvIsolation:
         """
         env_file = tmp_path / ".env"
         env_file.write_text(
-            "METASCI_SCRIBE_LANGGRAPH_DEV_PORT=6606\n"
-            "METASCI_SCRIBE_DANGEROUS_MODE=true\n"
+            "METASCI_SCRIBE_LANGGRAPH_DEV_PORT=6606\nMETASCI_SCRIBE_ENABLE_ASYNC_SUBAGENTS=true\n"
         )
         monkeypatch.setattr(
             "metasci_scribe.config.settings.find_dotenv",
             lambda *args, **kwargs: str(env_file),
         )
         monkeypatch.setenv("METASCI_SCRIBE_LANGGRAPH_DEV_PORT", "")
-        monkeypatch.delenv("METASCI_SCRIBE_DANGEROUS_MODE", raising=False)
+        monkeypatch.delenv("METASCI_SCRIBE_ENABLE_ASYNC_SUBAGENTS", raising=False)
 
         config = get_effective_config()
 
         assert config.langgraph_dev_port == ScribeConfig().langgraph_dev_port
-        assert config.dangerous_mode is False
+        assert config.enable_async_subagents is False
         assert os.environ["METASCI_SCRIBE_LANGGRAPH_DEV_PORT"] == ""
-        assert "METASCI_SCRIBE_DANGEROUS_MODE" not in os.environ
+        assert "METASCI_SCRIBE_ENABLE_ASYNC_SUBAGENTS" not in os.environ
 
 
 def test_backend_allowed_origins_ignores_the_environment(temp_config_dir, monkeypatch):

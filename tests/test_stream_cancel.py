@@ -192,9 +192,7 @@ def test_cancel_unwinds_hitl_prompt_and_renderer(monkeypatch):
     )
     monkeypatch.setattr(
         "metasci_scribe.agent._ensure_config",
-        lambda: SimpleNamespace(
-            auto_approve=False, dangerous_mode=False, shell_allow_list=""
-        ),
+        lambda: SimpleNamespace(auto_approve=False, shell_allow_list=""),
     )
 
     async def _empty_stream(_request):
@@ -236,7 +234,7 @@ def test_cancel_unwinds_hitl_prompt_and_renderer(monkeypatch):
 def test_cancel_terminates_active_shell_process_tree(tmp_path):
     """A cancelled turn must not leave delayed shell side effects running."""
     cancel_scope = "scope:shell"
-    backend = CustomSandboxBackend(root_dir=str(tmp_path), virtual_mode=True)
+    backend = CustomSandboxBackend(root_dir=str(tmp_path))
     started = tmp_path / "started.txt"
     forbidden = tmp_path / "forbidden.txt"
     result: dict[str, object] = {}

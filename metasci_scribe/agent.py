@@ -38,7 +38,6 @@ from .memory import MemorySourceType
 from .paths import (
     Workspace,
     process_session_dirs,
-    resolve_virtual_path,
 )
 from .prompts import get_system_prompt
 
@@ -317,15 +316,8 @@ def _load_mcp_tools_cached(
 # =============================================================================
 
 
-def _configured_system_prompt(cfg, work_dir: str | Path) -> str:
-    # In dangerous mode the agent works on the real filesystem; give it the real
-    # cwd so it can use absolute paths instead of the virtual `/` workspace root.
-    real_cwd = str(resolve_virtual_path(work_dir, "/")) if cfg.dangerous_mode else None
-    return get_system_prompt(
-        dangerous=cfg.dangerous_mode,
-        cwd=real_cwd,
-        bash_on_windows=uses_bash(),
-    )
+def _configured_system_prompt() -> str:
+    return get_system_prompt(bash_on_windows=uses_bash())
 
 
 def _inject_subagent_middleware(
@@ -428,7 +420,7 @@ def _inject_subagent_middleware(
             # Inside the retry layer: marks each provider call for the
             # stream decoder.
             ModelCallBoundaryMiddleware(),
-            ShellGateMiddleware(closed=no_shell or bool(cfg.dangerous_mode)),
+            ShellGateMiddleware(closed=no_shell),
         ]
         if memory_controls.memory_enabled:
             middleware.append(memory_middleware)
@@ -609,7 +601,7 @@ def _build_base_kwargs(
         "backend": base_backend,
         "subagents": subs,
         "middleware": base_middleware,
-        "system_prompt": _configured_system_prompt(cfg, work_dir),
+        "system_prompt": _configured_system_prompt(),
         "skills": list(DEFAULT_SKILL_SOURCES),
     }
 
@@ -700,7 +692,7 @@ def load_mcp_and_build_kwargs(
         "backend": base_backend,
         "subagents": subs,
         "middleware": base_middleware,
-        "system_prompt": _configured_system_prompt(cfg, work_dir),
+        "system_prompt": _configured_system_prompt(),
         "skills": list(DEFAULT_SKILL_SOURCES),
     }
 
@@ -753,13 +745,9 @@ def _get_default_backend(
     memory_dir = str(_paths_mod.MEMORIES_DIR)
     global_skills_dir = str(_paths_mod.GLOBAL_SKILLS_DIR)
 
-    # Dangerous mode opens the workspace (`/`) route to the real filesystem;
-    # the /skills/ and /memories/ routes stay confined (virtual_mode=True).
     ws_backend = CustomSandboxBackend(
         root_dir=root_dir,
-        virtual_mode=True,
         timeout=cfg.sandbox_execute_timeout,
-        dangerous=cfg.dangerous_mode,
         guard_dangerous=guard_dangerous,
         refuse_delete=refuse_delete,
         env=research_env_overrides(),
@@ -958,7 +946,7 @@ def _get_default_middleware(
             events=events,
         ),
         # Inside the selector, which must find the tools it always keeps.
-        ShellGateMiddleware(closed=for_async_subagent or bool(cfg.dangerous_mode)),
+        ShellGateMiddleware(closed=for_async_subagent),
         # Interpreter prompt must land before runtime/memory context, so this
         # middleware sits ahead of runtime_context in the stack.
         create_code_interpreter_middleware(
@@ -995,9 +983,7 @@ def _get_default_middleware(
     if not for_async_subagent:
         from .middleware.background import BackgroundExecutionMiddleware
 
-        # Capture the assembly-time dangerous-mode policy (agents rebuild on config
-        # change, so the flag is never staler than the agent it lives on). Process-exit
-        # notifications are delivered client-side from the ``bg_processes`` thread-state
+        # Process-exit notifications are delivered client-side from the ``bg_processes`` thread-state
         # mirror, not pushed from here. The dangerous-command guard is NOT baked from
         # auto_approve: run_in_background derives it per call from the run's
         # HITL-suppression state, mirroring execute().
@@ -1005,7 +991,6 @@ def _get_default_middleware(
             BackgroundExecutionMiddleware(
                 work_dir=work_dir,
                 skills_dir=workspace.skills_dir,
-                dangerous=cfg.dangerous_mode,
                 guard_dangerous=False,
             )
         )
@@ -1318,9 +1303,7 @@ def create_cli_agent(
 
     ws_backend = CustomSandboxBackend(
         root_dir=work_dir,
-        virtual_mode=True,
         timeout=cfg.sandbox_execute_timeout,
-        dangerous=cfg.dangerous_mode,
         # Guard derived per call from the run's HITL-suppression state (see
         # CustomSandboxBackend._effective_guard_dangerous), not baked here.
         guard_dangerous=False,

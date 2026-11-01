@@ -30,7 +30,6 @@ def test_cli_agent_backend_gets_the_overrides(overrides, tmp_path, workspace):
         return {"name": "x"}
 
     cfg = MagicMock()
-    cfg.dangerous_mode = False
     cfg.sandbox_execute_timeout = 300
     cfg.recursion_limit = 100
     with (

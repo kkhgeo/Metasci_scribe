@@ -58,13 +58,12 @@ _SYSTEM_PATH_PREFIXES = (
     "/root/",
 )
 
-# Path-confinement patterns: keep the agent inside the workspace. These are
-# bypassed in dangerous mode (real-filesystem access).
+# Path-confinement patterns: keep the agent inside the workspace.
 _PATH_PATTERNS = [
     r"~/",  # home directory
     r"\bcd\s+/",  # cd to absolute path
 ]
-# Destructive patterns: catastrophic regardless of mode — always enforced.
+# Destructive patterns: catastrophic wherever they point.
 _DESTRUCTIVE_PATTERNS = [
     r"\brm\s+-rf\s+/",  # rm -rf with absolute path
     # The same with a Windows drive path, which Git Bash's rm accepts.
@@ -540,7 +539,7 @@ def hitl_suppressed_for_run(config=None) -> bool:
 def no_human_gate(config=None) -> bool:
     """Whether a shell command in this run would start with nobody approving it.
 
-    True for ``auto_mode``, ``auto_approve`` and ``dangerous_mode``, from the
+    True for ``auto_mode`` and ``auto_approve``, from the
     run's own key or the live session config, whichever says so: the two can
     disagree for a run that reached the server directly. With no human gate
     the agent gets no shell (:class:`~.middleware.shell_gate.ShellGateMiddleware`).
@@ -548,11 +547,7 @@ def no_human_gate(config=None) -> bool:
     from .agent import _ensure_config
 
     live = _ensure_config()
-    return (
-        is_hitl_suppressed(config)
-        or hitl_suppressed_for_run(live)
-        or bool(getattr(live, "dangerous_mode", False))
-    )
+    return is_hitl_suppressed(config) or hitl_suppressed_for_run(live)
 
 
 def model_retry_for_run(config=None) -> dict[str, Any]:
@@ -579,24 +574,19 @@ def resolve_action_decision(
     command: str,
     *,
     auto_approve: bool = False,
-    dangerous_mode: bool = False,
     allow_list: list[str] | None = None,
 ) -> ActionVerdict:
     """Single source of truth for approve / reject / prompt.
 
     Precedence:
-      1. ``dangerous_mode`` — the user asked for full power; run everything.
-      2. dangerous detection — pipe into interpreter/network.
-      3. ``auto_approve`` — opt-out means *never prompt*: approve, or reject
+      1. dangerous detection — pipe into interpreter/network.
+      2. ``auto_approve`` — opt-out means *never prompt*: approve, or reject
          a dangerous command with a reason the agent can act on.
-      4. ``allow_list`` — case-sensitive match on a whole command or a
+      3. ``allow_list`` — case-sensitive match on a whole command or a
          command-plus-space prefix; blank entries are ignored. Every segment of
          a chain (``a; b``, ``a && b``, ``a | b``) must match, so an allow-listed
          prefix cannot carry a non-listed command in behind it.
     """
-    if dangerous_mode:
-        return ActionVerdict(ActionDecision.APPROVE)
-
     reason = check_dangerous_command(command)
 
     if auto_approve:
@@ -1195,8 +1185,6 @@ def _names_secret_path(command: str) -> bool:
 def validate_command(
     command: str,
     allow_prefixes: tuple[str, ...] = (),
-    *,
-    dangerous: bool = False,
 ) -> str | None:
     """
     Validate a shell command for safety.
@@ -1205,38 +1193,30 @@ def validate_command(
         command: Shell command string.
         allow_prefixes: Absolute path prefixes exempt from the system-path
             block list (matching rules in ``_is_under_allowed_prefix``).
-        dangerous: When True (real-filesystem mode), skip the path-confinement
-            checks (``..`` traversal, ``~/``/``cd /`` patterns, absolute system
-            paths). Privileged commands (:data:`BLOCKED_COMMANDS`),
-            catastrophic patterns (:data:`_DESTRUCTIVE_PATTERNS`) and the
-            saved sign-in (:data:`_SECRET_PATH_PATTERNS`) are still enforced.
 
     Returns:
         None if command is safe, error message string if blocked.
     """
-    # Always enforced, whatever the mode.
     if _names_secret_path(command):
         return _SECRET_PATH_ERROR
 
-    # Path-confinement checks — skipped in dangerous mode.
-    if not dangerous:
-        # Check for '..' path traversal as a path component
-        if _has_traversal_component(command):
+    # Check for '..' path traversal as a path component
+    if _has_traversal_component(command):
+        return (
+            "Command blocked: contains '..' path traversal. "
+            "All commands must operate within the workspace directory. "
+            "Use relative paths (e.g., './file.py') instead."
+        )
+
+    for pattern in _PATH_PATTERNS:
+        if re.search(pattern, command):
             return (
-                "Command blocked: contains '..' path traversal. "
-                "All commands must operate within the workspace directory. "
-                "Use relative paths (e.g., './file.py') instead."
+                f"Command blocked: contains forbidden pattern '{pattern}'. "
+                f"All commands must operate within the workspace directory. "
+                f"Use relative paths (e.g., './file.py') instead."
             )
 
-        for pattern in _PATH_PATTERNS:
-            if re.search(pattern, command):
-                return (
-                    f"Command blocked: contains forbidden pattern '{pattern}'. "
-                    f"All commands must operate within the workspace directory. "
-                    f"Use relative paths (e.g., './file.py') instead."
-                )
-
-    # Catastrophic patterns (e.g. `rm -rf /`) — always enforced.
+    # Catastrophic patterns (e.g. `rm -rf /`).
     for pattern in _DESTRUCTIVE_PATTERNS:
         if re.search(pattern, command):
             return (
@@ -1245,7 +1225,7 @@ def validate_command(
                 f"Use relative paths (e.g., './file.py') instead."
             )
 
-    # Check for dangerous commands (pipeline-aware) — always enforced.
+    # Check for dangerous commands (pipeline-aware).
     for base_cmd in _split_shell_commands(command):
         if base_cmd in BLOCKED_COMMANDS:
             return (
@@ -1253,17 +1233,16 @@ def validate_command(
                 f"Only standard development commands are permitted."
             )
 
-    # Absolute-system-path check — skipped in dangerous mode.
+    # Absolute-system-path check.
     # Catches attacks like: python -c "os.remove('/Users/foo/file')"
-    if not dangerous:
-        escaped_paths = _extract_all_paths(command, allow_prefixes=allow_prefixes)
-        if escaped_paths:
-            path_sample = escaped_paths[0]
-            return (
-                f"Command blocked: contains absolute system path '{path_sample}'. "
-                f"All file operations must use relative paths within the workspace. "
-                f"Use relative paths (e.g., './file.py') instead."
-            )
+    escaped_paths = _extract_all_paths(command, allow_prefixes=allow_prefixes)
+    if escaped_paths:
+        path_sample = escaped_paths[0]
+        return (
+            f"Command blocked: contains absolute system path '{path_sample}'. "
+            f"All file operations must use relative paths within the workspace. "
+            f"Use relative paths (e.g., './file.py') instead."
+        )
 
     return None
 
@@ -1958,8 +1937,6 @@ def prepare_sandbox_command(
     command: str,
     cwd: str | Path,
     *,
-    virtual_mode: bool = True,
-    dangerous: bool = False,
     guard_dangerous: bool = False,
     skills_dir: str | Path | None = None,
 ) -> tuple[str, str | None]:
@@ -1995,19 +1972,15 @@ def prepare_sandbox_command(
     # Replace literal workspace-root absolute paths with ./ after SSH masking so
     # remote paths that happen to contain the local cwd are preserved, and before
     # validation so local workspace paths are sanitized before the system-path
-    # check fires. Skipped in dangerous mode: there is no virtual workspace, the
-    # agent uses real absolute paths, and rewriting would corrupt any argument
-    # (echo text, grep/git pattern) that merely contains the cwd string.
-    if not dangerous:
-        ws = cwd_str + "/"
-        if ws in command:
-            command = command.replace(ws, "./")
-    if virtual_mode:
-        command = convert_virtual_paths_in_command(
-            command=command,
-            workspace_name=Path(cwd_str).name,
-            skills_dir=skills_dir,
-        )
+    # check fires.
+    ws = cwd_str + "/"
+    if ws in command:
+        command = command.replace(ws, "./")
+    command = convert_virtual_paths_in_command(
+        command=command,
+        workspace_name=Path(cwd_str).name,
+        skills_dir=skills_dir,
+    )
     # Skills/memory dirs must be allowlisted: the workspace-literal replace above runs
     # before the resolver, so any absolute path it later injects reaches validate unstripped.
     allow_prefixes = tuple(
@@ -2020,16 +1993,14 @@ def prepare_sandbox_command(
         )
         if prefix is not None
     )
-    error = validate_command(
-        command, allow_prefixes=allow_prefixes, dangerous=dangerous
-    )
+    error = validate_command(command, allow_prefixes=allow_prefixes)
     if error:
         return command, error
 
     # No interactive approval is reachable here (unattended main agent, or an
     # async sub-agent on a remote thread), so refuse the narrow dangerous set
     # with a reason the agent can act on rather than running it blind.
-    if guard_dangerous and not dangerous:
+    if guard_dangerous:
         dangerous_reason = check_dangerous_command(original_command)
         if dangerous_reason:
             return _restore_spans(command, ssh_replacements), (
@@ -2057,12 +2028,10 @@ class CustomSandboxBackend(_GuardedFiles, LocalShellBackend):
         self,
         root_dir: str = ".",
         *,
-        virtual_mode: bool = True,
         timeout: int = 300,
         max_output_bytes: int = 100_000,
         env: dict[str, str] | None = None,
         inherit_env: bool = True,
-        dangerous: bool = False,
         guard_dangerous: bool = False,
         refuse_delete: bool = False,
         skills_dir: str | Path | None = None,
@@ -2071,41 +2040,30 @@ class CustomSandboxBackend(_GuardedFiles, LocalShellBackend):
         Initialize custom sandbox backend.
 
         Args:
-            root_dir: File system root directory
-            virtual_mode: Whether to enable virtual path mode
+            root_dir: File system root directory. File tools and the shell
+                are confined to it: `/` is this folder, never the host root.
             timeout: Command execution timeout in seconds
             max_output_bytes: Max output size before truncation (default 100KB)
             env: Extra environment variables for subprocess
             inherit_env: Whether to inherit parent process env (default True)
-            dangerous: Real-filesystem mode — the agent operates on real absolute
-                paths anywhere on disk (no workspace confinement). Forces
-                ``virtual_mode=False`` and relaxes path validation while keeping
-                the privileged-command blocklist. Defaults to False.
             guard_dangerous: Refuse the narrow dangerous-command set (see
                 :func:`check_dangerous_command`) outright, for contexts where
                 no interactive approval is reachable (unattended auto-approve
-                runs, async sub-agents). Bypassed when ``dangerous=True``.
-                Defaults to False.
+                runs, async sub-agents). Defaults to False.
             refuse_delete: Refuse the recursive ``delete`` FS tool outright,
                 relaying an approval request to the orchestrator. Used for async
                 research sub-agents (writing) that have no
-                interactive approval path. Bypassed when ``dangerous=True``.
-                Defaults to False.
+                interactive approval path. Defaults to False.
             skills_dir: The workspace skills tier. ``/skills/...`` paths in
                 commands resolve through it first, and it is allowlisted for
                 command validation.
         """
-        self._dangerous = dangerous
         self._skills_dir = skills_dir
         self._guard_dangerous = guard_dangerous
         self._refuse_delete = refuse_delete
-        if dangerous:
-            # Real paths require the legacy (non-virtual) resolution path so the
-            # parent backend returns absolute paths as-is.
-            virtual_mode = False
         super().__init__(
             root_dir=root_dir,
-            virtual_mode=virtual_mode,
+            virtual_mode=True,
             timeout=timeout,
             max_output_bytes=max_output_bytes,
             env=env,
@@ -2129,13 +2087,8 @@ class CustomSandboxBackend(_GuardedFiles, LocalShellBackend):
           2. /<ws_name>/file.py            → /file.py
           3. /Users/name/.../<ws_name>/f   → /f  (strip at LAST <ws_name>/)
           4. /Users/name/file.py           → /file.py (keep basename)
-
-        In dangerous (real-filesystem) mode, only decode a Windows ``/C:/...``
-        alias and let the parent resolve real absolute paths as-is.
         """
         key = paths.host_file_tool_path(key)
-        if self._dangerous:
-            return super()._sanitized_path(key)
 
         cwd_str = self.cwd.as_posix().rstrip("/")
         ws_name = Path(cwd_str).name  # e.g. "workspace", "my-project"
@@ -2190,18 +2143,9 @@ class CustomSandboxBackend(_GuardedFiles, LocalShellBackend):
         runs ``asyncio.to_thread(self.delete, ...)``, so async sub-agents reach
         this refusal too.
         """
-        if self._refuse_delete and not self._dangerous:
+        if self._refuse_delete:
             return DeleteResult(error=self._DELETE_APPROVAL_ERROR)
         return super().delete(file_path)
-
-    def _tool_paths(self, items: list | None) -> list | None:
-        """Spell dangerous-mode result paths the way the file tools accept them."""
-        visible = super()._tool_paths(items)
-        if not self._dangerous or not visible:
-            return visible
-        return [
-            {**item, "path": paths.file_tool_path(item["path"])} for item in visible
-        ]
 
     def execute(self, command: str, *, timeout: int | None = None) -> ExecuteResponse:
         """
@@ -2229,8 +2173,6 @@ class CustomSandboxBackend(_GuardedFiles, LocalShellBackend):
         command, error = prepare_sandbox_command(
             command,
             self.cwd,
-            virtual_mode=self.virtual_mode,
-            dangerous=self._dangerous,
             guard_dangerous=self._effective_guard_dangerous(),
             skills_dir=self._skills_dir,
         )
@@ -2415,9 +2357,7 @@ class CustomSandboxBackend(_GuardedFiles, LocalShellBackend):
         if response.exit_code == 124:
             cmd_words = command.split()
             grep_hint = cmd_words[0] if cmd_words else "process"
-            # In dangerous mode `/` is the host root; use a workspace-relative
-            # log path so the suggested command doesn't fail or write to `/`.
-            output_log = "./output.log" if self._dangerous else "/output.log"
+            output_log = "/output.log"
             bg_cmd = f'{command} > {output_log} 2>&1 & echo "PID: $!"'
             response = ExecuteResponse(
                 output=(

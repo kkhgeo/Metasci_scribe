@@ -1,8 +1,8 @@
 """Approval policy shared by the CLI and LangGraph gateway.
 
-Config-rule HITL decisions (``shell_allow_list``, ``auto_approve``,
-``dangerous_mode``) and the :class:`ApprovalOutcome` result type. Pure policy:
-no agent, no graph, no transport.
+Config-rule HITL decisions (``shell_allow_list``, ``auto_approve``) and the
+:class:`ApprovalOutcome` result type. Pure policy: no agent, no graph, no
+transport.
 """
 
 from __future__ import annotations
@@ -56,8 +56,8 @@ def config_policy_snapshot(
     try:
         from ..agent import _ensure_config
 
-        # Session-effective config, not the file: --auto-approve / --dangerous
-        # and METASCI_SCRIBE_* overrides live here (the same object
+        # Session-effective config, not the file: --auto-approve and
+        # METASCI_SCRIBE_* overrides live here (the same object
         # ``hitl_suppressed_for_run`` reads); the graph is armed on the runs that
         # reach this resolver, so this snapshot is the only gate for them.
         cfg = _ensure_config()
@@ -140,11 +140,6 @@ def _resolve_one_action_request(
     name = req.get("name", "")
     if not isinstance(name, str) or not name:
         return None
-    # dangerous_mode keeps its "trust everything" meaning: it must approve
-    # ahead of the always-prompt set, or a --dangerous session is interrupted
-    # on every delete while execute stays silent.
-    if cfg.dangerous_mode:
-        return {"type": "approve"}
     if name in HITL_ALWAYS_PROMPT_TOOLS:
         return None
     # A skill install is a person's decision; no config rule clears it.
@@ -164,7 +159,6 @@ def _resolve_one_action_request(
     verdict = resolve_action_decision(
         command,
         auto_approve=cfg.auto_approve,
-        dangerous_mode=cfg.dangerous_mode,
         allow_list=shell_allow_list,
     )
     if verdict.decision is ActionDecision.APPROVE:
