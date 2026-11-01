@@ -83,6 +83,7 @@ metasci_scribe = [
     "subagents/*.yaml",
     "langgraph_dev/*.json",
     "skills/**/*",
+    "templates/*.md",
 ]
 
 [tool.pytest.ini_options]

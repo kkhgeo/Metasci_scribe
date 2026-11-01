@@ -329,3 +329,29 @@ def test_one_shot_new_thread_keeps_launch_dirs(monkeypatch, tmp_path):
     assert got["run_dirs"] == SessionDirs(Workspace(tmp_path))
     assert got["prespawned"] == [SessionDirs(Workspace(tmp_path))]
     assert got["synced"] == []
+
+
+def test_network_start_folder_stops_with_the_local_disk_message(monkeypatch, tmp_path):
+    import typer
+
+    from metasci_scribe import project
+
+    printed: list[str] = []
+    monkeypatch.setattr(commands.console, "print", lambda *a, **k: printed.append(a[0]))
+    monkeypatch.setattr(project, "is_network_path", lambda p: True)
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(typer.Exit):
+        _run(monkeypatch, _config())
+    assert any("local" in line.lower() for line in printed)
+
+
+def test_network_workdir_is_not_created(monkeypatch, tmp_path):
+    import typer
+
+    from metasci_scribe import project
+
+    monkeypatch.setattr(project, "is_network_path", lambda p: True)
+    target = tmp_path / "paper"
+    with pytest.raises(typer.Exit):
+        _run(monkeypatch, _config(), workdir=str(target))
+    assert not target.exists()

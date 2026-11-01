@@ -15,6 +15,7 @@ import typer
 from rich.markup import escape
 from rich.table import Table
 
+from .. import project
 from ..gateway import (
     GraphGateway,
     GraphTarget,
@@ -1818,10 +1819,18 @@ def _main_callback(
         workspace_root = start_workspace_path()
     elif workdir:
         workspace_root = start_workspace_path(workdir)
-        os.makedirs(workspace_root, exist_ok=True)
     else:
         workspace_root = start_workspace_path(default_workdir=config.default_workdir)
         effective_mode = mode or config.default_mode
+    # Before the path is resolved (a mapped drive resolves to a UNC path) or
+    # created: network folders are not supported.
+    try:
+        project.require_local_path(workspace_root)
+    except project.NetworkPathError as exc:
+        console.print(f"[red]✗ {escape(str(exc))}[/red]")
+        raise typer.Exit(code=1) from exc
+    if workdir and not use_cwd:
+        os.makedirs(workspace_root, exist_ok=True)
     workspace = Workspace(workspace_root)
     try:
         require_workspace_root(workspace.root)
