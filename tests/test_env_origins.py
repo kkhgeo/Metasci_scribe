@@ -1,5 +1,5 @@
 """Tests for the record of where config-mapped environment variables came from
-(metasci_scribe.config.settings) and its use in the settings API's ``sources``."""
+(metasci_scribe.config.settings)."""
 
 from __future__ import annotations
 
@@ -21,13 +21,11 @@ from metasci_scribe.config.settings import (
     get_config_path,
     get_effective_config,
 )
-from metasci_scribe.langgraph_dev import settings_api
 
 
 @pytest.fixture(autouse=True)
 def _clean(monkeypatch):
     monkeypatch.setattr(settings, "_ENV_ORIGINS", {})
-    monkeypatch.setattr(settings_api, "_baseline", None)
 
 
 def _use_dotenv(tmp_path: Path, monkeypatch) -> None:
@@ -120,64 +118,6 @@ def test_the_server_reads_and_removes_the_record():
     assert json.loads(out.strip().splitlines()[-1]) == [None, {"source": "file"}]
 
 
-class TestSources:
-    def test_a_saved_key_copied_into_the_environment_reads_file(self, config_file):
-        config_file.write_text("openai_api_key: sk-file\n", encoding="utf-8")
-        apply_config_to_env(get_effective_config())
-        sources = settings_api.read_settings()["sources"]
-        assert sources["openai_api_key"] == {"source": "file", "shadowed": False}
-
-    def test_shell_key_shadows_with_and_without_a_saved_one(
-        self, config_file, monkeypatch
-    ):
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-shell")
-        sources = settings_api.read_settings()["sources"]
-        assert sources["openai_api_key"] == {"source": "env", "shadowed": True}
-        config_file.write_text("openai_api_key: sk-file\n", encoding="utf-8")
-        apply_config_to_env(get_effective_config())
-        sources = settings_api.read_settings()["sources"]
-        assert sources["openai_api_key"] == {"source": "env", "shadowed": True}
-
-    def test_dotenv_with_path(self, tmp_path, monkeypatch):
-        _use_dotenv(tmp_path, monkeypatch)
-        sources = settings_api.read_settings()["sources"]
-        assert sources["tavily_api_key"] == {
-            "source": "dotenv",
-            "path": str(tmp_path / ".env"),
-            "shadowed": True,
-        }
-
-    def test_launcher_workspace_is_not_shadowed(self, monkeypatch):
-        settings.record_env_origin("METASCI_SCRIBE_WORKSPACE_DIR", "default")
-        monkeypatch.setenv("METASCI_SCRIBE_WORKSPACE_DIR", os.getcwd())
-        sources = settings_api.read_settings()["sources"]
-        assert sources["default_workdir"] == {"source": "default", "shadowed": False}
-
-    def test_a_port_flag_is_cli_and_shadowed(self, monkeypatch):
-        settings.record_env_origin("METASCI_SCRIBE_LANGGRAPH_DEV_PORT", "cli")
-        monkeypatch.setenv("METASCI_SCRIBE_LANGGRAPH_DEV_PORT", "9000")
-        sources = settings_api.read_settings()["sources"]
-        assert sources["langgraph_dev_port"] == {"source": "cli", "shadowed": True}
-
-    def test_changed_saved_key_needs_a_restart_although_copied(self, config_file):
-        """The server's environment holds the old copy; a restart applies the
-        new value, so it is pending, not shadowed."""
-        config_file.write_text("openai_api_key: sk-old-value\n", encoding="utf-8")
-        apply_config_to_env(get_effective_config())
-        settings_api.capture_restart_baseline()
-        config_file.write_text("openai_api_key: sk-new-value\n", encoding="utf-8")
-        body = settings_api.read_settings()
-        assert body["restart_fields"] == ["openai_api_key"]
-
-    def test_auto_approve_flag_needs_no_restart(self, config_file):
-        """A server started by ``metasci-scribe --auto-approve`` compares the file with
-        the file, so the flag is no change."""
-        config_file.write_text("auto_approve: false\n", encoding="utf-8")
-        apply_config_to_env(get_effective_config({"auto_approve": True}))
-        settings_api.capture_restart_baseline()
-        assert settings_api.read_settings()["restart_required"] is False
-
-
 class TestServerRecord:
     """What start_langgraph_dev records for the workspace, port and host."""
 
@@ -214,16 +154,15 @@ class TestServerRecord:
 def test_an_unreadable_config_file_does_not_stop_a_start(config_file):
     config_file.mkdir()
     apply_config_to_env(get_effective_config())
-    settings_api.capture_restart_baseline()
-    assert settings_api._baseline is not None
 
 
 def test_apply_config_to_env_reads_the_file_once(config_file, monkeypatch):
     from metasci_scribe.config import store
 
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     config_file.write_text(
-        "openai_api_key: sk-file-1\ntavily_api_key: tvly-file-2\n"
-        "minimax_api_key: sk-file-3\n",
+        "openai_api_key: sk-file-1\nanthropic_api_key: sk-ant-file-2\n",
         encoding="utf-8",
     )
     config = get_effective_config()
@@ -232,5 +171,5 @@ def test_apply_config_to_env_reads_the_file_once(config_file, monkeypatch):
     monkeypatch.setattr(store, "read_config_mapping", lambda: reads.append(1) or real())
     apply_config_to_env(config)
     assert len(reads) == 1
-    for field in ("openai_api_key", "tavily_api_key", "minimax_api_key"):
+    for field in ("openai_api_key", "anthropic_api_key"):
         assert env_origin(_ENV_MAPPINGS[field]) == {"source": "file"}

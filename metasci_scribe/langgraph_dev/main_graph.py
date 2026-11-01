@@ -18,11 +18,6 @@ closes the gap without touching the middleware's write path, preserving
 cross-turn REPL persistence as ``langchain-ai/deepagents#3064`` shipped it.
 """
 
-# Records config.yaml before the agent import below reads it.
-import metasci_scribe.langgraph_dev.config_baseline  # noqa: F401
-
-# isort: split
-
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import PregelTask, StateSnapshot
 
@@ -35,11 +30,6 @@ from metasci_scribe.sessions import AGENT_NAME
 # building the agent this import triggers.
 from .folder_check import folder_checked
 from .stream_transformers import stream_transformers
-
-# The model fallback chain is seeded in _get_default_middleware (the
-# factory every graph — main, sync/async subagent — is built through), so
-# no registration-time seeding is needed here: importing the agent builds
-# its middleware and seeds the chain in the same sync import context.
 
 _PRIVATE_STATE_FIELDS = frozenset({"_quickjs_snapshot_payload"})
 

@@ -11,11 +11,22 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 # Imported before any patch is active: the module binds ``get_effective_config``
 # at import, and a first import under the patch would freeze the mock in place.
 import metasci_scribe.agent  # noqa: F401
 from metasci_scribe.config import MemoryObservationWriter
 from metasci_scribe.memory import MemorySourceType
+
+
+@pytest.fixture(autouse=True)
+def _memory_on(monkeypatch):
+    """Memory is off by default; these tests exercise it."""
+    for name in ("PROFILE", "OBSERVATIONS", "WORKERS"):
+        monkeypatch.setenv(f"METASCI_SCRIBE_MEMORY_{name}_ENABLED", "true")
+    # A config cached by an earlier test would hide the variables above.
+    monkeypatch.setattr("metasci_scribe.agent._config", None)
 
 
 def _single_middleware(subagent: dict, class_name: str):
@@ -102,8 +113,6 @@ def test_factory_requests_async_safe_middleware(
         work_dir=None,
         for_async_subagent=True,
         memory_source_agent="writing-agent",
-        unattended=False,
-        model_retry_honors_run_key=True,
         backend=mock_backend.return_value,
         chat_model=mock_chat.return_value,
     )

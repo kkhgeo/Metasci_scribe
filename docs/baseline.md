@@ -69,3 +69,57 @@ Decisions:
 Not done here (left for later tasks): the langgraph dev server's WebUI-facing HTTP routes
 (`langgraph_dev/http.py`, `settings_api.py`, the `boundary.py` CORS rules) are unchanged, and prose
 that still mentions the TUI or the WebUI in comments and in `docs/` and the README.
+
+## Task 5: commands, middleware, sub-agents and providers reduced
+
+Result after the reduction (same command): **2 failed, 4551 passed, 25 skipped** in 75 s. The count
+drops again because the tests of the removed commands, middleware, sub-agents, providers and
+WebUI routes went with them. The two failures are the cp949 ones from Task 4
+(`tests/test_config.py::TestDotenvIsolation::test_copied_template_does_not_shadow_config_keys` and
+`tests/test_langgraph_manager.py::TestReadTunnelUrl::test_returns_none_on_timeout`).
+
+Decisions:
+
+- **Defaults.** `provider="openai"`, `model="gpt-6.1-sol"`; `memory_profile_enabled`,
+  `memory_observations_enabled`, `memory_workers_enabled`, `memory_skill_synthesis_enabled`,
+  `enable_async_subagents` and `enable_scheduler` are all `False`. These are the only triggers of
+  `needs_langgraph_dev`, so a plain start spawns no `langgraph dev` server and prints no
+  "Starting background agent server" line. `tests/test_reduced_surface.py` pins that with the spawn
+  function patched.
+- **Providers: OpenAI and Anthropic only.** `config.provider_keys.PROVIDERS`, `VALID_PROVIDERS` and the
+  model registry hold just those two. All routed providers (MiniMax, DeepSeek, Moonshot, Zhipu, ...,
+  `custom-openai`, `custom-anthropic`), Google, NVIDIA, Ollama and OpenRouter are gone with their
+  settings, key checks, onboarding steps and the OpenRouter referer. `OPENAI_BASE_URL` and
+  `ANTHROPIC_BASE_URL` still point the two providers at a compatible gateway.
+- **`openai_auth_mode`** is `Literal["api_key", "chatgpt_plan"]`, default `"api_key"`. `"chatgpt_plan"` is
+  reserved for the ChatGPT plan connector (T8): `get_chat_model` refuses it with a clear message. The
+  old `"oauth"` value reads as `"api_key"` with the usual invalid-value warning; `llm/chatgpt_oauth.py`,
+  the `--auth-mode` flag, the sign-in onboarding step and `_patch_openai_responses_whole_tool_args`
+  (Codex-only) are deleted.
+- **Tavily is gone completely**: the tool (`tools/search.py`, with the unused `fetch_webpage_content`),
+  the `tavily_api_key` setting, its onboarding step, `configure tavily`, `--tavily-key`, the key check, and
+  the `tavily-python` and `markdownify` dependencies. `research.yaml` now lists only `think_tool`.
+- **`model_fallback` is gone**, so `model_retry` took over the two helpers it used from it
+  (`_is_deterministic_request_error`, and a single failure instead of a chain). `UnknownModelError`
+  stays and is what an unsupported provider raises.
+- **Server HTTP surface.** `langgraph_dev/http.py` stays, with only `/api/bg_process_status` (the CLI's
+  `gateway/local.py` and `gateway/server.py` poll it) and the `BrowserBoundary` guard in front of the
+  whole server. `settings_api.py`, `config_baseline.py`, `local_secret.py`, the other routes, the
+  `cors` block of `langgraph.json` and `boundary.cors_config` / `CORS_CONFIG` are removed. The guard is kept on
+  purpose: it is what stops a web page from driving the loopback server.
+- **agent_shell job objects stay.** They are not dead: `ShellLaunch.started` / `terminate_job` are used by
+  the agent's `execute` tool (`backends.py`) and by background processes (`background.py`).
+- **Async sub-agents** are off by default but not deleted: `writing-agent` keeps `async: true` and its
+  graph. With `EvoAsyncSubAgentMiddleware` gone they use deepagents' own `AsyncSubAgentMiddleware`, so
+  they no longer forward the session folders or a `/model` override to the child run.
+- **cron** keeps only what AutoSkills uses (`create_cron`, `delete_cron`, search and ownership helpers);
+  the scheduling API, the startup re-tagging of scheduled tasks and the "autoskill proposals" notice
+  of the deleted `/autoskills` command are removed.
+- **Sub-agents**: only `planner`, `research` and `writing`. The system prompt no longer sends work to
+  `code-agent`, `debug-agent` or `data-analysis-agent`, and the code-generation mode question is gone.
+
+Not done here: `config/settings.py` still carries the env-origin record (`ENV_ORIGINS_VAR`,
+`record_env_origin`, `_server_env_origins` in the manager) that only the deleted settings API read;
+`middleware/events.py` and `stream/sink.py` still carry the fallback-notice event; `llm/patches.py` keeps
+the unused message-flattening patches and client proxies; `tools/skills_manager.py` still classifies expert
+skills. Prose in `docs/` and the README is for T15.

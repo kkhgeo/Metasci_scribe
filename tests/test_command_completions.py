@@ -51,23 +51,17 @@ class TestTopLevelCompletions:
 
 class TestAliasVisibility:
     def test_alias_prefix_matches(self):
-        r = compute_completions("/fa", 3)
+        r = compute_completions("/qu", 3)
         names = [c.text for c in r.candidates]
-        assert "/model-fallback" in names
+        assert "/exit" in names
 
     def test_alias_exact_hides_leaf(self):
         r = compute_completions("/quit", 5)
         assert r.kind == "empty"
 
     def test_alias_exact_hides_without_space(self):
-        r = compute_completions("/fallback", 9)
+        r = compute_completions("/q", 2)
         assert r.kind == "empty"
-
-    def test_alias_space_shows_subcommands(self):
-        r = compute_completions("/fallback ", 10)
-        names = [c.text for c in r.candidates]
-        assert "add" in names
-        assert "list" in names
 
 
 class TestSubcommandCompletions:
@@ -85,14 +79,8 @@ class TestSubcommandCompletions:
         assert "list" not in names
 
     def test_leaf_subcommand_stops(self):
-        r = compute_completions("/model-fallback help ", 21)
+        r = compute_completions("/mcp list ", 10)
         assert r.kind == "empty"
-
-    def test_model_fallback_subcommands(self):
-        r = compute_completions("/model-fallback ", 16)
-        names = [c.text for c in r.candidates]
-        assert "add" in names
-        assert "clear" in names
 
 
 class TestDynamicCompletions:
@@ -214,7 +202,6 @@ class TestSkillCompletions:
         texts = [c.text for c in r.candidates]
         assert texts[:2] == ["/skill", "/skill-two"]
         assert "/skills" in texts
-        assert "/autoskills" in texts
         categories = [c.category for c in r.candidates]
         skill_count = categories.count(SKILL_CATEGORY)
         assert skill_count == 2
@@ -234,7 +221,6 @@ class TestSkillCompletions:
         texts = [c.text for c in r.candidates]
         categories = [c.category for c in r.candidates]
         assert "/skills" in texts
-        assert "/autoskills" in texts
         assert categories[0] != SKILL_CATEGORY
         assert texts[-2:] == ["/skill", "/skill-two"]
         assert categories[-2:] == [SKILL_CATEGORY] * 2

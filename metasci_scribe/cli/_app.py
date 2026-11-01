@@ -38,12 +38,12 @@ Examples:
   metasci-scribe mcp add brave-search npx --env-ref BRAVE_API_KEY -e research-agent -- -y @modelcontextprotocol/server-brave-search
 
   # Expose to multiple agents:
-  metasci-scribe mcp add local-server python -e main,research-agent,code-agent -- /path/to/server.py
+  metasci-scribe mcp add local-server python -e main,research-agent -- /path/to/server.py
 
   # Explicit transport override:
   metasci-scribe mcp add my-sse https://example.com/sse --transport sse
 
-Sub-agents (-e): planner-agent | research-agent | code-agent | debug-agent | data-analysis-agent | writing-agent
+Sub-agents (-e): planner-agent | research-agent | writing-agent
 """
 mcp_app = typer.Typer(help=_MCP_HELP, invoke_without_command=True)
 app.add_typer(mcp_app, name="mcp")

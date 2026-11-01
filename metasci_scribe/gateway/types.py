@@ -113,11 +113,8 @@ class RunRequest:
     target: GraphTarget | None = None
     configurable_extra: dict[str, Any] | None = None
     """Extra keys to merge into the LangGraph ``configurable`` dict alongside
-    ``thread_id`` — e.g. ``{"active_teams": [...]}`` from the TUI
-    ``/expert`` command. WebUI callers achieve the same effect via
-    ``langgraph_sdk``'s ``config.configurable`` on their own; this field is
-    the local-gateway equivalent so CLI / TUI can bias
-    the run identically."""
+    ``thread_id`` — e.g. the rubric marker of ``/rubric``. This field is the
+    local-gateway equivalent of ``langgraph_sdk``'s ``config.configurable``."""
     rubric: str | None = None
     """Acceptance criteria this turn is graded against; ``None`` means ungraded."""
     goal_request: dict[str, Any] | None = None

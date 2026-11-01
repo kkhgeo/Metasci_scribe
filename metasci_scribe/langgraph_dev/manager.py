@@ -1125,10 +1125,11 @@ def start_langgraph_dev(
     sub_env["METASCI_SCRIBE_LANGGRAPH_DEV_HOST"] = host
     # The browser boundary: which pages and host names the server accepts
     # (``boundary.server_env``), always set here so nothing inherited, such as
-    # a workspace ``.env``, widens it. CORS_ALLOW_ORIGINS would only matter
-    # without our CORS_CONFIG; TUNNEL_HTTP_HOST_HEADER would make cloudflared,
-    # which inherits this environment, send tunnel requests with a local Host.
+    # a workspace ``.env``, widens it. TUNNEL_HTTP_HOST_HEADER would make
+    # cloudflared, which inherits this environment, send tunnel requests with
+    # a local Host.
     sub_env.update(boundary.server_env(host, allowed_origins))
+    sub_env.pop("CORS_CONFIG", None)
     sub_env.pop("CORS_ALLOW_ORIGINS", None)
     sub_env.pop("TUNNEL_HTTP_HOST_HEADER", None)
     # Where the server's config-mapped variables came from, for the settings

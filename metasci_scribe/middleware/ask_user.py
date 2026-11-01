@@ -191,7 +191,7 @@ or available tools.
 - Simple yes/no decisions — proceed with your best judgment
 - Information already provided in the conversation or memory
 - Trivial choices that don't meaningfully affect outcomes
-- Questions you can answer by searching with `tavily_search` or reading files
+- Questions you can answer by searching or reading files
 - During sub-agent execution (only the main agent should ask the user)
 
 ### Guidelines:

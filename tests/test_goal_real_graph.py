@@ -107,7 +107,11 @@ class TestMemoryWorker:
         model = AllRoles()
         agent = create_cli_agent(
             workspace=Workspace(tmp_path),
-            config=ScribeConfig(enable_async_subagents=False),
+            config=ScribeConfig(
+                enable_async_subagents=False,
+                memory_profile_enabled=True,
+                memory_workers_enabled=True,
+            ),
             chat_model=model,
             checkpointer=InMemorySaver(),
         )

@@ -48,6 +48,15 @@ SYNC_AND_ASYNC = pytest.mark.parametrize(
 )
 
 
+@pytest.fixture(autouse=True)
+def _memory_on(monkeypatch):
+    """Memory is off by default; these tests exercise it."""
+    for name in ("PROFILE", "OBSERVATIONS", "WORKERS"):
+        monkeypatch.setenv(f"METASCI_SCRIBE_MEMORY_{name}_ENABLED", "true")
+    # A config cached by an earlier test would hide the variables above.
+    monkeypatch.setattr("metasci_scribe.agent._config", None)
+
+
 def _text(content: Any) -> str:
     """Flatten message content (a string or content blocks) to its text."""
     if isinstance(content, list):
@@ -1009,9 +1018,10 @@ def test_main_agent_record_tool_itself_has_no_per_run_limit(tmp_path):
     assert len(_observation_files(tmp_path)) == 5
 
 
-def test_main_agent_middleware_carries_no_guardrail(tmp_path):
+def test_main_agent_middleware_carries_no_guardrail(tmp_path, monkeypatch):
     from metasci_scribe.agent import _get_default_middleware
 
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     middleware = _get_default_middleware(workspace=Workspace(tmp_path / "workspace"))
 
     assert not any(
@@ -1455,6 +1465,7 @@ def test_working_agents_share_the_index_by_session(tmp_path, monkeypatch):
     )
     from metasci_scribe.middleware.memory import EvoMemoryMiddleware
 
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     _write_overflowing_global_memory(tmp_path)
     shared = _index_rows(_index(tmp_path))
     assert shared != _index_rows(_index(tmp_path, rows_per_session=None))
@@ -1514,29 +1525,7 @@ def test_strategy_replica_skips_the_wrap_up_without_the_name_list(monkeypatch):
         assert memory_worker._tool_strategy_run(request) is False
 
 
-_PROVIDER_KEY_ENV = (
-    "ANTHROPIC_API_KEY",
-    "OPENAI_API_KEY",
-    "OPENROUTER_API_KEY",
-    "DEEPSEEK_API_KEY",
-    "MINIMAX_API_KEY",
-    "KIMI_API_KEY",
-    "MIMO_API_KEY",
-    "MIMO_TOKEN_PLAN_API_KEY",
-    "CUSTOM_ANTHROPIC_API_KEY",
-    "CUSTOM_OPENAI_API_KEY",
-    "MOONSHOT_API_KEY",
-    "ZHIPUAI_API_KEY",
-    "DASHSCOPE_API_KEY",
-    "GOOGLE_API_KEY",
-    "SILICONFLOW_API_KEY",
-    "VOLCENGINE_API_KEY",
-    "ARK_API_KEY",
-    "NOVITA_API_KEY",
-    "REQUESTY_API_KEY",
-    "ATLASCLOUD_API_KEY",
-    "NVIDIA_API_KEY",
-)
+_PROVIDER_KEY_ENV = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY")
 
 
 def test_strategy_replica_never_claims_a_tool_strategy_langchain_lacks(monkeypatch):
@@ -1547,20 +1536,12 @@ def test_strategy_replica_never_claims_a_tool_strategy_langchain_lacks(monkeypat
     from langchain.agents.factory import _supports_provider_strategy
     from langchain.agents.structured_output import ToolStrategy
     from langchain_core.tools import tool
-    from langchain_nvidia_ai_endpoints._common import _NVIDIABaseClient
 
     from metasci_scribe.llm import get_chat_model
     from metasci_scribe.llm.registry import _MODEL_ENTRIES
-    from metasci_scribe.middleware.utils import structured_output_for
 
     for key in _PROVIDER_KEY_ENV:
         monkeypatch.setenv(key, "sk-test")
-    monkeypatch.setenv("CUSTOM_ANTHROPIC_BASE_URL", "http://127.0.0.1:9/anthropic")
-    monkeypatch.setenv("CUSTOM_OPENAI_BASE_URL", "http://127.0.0.1:9/v1")
-    # ChatNVIDIA asks the API about model names outside its static table.
-    monkeypatch.setattr(
-        _NVIDIABaseClient, "available_models", property(lambda self: [])
-    )
 
     @tool
     def search_observations(query: str) -> str:
@@ -1572,11 +1553,9 @@ def test_strategy_replica_never_claims_a_tool_strategy_langchain_lacks(monkeypat
     for _short, model_id, provider in _MODEL_ENTRIES:
         try:
             model = get_chat_model(model=model_id, provider=provider)
-            model, response_format = structured_output_for(
-                model, memory_worker.SubagentMemoryDecision
-            )
         except Exception:
             continue
+        response_format = memory_worker.SubagentMemoryDecision
         compared += 1
         replica = memory_worker._tool_strategy_run(
             SimpleNamespace(model=model, response_format=response_format)
@@ -1587,5 +1566,5 @@ def test_strategy_replica_never_claims_a_tool_strategy_langchain_lacks(monkeypat
         if replica and not langchain_tool:
             unsafe.append(f"{provider}:{model_id}")
 
-    assert compared > 100
+    assert compared == len(_MODEL_ENTRIES)
     assert unsafe == []

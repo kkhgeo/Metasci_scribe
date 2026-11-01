@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 
-import httpx
 import pytest
 from langchain_core.language_models.fake_chat_models import (
     FakeMessagesListChatModel,
@@ -311,76 +310,3 @@ async def test_the_next_turn_gets_a_budget_of_its_own(tmp_path, waits):
     events = [event async for event in stream_agent_events(agent, "again", "t9")]
     assert sum(waits) == spent + 1.0
     assert next(e for e in events if e["type"] == "done")["response"] == "All done."
-
-
-class _Answering(GenericFakeChatModel):
-    def bind_tools(self, tools, **kwargs):
-        return self
-
-
-class _Rejecting(GenericFakeChatModel):
-    """A fallback entry that fails for good: the provider rejects its key."""
-
-    calls: int = 0
-
-    async def _astream(self, messages, stop=None, run_manager=None, **kwargs):
-        import openai
-
-        self.calls += 1
-        request = httpx.Request("POST", "https://provider.test/v1/chat/completions")
-        raise openai.AuthenticationError(
-            "Error code: 401",
-            response=httpx.Response(401, request=request),
-            body=None,
-        )
-        yield  # an async generator, as the real stream is
-
-    def bind_tools(self, tools, **kwargs):
-        return self
-
-
-@pytest.fixture
-def fallback(monkeypatch):
-    """A one-entry fallback chain served by whatever model the test puts in the holder."""
-    from metasci_scribe.middleware import model_fallback
-
-    holder: dict = {}
-    monkeypatch.setattr(
-        "metasci_scribe.llm.models.get_chat_model",
-        lambda model, provider=None, **kwargs: holder["model"],
-    )
-    model_fallback.set_fallback_chain([("fallback-model", "openai")])
-    yield holder
-    model_fallback._reset_chain_initialization()
-
-
-async def test_a_fallback_takes_over_a_dropped_stream_without_a_wait(
-    tmp_path, waits, fallback
-):
-    primary = _Flaky(messages=iter([AIMessage("never used")]))
-    fallback["model"] = _Answering(messages=iter([AIMessage("Fallback.")]))
-    agent = _agent(tmp_path, primary, model_retry_wait_seconds=60)
-    events = [event async for event in stream_agent_events(agent, "hi", "t6")]
-    assert not [e for e in events if e["type"] == "model_retry"]
-    assert waits == []
-    (dropped,) = [e for e in events if e["type"] == "model_output_discarded"]
-    assert dropped["discarded"]["text_chars"] == len("Half a sen")
-    done = next(e for e in events if e["type"] == "done")
-    assert done["response"] == "Fallback."
-    assert primary.calls == 1
-
-
-async def test_a_broken_fallback_leaves_the_primary_its_retry(
-    tmp_path, waits, fallback
-):
-    primary = _Flaky(messages=iter([AIMessage("Complete.")]))
-    fallback["model"] = _Rejecting(messages=iter([]))
-    agent = _agent(tmp_path, primary, model_retry_wait_seconds=60)
-    events = [event async for event in stream_agent_events(agent, "hi", "t7")]
-    (retry,) = [e for e in events if e["type"] == "model_retry"]
-    assert "dropped" in retry["reason"]
-    assert len(waits) == 1
-    assert next(e for e in events if e["type"] == "done")["response"] == "Complete."
-    assert (primary.calls, fallback["model"].calls) == (2, 1)
-    state = await agent.aget_state({"configurable": {"thread_id": "t7"}})
-    assert [m.text for m in state.values["messages"] if m.type == "ai"] == ["Complete."]

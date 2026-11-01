@@ -1,5 +1,13 @@
 """deepagents 0.7.0 made TodoListMiddleware opt-in; Metasci Scribe opts back in everywhere."""
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _openai_key(monkeypatch):
+    """The default (OpenAI) chat model needs a key to be built."""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+
 
 def _names(middleware_list):
     return {m.name for m in middleware_list}

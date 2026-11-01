@@ -1447,9 +1447,8 @@ async def stream_agent_events(
             (e.g. agent_name, updated_at for checkpoint persistence).
         media: Optional list of local file paths for attachments.
         configurable_extra: Optional extra keys merged into ``configurable``
-            alongside ``thread_id`` — e.g. ``{"active_teams": [...]}`` from
-            TUI ``/expert`` bindings, mirroring what WebUI writes via
-            langgraph-sdk. Ignored if ``None`` or empty.
+            alongside ``thread_id`` — e.g. the ``/rubric`` marker. Ignored if
+            ``None`` or empty.
 
     Yields:
         Event dicts: thinking, text, tool_call, tool_result,

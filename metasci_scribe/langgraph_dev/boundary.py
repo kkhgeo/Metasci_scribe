@@ -4,8 +4,7 @@ A browser sends every request a page makes, to any address, with the page's
 ``Origin`` and the host name it used in ``Host``. Without a boundary any web
 page open in the user's browser can create threads and start runs on a
 loopback backend, also through DNS rebinding (a name that resolves to
-``127.0.0.1`` looks same-origin to the browser) and over WebSockets, which CORS
-does not cover. The backend therefore accepts browser requests only from pages
+``127.0.0.1`` looks same-origin to the browser) and over WebSockets. The backend therefore accepts browser requests only from pages
 on trusted host names and only when ``Host`` is one of them:
 
 - the loopback names, on any port;
@@ -18,17 +17,15 @@ Under ``--tunnel`` the quick-tunnel name joins the ``Host`` list only: a page
 on any other origin that calls the tunnel URL needs that origin in
 ``backend_allowed_origins``.
 
-Requests without ``Origin`` (the CLI, SDK scripts, the WebUI's Node server)
-are only checked for ``Host``. Non-browser programs can send any header, so
+Requests without ``Origin`` (the CLI, SDK scripts) are only checked for
+``Host``. Non-browser programs can send any header, so
 this stops pages, not programs; the local secret is for the routes that need
 more.
 
 The manager computes the trusted names when it starts the server
-(:func:`server_env`) and passes them twice from one set: as langgraph-api's
-``CORS_CONFIG``, which langgraph-api reads before this code runs, and as
-:data:`BOUNDARY_ENV` for :class:`BrowserBoundary`, which refuses requests in the
-server. A plain ``langgraph dev`` gets the loopback names from
-``langgraph.json``.
+(:func:`server_env`) and passes them as :data:`BOUNDARY_ENV` for
+:class:`BrowserBoundary`, which refuses requests in the server. A plain
+``langgraph dev`` gets the loopback names.
 """
 
 from __future__ import annotations
@@ -45,8 +42,6 @@ logger = logging.getLogger(__name__)
 
 LOOPBACK_NAMES = ("localhost", "127.0.0.1", "::1")
 BOUNDARY_ENV = "METASCI_SCRIBE_BROWSER_BOUNDARY"
-# What the WebUI reads from responses; a ``cors`` block replaces these defaults.
-_EXPOSE_HEADERS = ["x-pagination-total", "x-pagination-next", "content-location"]
 _WILDCARD_HOSTS = frozenset({"", "0.0.0.0", "::"})
 # A quick-tunnel name; ``api`` is cloudflared's own API, which langgraph-api
 # takes for the tunnel URL when the tunnel cannot be created.
@@ -102,26 +97,7 @@ def server_env(bind_host: str, allowed_origins: str) -> dict[str, str]:
     """Environment variables that set the boundary of a server bound to *bind_host*."""
     names = _trusted_names(bind_host)
     origins = parse_allowed_origins(allowed_origins)
-    return {
-        "CORS_CONFIG": json.dumps(cors_config(names, origins)),
-        BOUNDARY_ENV: json.dumps({"names": names, "origins": origins}),
-    }
-
-
-def cors_config(names: list[str], origins: list[str]) -> dict:
-    """langgraph-api's CORS settings for pages on *names* (any port) and *origins*.
-
-    ``allow_origins`` is always set: langgraph-api fills a missing one with
-    ``["*"]``, which would allow every origin.
-    """
-    hosts = "|".join(re.escape(f"[{n}]" if ":" in n else n) for n in names)
-    return {
-        "allow_origins": origins,
-        "allow_origin_regex": rf"https?://({hosts})(:\d+)?",
-        "allow_methods": ["*"],
-        "allow_headers": ["*"],
-        "expose_headers": _EXPOSE_HEADERS,
-    }
+    return {BOUNDARY_ENV: json.dumps({"names": names, "origins": origins})}
 
 
 def _trusted_names(bind_host: str) -> list[str]:
@@ -231,7 +207,7 @@ class BrowserBoundary:
     """ASGI middleware that refuses requests outside the trusted names.
 
     Installed on the custom app, which langgraph-api places outside its own
-    middleware, so it runs before CORS and every route, WebSockets included.
+    middleware, so it runs before every route, WebSockets included.
     Requests langgraph-api makes to itself in process (``root_path``
     ``/noauth``, which no request from outside can set) pass, as they pass its
     auth.

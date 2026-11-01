@@ -87,12 +87,11 @@ def build_memory_agent_graph(
 
     from ...agent import _ensure_auxiliary_chat_model
     from ...backends import build_memory_agent_backend
-    from ...middleware.utils import structured_output_for
 
     model = _ensure_auxiliary_chat_model()
     kwargs: dict[str, Any] = {}
     if response_format is not None:
-        model, kwargs["response_format"] = structured_output_for(model, response_format)
+        kwargs["response_format"] = response_format
 
     if backend is None:
         backend = build_memory_agent_backend(

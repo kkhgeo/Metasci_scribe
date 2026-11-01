@@ -59,8 +59,8 @@ _logger = logging.getLogger(__name__)
 #
 # ``install_skill`` and ``uninstall_skill`` are called from six places today:
 # three slash commands, two paths in the agent's ``skill_manager`` @tool, and
-# the onboarding step. Consumers that cache skill data (currently the
-# /expert completion popup) need to invalidate on every mutation, and wiring
+# the onboarding step. Consumers that cache skill data (for example the
+# skill completion popup) need to invalidate on every mutation, and wiring
 # that at each caller site was the "vibes and hope" pattern reviewers rightly
 # called out on PR #371 — the next caller silently reintroduces staleness.
 #
@@ -75,7 +75,7 @@ def register_skills_changed_callback(callback: Callable[[], None]) -> None:
     """Register a callback fired after every ``install_skill`` /
     ``uninstall_skill`` call.
 
-    Consumers that cache skill data — e.g. the ``/expert`` completion
+    Consumers that cache skill data — e.g. the skill completion
     popup — subscribe once at import time so every mutation path
     (commands, agent ``skill_manager`` @tool, onboarding) invalidates
     their view. Callbacks are process-scoped and never unregistered
@@ -196,7 +196,7 @@ _EXPERT_FILENAME = "EXPERT.md"
 
 # Legacy ``type: expert`` frontmatter is a deprecated fallback, so the warning
 # is one-shot per skill name — ``_parse_skill_md`` runs on every ``list_skills``
-# call (main-agent construction, /expert completion, GET /api/teams), and a
+# call (main-agent construction, skill listing), and a
 # per-parse warning would bury real diagnostics under repeats.
 _legacy_expert_warned: set[str] = set()
 
@@ -441,12 +441,11 @@ def _parse_skill_md(skill_md_path: Path, *, source: str = "") -> SkillInfo:
         content = skill_md_path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
         # ``_parse_skill_md`` runs during agent construction (via
-        # ``_fold_expert_subagents`` → ``list_skills``), so an unreadable
-        # SKILL.md in any tier must not abort the whole main-agent build or
-        # ``GET /api/teams``. Degrade to an "(unreadable)" placeholder so
+        # ``list_skills``), so an unreadable
+        # SKILL.md in any tier must not abort the whole main-agent build.
+        # Degrade to an "(unreadable)" placeholder so
         # the entry stays visible in ``skill_manager list`` for debugging
-        # but never advances into expert registration (empty body →
-        # ``build_expert_subagent_specs`` skips it).
+        # but never advances into expert registration (empty body).
         _logger.warning(
             "Skill %r: could not read %s (%s); skipping.",
             parent.name,
@@ -1246,21 +1245,11 @@ def list_expert_skills(
     Filters ``list_skills()`` output to entries classified as experts by
     ``_parse_skill_md`` — a sibling ``EXPERT.md`` (current contract), or
     legacy ``type: expert`` SKILL.md frontmatter. Read ``expert_source`` on
-    the returned entries to tell the two apart; use
-    ``expert_container.expert_prompt_body`` rather than ``.body`` to get an
-    expert's runtime prompt, since the two contracts source it from
-    different files.
+    the returned entries to tell the two apart.
 
     Defaults ``include_system=True`` because first-party experts ship under
     the builtin skills tier; user-installed experts still surface from the
     workspace and global tiers alongside them.
-
-    Consumed by:
-      - ``GET /api/teams`` (WebUI gallery listing).
-      - Main-agent construction (folds expert skills into the
-        ``subagents=[...]`` list so the ``task`` tool can dispatch to
-        them for sync consult).
-      - The ``skill_manager`` @tool's ``type=expert`` filter.
 
     Returns:
         List of ``SkillInfo`` for each expert skill.

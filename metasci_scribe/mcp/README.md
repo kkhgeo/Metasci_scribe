@@ -113,7 +113,7 @@ metasci-scribe mcp add brave-search npx --env-ref BRAVE_API_KEY -e research-agen
 metasci-scribe mcp add fs npx -t "read_*,write_*" -- -y @modelcontextprotocol/server-filesystem /workspace
 
 # Context7 routed to multiple agents
-metasci-scribe mcp add context7 npx -e main,research-agent,code-agent -- -y @upstash/context7-mcp@latest
+metasci-scribe mcp add context7 npx -e main,research-agent -- -y @upstash/context7-mcp@latest
 ```
 
 <details>
@@ -141,7 +141,7 @@ Update individual fields without re-adding:
 
 ```bash
 # Change routing
-metasci-scribe mcp edit filesystem --expose-to main,code-agent
+metasci-scribe mcp edit filesystem --expose-to main,research-agent
 
 # Set a tool allowlist (supports glob wildcards)
 metasci-scribe mcp edit filesystem --tools "read_*,write_*"
@@ -162,7 +162,7 @@ postgres:
   transport: stdio
   command: npx
   args: ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/mydb"]
-  expose_to: [data-analysis-agent]
+  expose_to: [writing-agent]
 
 github:
   transport: stdio
@@ -178,9 +178,6 @@ github:
 | `main` | Main orchestrator (default target) |
 | `planner-agent` | Experiment planning |
 | `research-agent` | Literature search |
-| `code-agent` | Code writing |
-| `debug-agent` | Debugging |
-| `data-analysis-agent` | Data analysis |
 | `writing-agent` | Report writing |
 
 > [!NOTE]
@@ -275,7 +272,7 @@ filesystem:
   command: npx
   args: ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"]
   tools: ["read_*", "write_*"]       # optional allowlist with wildcards (omit = all tools)
-  expose_to: [main, code-agent]      # optional routing (omit = ["main"])
+  expose_to: [main, research-agent]      # optional routing (omit = ["main"])
 
 brave-search:
   transport: http

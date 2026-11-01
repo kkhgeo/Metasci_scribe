@@ -1884,7 +1884,7 @@ class CustomSandboxBackend(LocalShellBackend):
                 Defaults to False.
             refuse_delete: Refuse the recursive ``delete`` FS tool outright,
                 relaying an approval request to the orchestrator. Used for async
-                research sub-agents (writing / data-analysis) that have no
+                research sub-agents (writing) that have no
                 interactive approval path. Bypassed when ``dangerous=True``.
                 Defaults to False.
             skills_dir: The workspace skills tier. ``/skills/...`` paths in

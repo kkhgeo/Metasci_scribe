@@ -127,58 +127,6 @@ def test_factory_checks_runs_only_and_returns_the_prebuilt_graph(served, tmp_pat
         asyncio.run(factory(mismatch, running))
 
 
-# ---------------------------------------------------------------------------
-# Child runs forward their folders
-# ---------------------------------------------------------------------------
-
-
-def _launch(workspace: Workspace, work_dir=None) -> dict:
-    """Start an async sub-agent and return the ``configurable`` it was sent."""
-    from metasci_scribe.middleware.expert_async_subagent import (
-        EvoAsyncSubAgentMiddleware,
-    )
-
-    middleware = EvoAsyncSubAgentMiddleware(
-        workspace=workspace,
-        work_dir=work_dir,
-        async_subagents=[
-            {
-                "name": "writing-agent",
-                "description": "writes",
-                "graph_id": "writing-agent",
-                "url": "http://127.0.0.1:6174",
-            }
-        ],
-    )
-    start = next(t for t in middleware.tools if t.name == "start_async_task")
-    client = MagicMock()
-    client.threads.create.return_value = {"thread_id": "t1"}
-    client.runs.create.return_value = {"run_id": "r1"}
-    with patch(
-        "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_sync",
-        return_value=client,
-    ):
-        start.func(
-            description="draft the paper",
-            subagent_type="writing-agent",
-            runtime=SimpleNamespace(tool_call_id="tc1", config={}),
-        )
-    return client.runs.create.call_args.kwargs["config"]["configurable"]
-
-
-def test_async_tasks_forward_the_session_folders(workspace):
-    run = workspace.runs_dir / RUN
-    configurable = _launch(workspace, work_dir=run)
-    assert configurable["workspace_dir"] == workspace.key
-    assert configurable["run_dir"] == run.as_posix()
-
-
-def test_daemon_async_tasks_forward_the_root_only(workspace):
-    configurable = _launch(workspace)
-    assert configurable["workspace_dir"] == workspace.key
-    assert "run_dir" not in configurable
-
-
 def test_memory_workers_and_the_linker_forward_the_root(workspace, tmp_path):
     from metasci_scribe.memory.launch import (
         _memory_worker_run_payload,
@@ -236,11 +184,9 @@ def test_registered_graphs_check_the_folders_they_work_in(served, monkeypatch, r
     import metasci_scribe.agent as evo
     import metasci_scribe.memory.agents as memory_agents
     import metasci_scribe.subagents._factory as factory_mod
-    import metasci_scribe.subagents.expert_container_async as expert_async
 
     for module, name in (
         (factory_mod, "build_async_subagent_graph"),
-        (expert_async, "build_expert_container_async_graph"),
         (memory_agents, "build_memory_worker_graph"),
         (memory_agents, "build_observation_linker_graph"),
         (memory_agents, "build_autoskills_graph"),
@@ -275,65 +221,6 @@ def test_registered_graphs_check_the_folders_they_work_in(served, monkeypatch, r
                 asyncio.run(factory(other_run, running))
         else:
             asyncio.run(factory(other_run, running))
-
-
-def test_async_task_check_reports_why_a_run_was_refused(workspace):
-    """langgraph-api records a failed run's error on its thread; the check
-    shows it to the agent instead of a generic failure."""
-    import json
-
-    from metasci_scribe.middleware.expert_async_subagent import (
-        EvoAsyncSubAgentMiddleware,
-    )
-
-    middleware = EvoAsyncSubAgentMiddleware(
-        workspace=workspace,
-        async_subagents=[
-            {
-                "name": "writing-agent",
-                "description": "writes",
-                "graph_id": "writing-agent",
-                "url": "http://127.0.0.1:6174",
-            }
-        ],
-    )
-    check = next(t for t in middleware.tools if t.name == "check_async_task")
-    client = MagicMock()
-    client.runs.get.return_value = {
-        "status": "error",
-        "thread_id": "t1",
-        "run_id": "r1",
-    }
-    client.threads.get.return_value = {
-        "error": {
-            "error": "RunFolderMismatchError",
-            "message": "This Metasci Scribe server serves workspace /a",
-        }
-    }
-    task = {
-        "task_id": "t1",
-        "agent_name": "writing-agent",
-        "thread_id": "t1",
-        "run_id": "r1",
-        "status": "running",
-        "created_at": "2026-10-01T00:00:00Z",
-        "last_checked_at": "2026-10-01T00:00:00Z",
-        "last_updated_at": "2026-10-01T00:00:00Z",
-    }
-    runtime = SimpleNamespace(state={"async_tasks": {"t1": task}}, tool_call_id="tc1")
-    with patch(
-        "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_sync",
-        return_value=client,
-    ):
-        first = check.func(task_id="t1", runtime=runtime)
-        second = check.func(task_id="t1", runtime=runtime)
-
-    for command in (first, second):
-        result = json.loads(command.update["messages"][0].content)
-        assert result["status"] == "error"
-        assert "serves workspace /a" in result["error"]
-    # A failed run's reason does not change; it is looked up once.
-    client.threads.get.assert_called_once_with("t1")
 
 
 def test_new_run_folders_never_reuse_an_existing_one(workspace, monkeypatch):
@@ -388,72 +275,6 @@ def test_run_errors_return_run_without_id_unchanged():
     run = {"status": "error", "thread_id": "t1"}
     thread = {"error": {"error": "RuntimeError", "message": "boom"}}
     assert _RunErrors().attach(run, thread) == run
-
-
-async def test_acheck_async_task_reports_failure_reason(workspace):
-    """``acheck_async_task`` (langgraph dev, TUI) reads the thread's error too."""
-    import json
-    from unittest.mock import AsyncMock
-
-    from metasci_scribe.middleware.expert_async_subagent import (
-        EvoAsyncSubAgentMiddleware,
-    )
-
-    middleware = EvoAsyncSubAgentMiddleware(
-        workspace=workspace,
-        async_subagents=[
-            {
-                "name": "writing-agent",
-                "description": "writes",
-                "graph_id": "writing-agent",
-                "url": "http://127.0.0.1:6174",
-            }
-        ],
-    )
-    check = next(t for t in middleware.tools if t.name == "check_async_task")
-
-    def _task(task_id: str) -> dict:
-        return {
-            "task_id": task_id,
-            "agent_name": "writing-agent",
-            "thread_id": task_id,
-            "run_id": f"r-{task_id}",
-            "status": "running",
-            "created_at": "2026-10-01T00:00:00Z",
-            "last_checked_at": "2026-10-01T00:00:00Z",
-            "last_updated_at": "2026-10-01T00:00:00Z",
-        }
-
-    def _thread(thread_id: str, **_k) -> dict:
-        if thread_id != "t1":
-            raise RuntimeError("thread unreadable")
-        return {"error": {"error": "RunFolderMismatchError", "message": "no"}}
-
-    client = MagicMock()
-    client.runs.get = AsyncMock(
-        side_effect=lambda thread_id, run_id, **_k: {
-            "status": "error",
-            "thread_id": thread_id,
-            "run_id": run_id,
-        }
-    )
-    client.threads.get = AsyncMock(side_effect=_thread)
-    runtime = SimpleNamespace(
-        state={"async_tasks": {"t1": _task("t1"), "t2": _task("t2")}},
-        tool_call_id="tc1",
-    )
-    with patch(
-        "metasci_scribe.middleware.expert_async_subagent._ClientCache.get_async",
-        return_value=client,
-    ):
-        refused = await check.coroutine(task_id="t1", runtime=runtime)
-        unreadable = await check.coroutine(task_id="t2", runtime=runtime)
-
-    result = json.loads(refused.update["messages"][0].content)
-    assert "RunFolderMismatchError" in result["error"]
-    # When the thread cannot be read, the run is reported as it is.
-    result = json.loads(unreadable.update["messages"][0].content)
-    assert result["status"] == "error"
 
 
 def test_merge_runs_config_replaces_caller_folders():
@@ -528,7 +349,6 @@ async def _sync_order(workspace, *, pinned_elsewhere: bool) -> list[str]:
             lambda *a, **k: order.append("move"),
         ),
         patch.object(commands, "_reconcile_autoskill_schedule", lambda *a, **k: None),
-        patch.object(commands, "_adopt_stale_scheduled_tasks", lambda **_k: None),
     ):
         await commands._sync_background_agent_server_workspace(
             MagicMock(), dirs=SessionDirs(workspace)

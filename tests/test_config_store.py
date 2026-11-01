@@ -354,7 +354,7 @@ def test_config_list_does_not_print_secrets(config_file):
     for call in printed.call_args_list:
         render.print(*call.args)
     text = out.getvalue()
-    assert "tavily_api_key" in text
+    assert "anthropic_api_key" in text
     assert "SECRETTOKEN" not in text
     assert "sk-abcdefgh" not in text
     assert "***1234" in text

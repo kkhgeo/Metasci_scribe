@@ -387,7 +387,6 @@ class GoalDrafter:
         from deepagents.middleware import UnsupportedContentMiddleware
         from langchain.agents import create_agent
 
-        from .model_fallback import ModelFallbackMiddleware
         from .model_retry import ModelCallBoundaryMiddleware
         from .rubric import _GraderCallBudget
 
@@ -411,8 +410,6 @@ class GoalDrafter:
                     missing="returning criteria",
                 ),
                 UnsupportedContentMiddleware(),
-                # Drafting uses the main model, so its chain applies here too.
-                ModelFallbackMiddleware(),
                 *([ModelCallBoundaryMiddleware()] if retry is not None else []),
             ],
             name=GOAL_DRAFTER_NAME,

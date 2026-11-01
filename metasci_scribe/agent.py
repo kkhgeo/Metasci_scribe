@@ -18,7 +18,6 @@ Usage:
 
 import json
 import logging
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -66,7 +65,6 @@ DEFAULT_SKILL_SOURCES = ("/skills/",)
 HITL_INTERRUPT_ON: dict[str, bool] = {
     "execute": True,
     "run_in_background": True,
-    "schedule_task": True,
     "delete": True,
 }
 
@@ -452,44 +450,6 @@ def _ensure_general_purpose_subagent(subs: list[dict]) -> None:
     )
 
 
-def _fold_expert_subagents(
-    subs: list[dict], tool_registry: dict, workspace: Workspace
-) -> None:
-    """Append expert-skill sub-agent specs to ``subs``, guarding names.
-
-    Each installed expert skill becomes an in-process sub-agent entry so
-    the main agent's ``task`` tool (and the QuickJS ``task()`` global) can
-    dispatch to it in-turn by name. The same experts independently get a
-    background reach via ``build_expert_async_subagent_specs``; the two
-    reaches land on separate tool schemas, so sharing the name is safe.
-
-    Skips (with a warning) any expert whose ``name`` collides with a
-    subagent already in ``subs`` or with ``general-purpose``. The reserved
-    name matters because ``_ensure_general_purpose_subagent`` runs right
-    after this and early-returns when it sees the slot occupied — an expert
-    named ``general-purpose`` would silently take the slot and deepagents'
-    default subagent prompt would never reach the agent.
-    """
-    from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT
-
-    from .subagents.expert_container import build_expert_subagent_specs
-
-    logger = logging.getLogger(__name__)
-    taken = {s.get("name") for s in subs} | {GENERAL_PURPOSE_SUBAGENT["name"]}
-    for spec in build_expert_subagent_specs(
-        tool_registry=tool_registry, workspace=workspace
-    ):
-        name = spec["name"]
-        if name in taken:
-            logger.warning(
-                "Expert skill %r collides with an existing sub-agent name; skipping.",
-                name,
-            )
-            continue
-        taken.add(name)
-        subs.append(spec)
-
-
 def _maybe_swap_async_subagents(
     subs: list,
     *,
@@ -588,69 +548,6 @@ def _maybe_swap_async_subagents(
     return out
 
 
-def _route_async_specs_through_evo_middleware(
-    subs: list,
-    base_middleware: list,
-    *,
-    workspace: Workspace,
-    work_dir: str | Path | None = None,
-    cfg=None,
-) -> list:
-    """Move ``AsyncSubAgent`` specs from ``subs`` into ``EvoAsyncSubAgentMiddleware``.
-
-    Deepagents' ``create_deep_agent`` auto-composes the vanilla
-    ``AsyncSubAgentMiddleware`` when it sees ``graph_id``-carrying entries
-    in ``subagents=``. We need our payload-aware subclass to handle those
-    (see ``metasci_scribe/middleware/expert_async_subagent.py`` for the
-    upstream-workaround rationale). To prevent the auto-composition and
-    route all async dispatch through our subclass, we strip AsyncSubAgent
-    specs from ``subs`` here and hand them to our middleware.
-
-    Also folds in ``AsyncSubAgent`` specs for installed expert skills —
-    all pointing at the shared ``expert-container-async`` graph, marked
-    ``is_expert=True`` so the middleware requires a payload with
-    ``skill_name``.
-
-    Returns:
-        ``subs`` with ``graph_id``-carrying entries removed. Safe to pass
-        as ``create_deep_agent(subagents=...)`` — the async-auto-compose
-        branch is skipped for empty async lists.
-    """
-    from .middleware.expert_async_subagent import EvoAsyncSubAgentMiddleware
-    from .subagents.expert_container_async import build_expert_async_subagent_specs
-
-    cfg = cfg if cfg is not None else _ensure_config()
-
-    async_specs = [s for s in subs if "graph_id" in s]
-    sync_subs = [s for s in subs if "graph_id" not in s]
-    expert_specs = build_expert_async_subagent_specs(cfg=cfg, workspace=workspace)
-    async_specs.extend(expert_specs)
-
-    if async_specs:
-        # Prepend rather than append so the ``## Async subagents`` prompt
-        # section stays in the stable prefix. Appending pushes it past the
-        # volatile memory tail, invalidating the cached prefix on every
-        # memory change.
-        base_middleware.insert(
-            0,
-            EvoAsyncSubAgentMiddleware(
-                async_subagents=async_specs,
-                workspace=workspace,
-                work_dir=work_dir,
-                # The construction cfg, so resolve-on-miss specs the same
-                # langgraph_dev_port the construction-time specs used instead
-                # of re-reading config from disk at dispatch time.
-                cfg=cfg,
-            ),
-        )
-
-    # Expert completions (like all async-task completions) are detected from
-    # thread state by the client-side reader, so no per-agent watcher client
-    # cache is needed here — the expert specs are already routed through
-    # ``EvoAsyncSubAgentMiddleware`` above.
-    return sync_subs
-
-
 def _build_base_kwargs(
     base_backend,
     base_middleware,
@@ -661,20 +558,17 @@ def _build_base_kwargs(
     chat_model=None,
 ):
     """Build agent kwargs *without* MCP (fast, no subprocess spawning)."""
-    from .tools import make_skill_manager_tool, tavily_search, think_tool
+    from .tools import make_skill_manager_tool, think_tool
     from .utils import load_subagents
 
     cfg = cfg if cfg is not None else _ensure_config()
     work_dir = work_dir if work_dir is not None else workspace.root
     tool_registry = {"think_tool": think_tool}
-    if os.environ.get("TAVILY_API_KEY"):
-        tool_registry["tavily_search"] = tavily_search
     base_tools = [think_tool, make_skill_manager_tool(workspace, work_dir=work_dir)]
 
     subs = load_subagents(
         SUBAGENTS_CONFIG,
     )
-    _fold_expert_subagents(subs, tool_registry, workspace)
     _ensure_general_purpose_subagent(subs)
     _inject_subagent_middleware(
         subs,
@@ -687,12 +581,6 @@ def _build_base_kwargs(
         subs,
         tool_registry=tool_registry,
         cfg=cfg,
-    )
-    # Route AsyncSubAgent specs (both standard and expert) through
-    # EvoAsyncSubAgentMiddleware so the payload-aware start_async_task tool
-    # replaces upstream's non-parameterisable one.
-    subs = _route_async_specs_through_evo_middleware(
-        subs, base_middleware, workspace=workspace, work_dir=work_dir, cfg=cfg
     )
     return {
         "name": "metasci-scribe",
@@ -730,7 +618,7 @@ def load_mcp_and_build_kwargs(
         chat_model: Explicit chat model to bind instead of
             ``_ensure_chat_model()`` (which would write module globals).
     """
-    from .tools import make_skill_manager_tool, tavily_search, think_tool
+    from .tools import make_skill_manager_tool, think_tool
     from .utils import load_subagents
 
     cfg = cfg if cfg is not None else _ensure_config()
@@ -750,8 +638,6 @@ def load_mcp_and_build_kwargs(
         )
 
     tool_registry = {"think_tool": think_tool}
-    if os.environ.get("TAVILY_API_KEY"):
-        tool_registry["tavily_search"] = tavily_search
     base_tools = [think_tool, make_skill_manager_tool(workspace, work_dir=work_dir)]
 
     # Fresh tool registry — start from base tools + MCP tools
@@ -765,8 +651,6 @@ def load_mcp_and_build_kwargs(
     subs = load_subagents(
         SUBAGENTS_CONFIG,
     )
-    _fold_expert_subagents(subs, registry, workspace)
-
     _ensure_general_purpose_subagent(subs)
     _inject_subagent_middleware(
         subs,
@@ -787,12 +671,6 @@ def load_mcp_and_build_kwargs(
         subs,
         tool_registry=registry,
         cfg=cfg,
-    )
-    # Mirror the base path: route AsyncSubAgent specs through
-    # EvoAsyncSubAgentMiddleware so the payload-aware start_async_task tool
-    # is the one composed into the main agent.
-    subs = _route_async_specs_through_evo_middleware(
-        subs, base_middleware, workspace=workspace, work_dir=work_dir, cfg=cfg
     )
 
     return {
@@ -828,11 +706,11 @@ def _get_default_backend(
     ``guard_dangerous`` — when ``None`` (default) the backend derives the guard
     per call from the run's HITL-suppression state (``is_hitl_suppressed``): an
     unattended run is guarded, an armed run relies on the interrupt + client
-    policy. The two research async sub-agent graphs (``writing-agent`` /
-    ``data-analysis-agent``) pass ``True`` because their remote thread has no
-    approval path at all (see ``subagents/_factory._GUARDED_ASYNC_SUBAGENTS``);
-    that becomes an always-on floor.
-    ``refuse_delete`` — the same two async graphs pass ``True`` so the recursive
+    policy. The research async sub-agent graph (``writing-agent``) passes
+    ``True`` because its remote thread has no approval path at all (see
+    ``subagents/_factory._GUARDED_ASYNC_SUBAGENTS``); that becomes an always-on
+    floor.
+    ``refuse_delete`` — the same async graph passes ``True`` so the recursive
     ``delete`` FS tool is refused and relayed to the orchestrator for approval,
     rather than deleting unattended.
     """
@@ -926,7 +804,7 @@ def _get_default_middleware(
     """Build the default middleware list.
 
     Args:
-        workspace: The workspace the agent serves (skills, experts).
+        workspace: The workspace the agent serves (skills, memory).
         work_dir: The folder the agent works in: background processes start
             there and memory is keyed to it. Defaults to the workspace root.
         for_async_subagent: When True, omit middleware that would deadlock a
@@ -947,13 +825,13 @@ def _get_default_middleware(
             appended; deepagents' name-based merge then REPLACES its frozen
             built-in in place so the replacement offloads history to this
             same backend. Every graph built on a real backend — main, CLI,
-            async sub-agents, expert container — passes it; only backend-less
+            async sub-agents — passes it; only backend-less
             test assemblies omit it, leaving the stock frozen-limits built-in
             untouched.
         memory_source_agent: Attribution name for profile/observation writes.
             Async sub-agent factories pass their deployed agent name here.
         events: Frontend/session-supplied event sink. Middleware report
-            tool-selection events and model-fallback notices to it.
+            tool-selection events to it.
             Defaults to the current stream run's sink for main agents; async
             sub-agent stacks are always forced to ``NoOpSink`` (they must not
             drive the main-agent widgets).
@@ -962,19 +840,16 @@ def _get_default_middleware(
         ConfigurableModelMiddleware,
         ContextOverflowMapperMiddleware,
         ErrorNormalizationMiddleware,
-        ModelFallbackMiddleware,
         SkillPinMiddleware,
         SkillsReloadMiddleware,
         ToolErrorHandlerMiddleware,
         ToolHistoryRepairMiddleware,
-        create_active_team_middleware,
         create_code_interpreter_middleware,
         create_context_editing_middleware,
         create_memory_lifecycle_middleware,
         create_memory_middleware,
         create_per_run_summarization_middleware,
         create_runtime_context_middleware,
-        create_scheduler_middleware,
         create_tool_selector_middleware,
         default_memory_scheduler,
     )
@@ -985,7 +860,6 @@ def _get_default_middleware(
     # additionally mirror events onto the run's `custom` stream channel so
     # the server gateway can render them client-side.
     from .middleware.events import resolve_middleware_event_sink
-    from .middleware.model_fallback import seed_fallback_chain
     from .middleware.model_retry import ModelCallBoundaryMiddleware
 
     events = resolve_middleware_event_sink(
@@ -993,13 +867,6 @@ def _get_default_middleware(
     )
 
     cfg = cfg if cfg is not None else _ensure_config()
-    # Seed the fallback chain from the factory-resolved config: every graph
-    # (main, sync/async subagent) is built through this factory, so this is
-    # the single seeding site that covers every load path. First-touch only
-    # (idempotent per process) and pure in-memory — the resolved ``cfg``
-    # performs no disk read here, so later calls cannot clobber session edits
-    # made via /model-fallback (see model_fallback._ensure_chain_initialized).
-    seed_fallback_chain(cfg)
     model = chat_model if chat_model is not None else _ensure_chat_model()
     memory_dir = str(_paths_mod.MEMORIES_DIR)
     work_dir = work_dir if work_dir is not None else workspace.root
@@ -1013,10 +880,6 @@ def _get_default_middleware(
         if for_async_subagent
         else MemoryObservationTarget.TURN_WORKER
     )
-    # ``ConfigurableModelMiddleware`` is placed first so it wraps
-    # ``ModelFallbackMiddleware``: a configurable.model override sets the
-    # PRIMARY model only, leaving the fallback chain free to try its own
-    # alternatives instead of re-overriding every retry to the same model.
     memory_middleware = create_memory_middleware(
         memory_dir,
         workspace_dir=workspace.root,
@@ -1049,8 +912,7 @@ def _get_default_middleware(
 
             tool_selector_model = get_chat_model(model=aux_model, provider=aux_provider)
     mw = [
-        # Retries transient provider failures around everything below: one
-        # attempt is the primary model plus the fallback chain.
+        # Retries transient provider failures around everything below.
         _model_retry_middleware(
             cfg, unattended=unattended, honor_run_key=model_retry_honors_run_key
         ),
@@ -1062,7 +924,6 @@ def _get_default_middleware(
         ToolHistoryRepairMiddleware(),
         ConfigurableModelMiddleware(),
         create_context_editing_middleware(model),
-        ModelFallbackMiddleware(events=events),
         ContextOverflowMapperMiddleware(),
         ToolErrorHandlerMiddleware(),
         # deepagents 0.7.0 dropped TodoListMiddleware from its defaults;
@@ -1078,12 +939,10 @@ def _get_default_middleware(
             timeout=cfg.code_interpreter_timeout,
             max_result_chars=cfg.code_interpreter_max_result_chars,
         ),
-        # Inside the fallback chain and the tool selector: marks each
-        # provider call for the stream decoder.
+        # Inside the tool selector: marks each provider call for the stream
+        # decoder.
         ModelCallBoundaryMiddleware(),
     ]
-    if cfg.enable_scheduler and not for_async_subagent:
-        mw.append(create_scheduler_middleware(workspace))
     mw.append(create_runtime_context_middleware())
     if memory_controls.memory_enabled:
         mw.append(memory_middleware)
@@ -1103,15 +962,6 @@ def _get_default_middleware(
         from .middleware.ask_user import AskUserMiddleware
 
         mw.insert(0, AskUserMiddleware())
-
-    # Expert prompt for the main agent — injects the ## Experts concept every
-    # turn (plus the invited-expert list when experts are invited). Inserted
-    # AFTER AskUser so it sits ahead of AskUser in the stack and runs first,
-    # landing its block right after ## Skills System (experts mirror skills).
-    # Main agent only: a running expert graph must not inject the expert prompt
-    # into its own baked-in persona.
-    if not for_async_subagent:
-        mw.insert(0, create_active_team_middleware(workspace))
 
     # Background-process tools (run_in_background / check_process / stop_process /
     # list_processes) — main agent only. Async sub-agents run on langgraph-dev and
@@ -1341,7 +1191,7 @@ def create_cli_agent(
         work_dir: The folder the agent works in (the session's
             ``--mode=run`` folder, or the workspace root). If ``None``,
             defaults to ``workspace.root``.
-        workspace: The workspace whose skills, experts and memory the
+        workspace: The workspace whose skills and memory the
             agent uses.
         checkpointer: Optional LangGraph checkpointer. If ``None``,
             falls back to ``InMemorySaver`` (non-persistent).
@@ -1375,12 +1225,6 @@ def create_cli_agent(
     else:
         cfg = _ensure_config(config)
         chat_model = None
-
-    # The fallback chain is seeded by _get_default_middleware below (the
-    # factory every graph is built through), which receives this same
-    # resolved ``cfg`` — first-touch seeding, so a caller-supplied config's
-    # model_fallbacks still wins over the on-disk chain, and no separate
-    # seeding is needed here.
 
     if checkpointer is None:
         from langgraph.checkpoint.memory import InMemorySaver

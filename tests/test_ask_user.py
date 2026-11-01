@@ -490,7 +490,6 @@ def test_for_async_subagent_omits_ask_user_middleware(
     from langchain.agents.middleware import ContextEditingMiddleware
 
     assert any(isinstance(m, ContextEditingMiddleware) for m in async_mw)
-    assert "ModelFallbackMiddleware" in async_names
 
 
 # ---------------------------------------------------------------------------

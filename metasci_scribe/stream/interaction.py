@@ -141,7 +141,7 @@ def _resolve_one_action_request(
         return None
     # dangerous_mode keeps its "trust everything" meaning: it must approve
     # ahead of the always-prompt set, or a --dangerous session is interrupted
-    # on every delete / schedule_task while execute stays silent.
+    # on every delete while execute stays silent.
     if cfg.dangerous_mode:
         return {"type": "approve"}
     if name in HITL_ALWAYS_PROMPT_TOOLS:

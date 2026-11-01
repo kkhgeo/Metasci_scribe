@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 # Default threshold: only run tool selection when tools exceed this count.
 # Base tools are ~29; selector activates when MCP tools push count above 42.
 DEFAULT_TOOL_THRESHOLD = 42
-# Every built-in tool, so selection only trims MCP tools (and ``tavily_search``).
+# Every built-in tool, so selection only trims MCP tools.
 # A new built-in tool belongs here too.
 DEFAULT_ALWAYS_INCLUDE_TOOLS: frozenset[str] = frozenset(
     {
@@ -71,10 +71,6 @@ DEFAULT_ALWAYS_INCLUDE_TOOLS: frozenset[str] = frozenset(
         "check_process",
         "list_processes",
         "stop_process",
-        # Scheduled tasks
-        "schedule_task",
-        "list_scheduled_tasks",
-        "cancel_scheduled_task",
         # Memory
         "read_memory",
         "record_observation",
@@ -250,7 +246,7 @@ class _ConditionalToolSelectorMiddleware(AgentMiddleware):
         Returns True when the failed request should retry with it; never when
         the selector that failed is already the auto one.
         """
-        # OpenRouter's str(exc) is generic; the provider message is in ``body``.
+        # Some SDKs keep the provider message in ``body``, not in ``str(exc)``.
         detail = f"{exc} {getattr(exc, 'body', '') or ''}"
         if (
             self._auto_selector_factory is None
@@ -341,11 +337,9 @@ class _ConditionalToolSelectorMiddleware(AgentMiddleware):
             if _handler_called:
                 raise  # Error from downstream model — don't retry
             # The selector is an optimization, so every selector-only failure
-            # degrades to all tools. This includes provider failures: the
-            # downstream model-fallback middleware may replace the request's
-            # primary model, but it cannot replace this selector's fixed
-            # auxiliary model. Re-raising here would make a healthy fallback
-            # retry the same failed selector and never reach the model call.
+            # degrades to all tools. This includes provider failures: they come
+            # from this selector's fixed auxiliary model, not from the main
+            # model, so re-raising would fail a turn the main model could do.
             self._report_selector_failure(exc)
             _end_selection()
             return handler(request)

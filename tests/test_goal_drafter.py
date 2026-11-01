@@ -272,31 +272,6 @@ class TestDraft:
         assert len(outcome["error"]) <= 300
         assert "503 upstream" in outcome["error"]
 
-    async def test_a_fallback_model_drafts_when_the_main_model_is_down(
-        self, monkeypatch
-    ):
-        """Drafting is as resilient as a turn: the chain takes over."""
-        from metasci_scribe.middleware import model_fallback
-
-        drafter, main = _drafter(RuntimeError("503 upstream"))
-        fallback = _Scripted(replies=["- drafted by the fallback"], seen=[])
-        monkeypatch.setattr(
-            "metasci_scribe.llm.models.get_chat_model",
-            lambda model, provider=None, **kwargs: fallback,
-        )
-        model_fallback.set_fallback_chain([("fallback-model", "openai")])
-        try:
-            outcome = await drafter.draft(
-                {"kind": "create", "objective": "write the report"}
-            )
-        finally:
-            model_fallback._reset_chain_initialization()
-        assert outcome == {
-            "objective": "write the report",
-            "criteria": "- drafted by the fallback",
-        }
-        assert len(main.seen) == len(fallback.seen) == 1
-
     async def test_an_unusable_reply_comes_back_as_an_error(self):
         drafter, _ = _drafter("I am not sure what you mean.")
         outcome = await drafter.draft({"kind": "create", "objective": "do it"})

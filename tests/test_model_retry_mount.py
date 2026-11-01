@@ -241,14 +241,13 @@ def _index_of(middleware, name: str) -> int:
     return _mw_names(middleware).index(name)
 
 
-def test_default_middleware_mounts_the_boundary_inside_the_fallback_chain(workspace):
+def test_default_middleware_mounts_the_boundary_inside_the_retry_layers(workspace):
     from metasci_scribe.agent import _get_default_middleware
 
     mw = _get_default_middleware(workspace=workspace, cfg=ScribeConfig())
     names = _mw_names(mw)
     assert names.count("model_call_boundary") == 1
     boundary = _index_of(mw, "model_call_boundary")
-    assert boundary > _index_of(mw, "model_fallback")
     assert boundary > _index_of(mw, "error_normalization")
     assert boundary > _index_of(mw, "context_overflow_mapper")
     assert boundary > _index_of(mw, "conditional_tool_selector")

@@ -54,9 +54,9 @@ def _patch_all_questionary(mock_q):
 
 
 class TestConstants:
-    def test_steps_has_twelve_items(self):
-        """Test that STEPS contains exactly 12 steps."""
-        assert len(STEPS) == 12
+    def test_steps_has_eleven_items(self):
+        """Test that STEPS contains exactly 11 steps."""
+        assert len(STEPS) == 11
         assert STEPS == [
             "UI",
             "LangGraph Port",
@@ -64,7 +64,6 @@ class TestConstants:
             "API Key",
             "Model",
             "Auxiliary Model",
-            "Tavily Key",
             "Workspace",
             "Thinking",
             "Skills",
@@ -149,10 +148,10 @@ class TestSharedConstantsAlignment:
         """Every key and base URL field in the table is a config field."""
         from dataclasses import fields
 
-        from metasci_scribe.config.provider_keys import KEY_SPECS
+        from metasci_scribe.config.provider_keys import PROVIDERS
 
         names = {f.name for f in fields(ScribeConfig)}
-        for provider, spec in KEY_SPECS.items():
+        for provider, spec in PROVIDERS.items():
             for attr in (spec.key_field, spec.base_url_field):
                 assert attr is None or attr in names, (provider, attr)
 
@@ -161,36 +160,6 @@ class TestSharedConstantsAlignment:
 
         with pytest.raises(KeyError):
             _provider_key_info(ScribeConfig(), "no-such-provider")
-
-
-class TestOAuthModeReconcile:
-    def test_reconcile_preserves_auxiliary_openai_oauth(self):
-        from metasci_scribe.config.onboard.wizard import _reconcile_oauth_modes
-
-        config = ScribeConfig(
-            provider="minimax",
-            auxiliary_provider="openai",
-            auxiliary_model="gpt-6-luna",
-            openai_auth_mode="oauth",
-        )
-
-        _reconcile_oauth_modes(config)
-
-        assert config.openai_auth_mode == "oauth"
-
-    def test_reconcile_preserves_auxiliary_provider_without_model(self):
-        from metasci_scribe.config.onboard.wizard import _reconcile_oauth_modes
-
-        config = ScribeConfig(
-            provider="minimax",
-            auxiliary_provider="openai",
-            auxiliary_model="",
-            openai_auth_mode="oauth",
-        )
-
-        _reconcile_oauth_modes(config)
-
-        assert config.openai_auth_mode == "oauth"
 
 
 # =============================================================================
@@ -350,172 +319,6 @@ class TestChoiceValidator:
         assert "one of" in str(exc_info.value.message)
 
 
-class TestValidateAtlasCloudKey:
-    def test_empty_key_skipped(self):
-        from metasci_scribe.config.onboard.validators import validate_atlascloud_key
-
-        is_valid, msg = validate_atlascloud_key("")
-        assert is_valid is True
-        assert "Skipped" in msg
-
-    @pytest.mark.parametrize("status", [200, 404])
-    def test_accepts_authenticated_sentinel_statuses(self, status):
-        from metasci_scribe.config.onboard.validators import validate_atlascloud_key
-
-        with patch("httpx.post") as mock_post:
-            mock_post.return_value.status_code = status
-            is_valid, msg = validate_atlascloud_key("atlas-key")
-
-        assert is_valid is True
-        assert msg == "Valid"
-        payload = mock_post.call_args.kwargs["json"]
-        assert payload["model"] == "atlascloud/auth-preflight"
-        assert payload["max_tokens"] == 1
-
-    @pytest.mark.parametrize("status", [401, 403])
-    def test_auth_rejection_is_invalid(self, status):
-        from metasci_scribe.config.onboard.validators import validate_atlascloud_key
-
-        with patch("httpx.post") as mock_post:
-            mock_post.return_value.status_code = status
-            is_valid, msg = validate_atlascloud_key("bad-key")
-
-        assert is_valid is False
-        assert msg == "Invalid API key"
-
-    def test_insufficient_balance_means_valid_key(self):
-        """402 fires before model resolution, so auth passed — key is valid."""
-        from metasci_scribe.config.onboard.validators import validate_atlascloud_key
-
-        with patch("httpx.post") as mock_post:
-            mock_post.return_value.status_code = 402
-            is_valid, msg = validate_atlascloud_key("atlas-key")
-
-        assert is_valid is True
-        assert "insufficient balance" in msg.lower()
-
-    @pytest.mark.parametrize("status", [400, 429, 500, 503])
-    def test_transient_status_is_inconclusive(self, status):
-        from metasci_scribe.config.onboard.validators import validate_atlascloud_key
-
-        with patch("httpx.post") as mock_post:
-            mock_post.return_value.status_code = status
-            is_valid, msg = validate_atlascloud_key("atlas-key")
-
-        assert is_valid is False
-        assert "inconclusive" in msg.lower()
-
-
-class TestValidateNovitaKey:
-    def test_empty_key_skipped(self):
-        from metasci_scribe.config.onboard.validators import validate_novita_key
-
-        is_valid, msg = validate_novita_key("")
-        assert is_valid is True
-        assert "Skipped" in msg
-
-    @pytest.mark.parametrize("status", [200, 404])
-    def test_accepts_authenticated_sentinel_statuses(self, status):
-        from metasci_scribe.config.onboard.validators import validate_novita_key
-
-        with patch("httpx.post") as mock_post:
-            mock_post.return_value.status_code = status
-            is_valid, msg = validate_novita_key("novita-key")
-
-        assert is_valid is True
-        assert msg == "Valid"
-        payload = mock_post.call_args.kwargs["json"]
-        assert payload["model"] == "novita/auth-preflight"
-        assert payload["max_tokens"] == 1
-
-    @pytest.mark.parametrize("status", [401, 403])
-    def test_auth_rejection_is_invalid(self, status):
-        from metasci_scribe.config.onboard.validators import validate_novita_key
-
-        with patch("httpx.post") as mock_post:
-            mock_post.return_value.status_code = status
-            is_valid, msg = validate_novita_key("bad-key")
-
-        assert is_valid is False
-        assert msg == "Invalid API key"
-
-    @pytest.mark.parametrize("status", [400, 429, 500, 503])
-    def test_transient_status_is_inconclusive(self, status):
-        from metasci_scribe.config.onboard.validators import validate_novita_key
-
-        with patch("httpx.post") as mock_post:
-            mock_post.return_value.status_code = status
-            is_valid, msg = validate_novita_key("novita-key")
-
-        assert is_valid is False
-        assert "inconclusive" in msg.lower()
-
-
-class TestValidateXiaomiKey:
-    @staticmethod
-    def _run(status, body, **kwargs):
-        import httpx
-        import openai
-
-        from metasci_scribe.config.onboard.validators import validate_xiaomi_key
-
-        seen = []
-
-        def handler(request):
-            seen.append(request)
-            return httpx.Response(status, json=body)
-
-        real = openai.OpenAI
-        with patch(
-            "openai.OpenAI",
-            side_effect=lambda **kw: real(
-                **kw,
-                http_client=httpx.Client(transport=httpx.MockTransport(handler)),
-            ),
-        ) as client_cls:
-            result = validate_xiaomi_key("sk-mimo", **kwargs)
-        assert client_cls.call_args.kwargs["timeout"] == 10
-        assert client_cls.call_args.kwargs["max_retries"] == 0
-        return result, seen
-
-    def test_empty_key_skipped(self):
-        from metasci_scribe.config.onboard.validators import validate_xiaomi_key
-
-        assert validate_xiaomi_key("") == (True, "Skipped (no key provided)")
-
-    def test_valid_key_lists_models(self):
-        (is_valid, msg), seen = self._run(
-            200, {"object": "list", "data": [{"id": "mimo-v2.6-pro"}]}
-        )
-
-        assert (is_valid, msg) == (True, "Valid")
-        assert str(seen[0].url) == "https://api.xiaomimimo.com/v1/models"
-        assert seen[0].headers["authorization"] == "Bearer sk-mimo"
-
-    def test_token_plan_region_lists_models_on_its_own_host(self):
-        (is_valid, _), seen = self._run(
-            200,
-            {"object": "list", "data": []},
-            base_url="https://token-plan-sgp.xiaomimimo.com/anthropic",
-        )
-
-        assert is_valid is True
-        assert str(seen[0].url) == "https://token-plan-sgp.xiaomimimo.com/v1/models"
-
-    def test_auth_rejection_is_invalid(self):
-        body = {
-            "error": {
-                "message": "Invalid API Key",
-                "param": "Please provide valid API Key",
-                "code": "401",
-                "type": "invalid_key",
-            }
-        }
-        (is_valid, msg), _ = self._run(401, body)
-
-        assert (is_valid, msg) == (False, "Invalid API key")
-
-
 # =============================================================================
 # Test Step Functions (Mocked questionary)
 # =============================================================================
@@ -548,7 +351,11 @@ class TestStepPortsRenderConfiguredHost:
     def test_langgraph_dev_step_shows_pinned_interface(self):
         from metasci_scribe.config.onboard.steps import _step_langgraph_dev_port
 
-        config = ScribeConfig(langgraph_dev_port=6174, langgraph_dev_host="192.168.1.5")
+        config = ScribeConfig(
+            enable_async_subagents=True,
+            langgraph_dev_port=6174,
+            langgraph_dev_host="192.168.1.5",
+        )
         assert "http://192.168.1.5:6174" in self._capture(
             _step_langgraph_dev_port, config
         )
@@ -558,7 +365,11 @@ class TestStepPortsRenderConfiguredHost:
         machine's own browser opens."""
         from metasci_scribe.config.onboard.steps import _step_langgraph_dev_port
 
-        config = ScribeConfig(langgraph_dev_port=6174, langgraph_dev_host="0.0.0.0")
+        config = ScribeConfig(
+            enable_async_subagents=True,
+            langgraph_dev_port=6174,
+            langgraph_dev_host="0.0.0.0",
+        )
         assert "http://127.0.0.1:6174" in self._capture(
             _step_langgraph_dev_port, config
         )
@@ -586,10 +397,10 @@ class TestStepProvider:
         config = ScribeConfig(provider="anthropic")
         with patch("metasci_scribe.config.onboard.steps.questionary") as mock_q:
             mock_q.select.return_value.ask.return_value = "openai"
-            _step_provider(config, label="co-pilot", default_value="openrouter")
+            _step_provider(config, label="co-pilot", default_value="openai")
 
         call = mock_q.select.call_args
-        assert call.kwargs["default"] == "openrouter"  # override, not config.provider
+        assert call.kwargs["default"] == "openai"  # override, not config.provider
         assert "co-pilot" in call.args[0]
 
     def test_raises_keyboard_interrupt_on_cancel(self):
@@ -602,98 +413,6 @@ class TestStepProvider:
             mock_q.select.return_value.ask.return_value = None
             with pytest.raises(KeyboardInterrupt):
                 _step_provider(config)
-
-
-class TestStepOpenAIAuthMode:
-    def _run(self, *, picked, signed_in, confirm=True, plan="plus"):
-        from metasci_scribe.config.onboard import steps as onboard_steps
-        from metasci_scribe.llm.chatgpt_oauth import ChatGPTLogin
-
-        select_question = MagicMock()
-        select_question.ask.return_value = picked
-        confirm_question = MagicMock()
-        confirm_question.ask.return_value = confirm
-        state = ChatGPTLogin(signed_in=signed_in, plan=plan if signed_in else None)
-        with (
-            patch("metasci_scribe.config.onboard.prompter.install_navigation_keys"),
-            patch(
-                "metasci_scribe.config.onboard.steps.questionary.select",
-                return_value=select_question,
-            ) as mock_select,
-            patch(
-                "metasci_scribe.config.onboard.steps.questionary.confirm",
-                return_value=confirm_question,
-            ) as mock_confirm,
-            patch("metasci_scribe.llm.chatgpt_oauth.status", return_value=state),
-            patch(
-                "metasci_scribe.config.onboard.steps._run_chatgpt_login"
-            ) as mock_login,
-            patch("metasci_scribe.config.onboard.steps.console") as mock_console,
-        ):
-            result = onboard_steps._step_openai_auth_mode(
-                ScribeConfig(openai_auth_mode="oauth")
-            )
-        printed = " ".join(str(c.args[0]) for c in mock_console.print.call_args_list)
-        return {
-            "result": result,
-            "select": mock_select,
-            "confirm": mock_confirm,
-            "login": mock_login,
-            "printed": printed,
-        }
-
-    def test_choices_offer_chatgpt_sign_in_and_back(self):
-        from questionary import Separator
-
-        out = self._run(picked="api_key", signed_in=False)
-
-        assert out["result"] == "api_key"
-        select_call = out["select"].call_args
-        assert select_call.args[0] == "OpenAI authentication mode  [Esc/← to go back]:"
-        assert select_call.kwargs["default"] == "oauth"
-        titles = [
-            choice.title
-            for choice in select_call.kwargs["choices"]
-            if not isinstance(choice, Separator)
-        ]
-        assert titles == [
-            "API Key (direct OpenAI access)",
-            "ChatGPT sign-in (no API key needed)",
-            "← Back (re-pick provider)",
-        ]
-        out["confirm"].assert_not_called()
-
-    def test_not_signed_in_offers_login(self):
-        out = self._run(picked="oauth", signed_in=False, confirm=True)
-
-        assert out["result"] == "oauth"
-        assert out["confirm"].call_args.args[0] == "Log in to ChatGPT now?"
-        assert out["confirm"].call_args.kwargs["default"] is True
-        out["login"].assert_called_once_with()
-        assert "Unofficial; OpenAI's terms apply." in out["printed"]
-
-    def test_signed_in_shows_plan_and_offers_reauthentication(self):
-        out = self._run(picked="oauth", signed_in=True, confirm=False)
-
-        assert out["result"] == "oauth"
-        assert "ChatGPT: signed in (plus)" in out["printed"]
-        assert out["confirm"].call_args.args[0] == (
-            "Re-authenticate to refresh credentials?"
-        )
-        assert out["confirm"].call_args.kwargs["default"] is False
-        out["login"].assert_not_called()
-
-    def test_declining_login_keeps_oauth(self):
-        out = self._run(picked="oauth", signed_in=False, confirm=False)
-
-        assert out["result"] == "oauth"
-        out["login"].assert_not_called()
-
-    def test_back_goes_back(self):
-        from metasci_scribe.config.onboard.prompter import BACK_SENTINEL, GoBack
-
-        with pytest.raises(GoBack):
-            self._run(picked=BACK_SENTINEL, signed_in=False)
 
 
 class TestStepReasoningEffort:
@@ -719,20 +438,12 @@ class TestStepReasoningEffort:
         assert values == ["", "low", "medium", "high", "xhigh", "max"]
         assert default == ""
 
-    def test_openrouter_list_is_unchanged(self):
-        _, values, default = self._run("openrouter", "")
-
-        assert values == ["xhigh", "high", "medium", "low", "minimal", "none"]
-        assert default == "high"
-
     @pytest.mark.parametrize(
         ("provider", "stored", "default"),
         [
             ("openai", "max", "max"),
             ("openai", "", ""),
             ("openai", "minimal", ""),  # carried over from another provider
-            ("openrouter", "minimal", "minimal"),
-            ("openrouter", "max", "high"),
         ],
     )
     def test_highlights_the_stored_level_only_when_it_is_offered(
@@ -740,23 +451,19 @@ class TestStepReasoningEffort:
     ):
         assert self._run(provider, stored)[2] == default
 
-    @pytest.mark.parametrize(
-        ("provider", "route"),
-        [("openai", "openai"), ("openai", "chatgpt"), ("openrouter", "openrouter")],
-    )
-    def test_every_offered_level_is_sent_unchanged(self, provider, route):
-        from metasci_scribe.llm.models import _resolve_reasoning_effort
+    def test_every_offered_level_is_sent_unchanged(self):
+        from metasci_scribe.llm.models import _reasoning_effort
 
-        _, values, _ = self._run(provider, "")
+        _, values, _ = self._run("openai", "")
 
         with patch.dict("os.environ"):
             for value in filter(None, values):
                 os.environ["METASCI_SCRIBE_REASONING_EFFORT"] = value
-                assert _resolve_reasoning_effort("high", route) == value
+                assert _reasoning_effort("high") == value
 
     @pytest.mark.parametrize(
         ("provider", "asked"),
-        [("openai", True), ("openrouter", True), ("anthropic", False), ("", False)],
+        [("openai", True), ("anthropic", False), ("", False)],
     )
     def test_only_providers_with_a_level_list_are_asked(self, provider, asked):
         from metasci_scribe.config.onboard import steps as onboard_steps
@@ -792,113 +499,6 @@ class TestStepReasoningEffort:
         assert final_config.reasoning_effort == "max"
 
 
-class TestRunChatGPTLogin:
-    @pytest.mark.parametrize(
-        ("platform", "env", "expected"),
-        [
-            ("darwin", {}, True),
-            ("darwin", {"SSH_CONNECTION": "1.2.3.4 5 6.7.8.9 22"}, False),
-            ("darwin", {"SSH_TTY": "/dev/ttys001"}, False),
-            ("linux", {"DISPLAY": ":0"}, True),
-            ("linux", {}, False),
-            ("linux", {"BROWSER": "firefox"}, True),
-            ("win32", {}, True),
-        ],
-    )
-    def test_browser_is_opened_only_where_the_user_can_see_it(
-        self, platform, env, expected, monkeypatch
-    ):
-        from metasci_scribe.config.onboard import helpers
-
-        for name in (
-            "SSH_CONNECTION",
-            "SSH_TTY",
-            "DISPLAY",
-            "WAYLAND_DISPLAY",
-            "BROWSER",
-        ):
-            monkeypatch.delenv(name, raising=False)
-        for name, value in env.items():
-            monkeypatch.setenv(name, value)
-        monkeypatch.setattr(helpers.sys, "platform", platform)
-
-        assert helpers._open_browser_here() is expected
-
-    def test_success_prints_the_status(self):
-        from metasci_scribe.config.onboard import helpers
-        from metasci_scribe.llm.chatgpt_oauth import ChatGPTLogin
-
-        with (
-            patch.object(helpers, "_open_browser_here", return_value=True),
-            patch(
-                "metasci_scribe.llm.chatgpt_oauth.login",
-                return_value=ChatGPTLogin(signed_in=True, plan="pro"),
-            ) as mock_login,
-            patch.object(helpers, "console") as mock_console,
-        ):
-            assert helpers._run_chatgpt_login() is True
-
-        mock_login.assert_called_once_with(open_browser=True)
-        assert "ChatGPT: signed in (pro)" in str(mock_console.print.call_args.args[0])
-
-    @pytest.mark.parametrize(
-        "error",
-        [
-            RuntimeError("Port 1455 is in use"),
-            TimeoutError("Timed out waiting for ChatGPT OAuth callback"),
-            PermissionError(13, "Permission denied"),
-            ValueError("Expecting value: line 1 column 1 (char 0)"),
-            KeyboardInterrupt(),
-        ],
-    )
-    def test_failure_prints_one_line_and_returns_false(self, error):
-        from metasci_scribe.config.onboard import helpers
-
-        with (
-            patch.object(helpers, "_open_browser_here", return_value=False),
-            patch("metasci_scribe.llm.chatgpt_oauth.login", side_effect=error),
-            patch.object(helpers, "console") as mock_console,
-        ):
-            assert helpers._run_chatgpt_login() is False
-
-        assert mock_console.print.call_count == 1
-
-    def test_http_failure_is_reported_too(self):
-        import httpx
-
-        from metasci_scribe.config.onboard import helpers
-
-        with (
-            patch.object(helpers, "_open_browser_here", return_value=True),
-            patch(
-                "metasci_scribe.llm.chatgpt_oauth.login",
-                side_effect=httpx.ConnectError("no route"),
-            ),
-            patch.object(helpers, "console") as mock_console,
-        ):
-            assert helpers._run_chatgpt_login() is False
-
-        assert "Login failed: no route" in str(mock_console.print.call_args.args[0])
-
-    def test_failure_text_cannot_break_the_console_markup(self):
-        from rich.console import Console
-
-        from metasci_scribe.config.onboard import helpers
-
-        console = Console(record=True, width=120)
-        with (
-            patch.object(helpers, "_open_browser_here", return_value=True),
-            patch(
-                "metasci_scribe.llm.chatgpt_oauth.login",
-                side_effect=RuntimeError("server said [/red] and [bold]"),
-            ),
-            patch.object(helpers, "console", console),
-        ):
-            assert helpers._run_chatgpt_login() is False
-
-        assert "Login failed: server said [/red] and [bold]" in console.export_text()
-
-
 class TestStepModel:
     def test_returns_selected_model(self):
         """Test that _step_model returns selected model."""
@@ -914,16 +514,16 @@ class TestStepModel:
 
     def test_main_model_not_in_provider_list_defaults_to_first(self):
         """Reset/main flow: a config.model that isn't in the chosen provider's
-        list (e.g. provider switched to google-genai) defaults to that
+        list (e.g. provider switched to anthropic) defaults to that
         provider's first model, NOT the custom 'Type a model name...' entry."""
         from metasci_scribe.config.onboard.steps import _step_model
         from metasci_scribe.llm.models import get_models_for_provider
 
-        config = ScribeConfig(model="claude-sonnet-4-6")
-        entries = get_models_for_provider("google-genai")
+        config = ScribeConfig(model="gpt-6-sol")
+        entries = get_models_for_provider("anthropic")
         with patch("metasci_scribe.config.onboard.steps.questionary") as mock_q:
             mock_q.select.return_value.ask.return_value = entries[0][0]
-            _step_model(config, "google-genai")
+            _step_model(config, "anthropic")
 
         default = mock_q.select.call_args.kwargs["default"]
         assert default == entries[0][0]
@@ -935,10 +535,10 @@ class TestStepModel:
         from metasci_scribe.config.onboard.steps import _step_model
         from metasci_scribe.llm import DEFAULT_MODEL
 
-        config = ScribeConfig(model="claude-sonnet-4-6")
+        config = ScribeConfig(model="gpt-4o")
         with patch("metasci_scribe.config.onboard.steps.questionary") as mock_q:
             mock_q.select.return_value.ask.return_value = DEFAULT_MODEL
-            _step_model(config, "anthropic")
+            _step_model(config, "openai")
 
         assert mock_q.select.call_args.kwargs["default"] == DEFAULT_MODEL
 
@@ -951,7 +551,7 @@ class TestStepModel:
         with patch("metasci_scribe.config.onboard.steps.questionary") as mock_q:
             mock_q.select.return_value.ask.return_value = "__custom__"
             mock_q.text.return_value.ask.return_value = "my-private/model"
-            result = _step_model(config, "openrouter", default_value="my-private/model")
+            result = _step_model(config, "openai", default_value="my-private/model")
 
         assert mock_q.select.call_args.kwargs["default"] == "__custom__"
         assert mock_q.text.call_args.kwargs["default"] == "my-private/model"
@@ -1479,7 +1079,6 @@ class TestRunOnboard:
             ]
             mock_q.password.return_value.ask.side_effect = [
                 "",  # Provider API key (keep current)
-                "",  # Tavily key (keep current)
             ]
             mock_q.confirm.return_value.ask.side_effect = [
                 True,  # Save config
@@ -1525,7 +1124,6 @@ class TestRunOnboard:
                 "claude-sonnet-4-6",  # Model
                 "assemble",  # Auxiliary: Assemble
                 "openai",  # Auxiliary provider (a different company)
-                "api_key",  # Auxiliary OpenAI auth mode
                 "gpt-6-luna",  # Auxiliary model
                 "daemon",  # Workspace mode
                 True,  # Show thinking
@@ -1533,7 +1131,6 @@ class TestRunOnboard:
             mock_q.password.return_value.ask.side_effect = [
                 "",  # Main provider API key (keep current)
                 "sk-aux-openai",  # Auxiliary provider API key
-                "",  # Tavily key (keep current)
             ]
             mock_q.confirm.return_value.ask.side_effect = [
                 True,  # Save config
@@ -1614,7 +1211,6 @@ class TestRunOnboard:
             mock_q.select.return_value.ask.side_effect = [
                 "assemble",  # Auxiliary: Assemble
                 "openai",  # Same provider as the main model
-                "api_key",  # Shared OpenAI auth mode
                 "gpt-6-luna",  # Auxiliary model
             ]
             mock_q.password.return_value.ask.side_effect = [
@@ -1633,130 +1229,7 @@ class TestRunOnboard:
         assert final_config.openai_auth_mode == "api_key"
         assert final_config.openai_api_key == "sk-shared-openai"
         mock_q.password.assert_called_once()
-        assert mock_q.select.return_value.ask.call_count == 4
-
-    def test_auxiliary_openai_oauth_skips_api_key(self):
-        """Auxiliary OpenAI goes through the auth step and skips keys on OAuth."""
-        from metasci_scribe.config.onboard.wizard import run_onboard
-        from metasci_scribe.llm.chatgpt_oauth import ChatGPTLogin
-
-        mock_q = MagicMock()
-        with (
-            _patch_all_questionary(mock_q),
-            patch("metasci_scribe.config.onboard.wizard.load_config") as mock_load,
-            patch("metasci_scribe.config.onboard.wizard.save_config") as mock_save,
-            patch("metasci_scribe.config.onboard.wizard.console"),
-            patch("metasci_scribe.config.onboard.steps.console"),
-            patch("metasci_scribe.config.onboard.helpers.console"),
-            patch(
-                "metasci_scribe.llm.chatgpt_oauth.status",
-                return_value=ChatGPTLogin(signed_in=False),
-            ) as mock_status,
-        ):
-            mock_load.return_value = ScribeConfig()
-            mock_q.select.return_value.ask.side_effect = [
-                "assemble",  # Auxiliary: Assemble
-                "openai",  # Auxiliary provider
-                "oauth",  # OpenAI auth mode
-                "gpt-6-luna",  # Auxiliary model
-            ]
-            mock_q.confirm.return_value.ask.side_effect = [
-                False,  # Do not log in to ChatGPT now
-                True,  # Save config
-            ]
-
-            result = run_onboard(
-                skip_validation=True, only_sections={"auxiliary_model"}
-            )
-
-        assert result is True
-        final_config = mock_save.call_args_list[-1].args[0]
-        assert final_config.auxiliary_provider == "openai"
-        assert final_config.auxiliary_model == "gpt-6-luna"
-        assert final_config.openai_auth_mode == "oauth"
-        assert final_config.openai_api_key == ""
-        mock_q.password.assert_not_called()
-        mock_status.assert_called_once_with()
-
-    def test_auxiliary_reconfigure_clears_unused_openai_oauth(self):
-        """Switching co-pilot away from OpenAI clears the stale ChatGPT sign-in mode."""
-        from metasci_scribe.config.onboard.wizard import run_onboard
-
-        mock_q = MagicMock()
-        with (
-            _patch_all_questionary(mock_q),
-            patch("metasci_scribe.config.onboard.wizard.load_config") as mock_load,
-            patch("metasci_scribe.config.onboard.wizard.save_config") as mock_save,
-            patch("metasci_scribe.config.onboard.wizard.console"),
-            patch("metasci_scribe.config.onboard.steps.console"),
-            patch("metasci_scribe.config.onboard.helpers.console"),
-        ):
-            mock_load.return_value = ScribeConfig(
-                provider="anthropic",
-                model="claude-sonnet-4-6",
-                auxiliary_provider="openai",
-                auxiliary_model="gpt-6-luna",
-                openai_auth_mode="oauth",
-            )
-            mock_q.select.return_value.ask.side_effect = [
-                "assemble",  # Auxiliary: Assemble
-                "minimax",  # Auxiliary provider no longer uses OpenAI
-                "global",  # MiniMax region
-                "minimax-m2",  # Auxiliary model
-            ]
-            mock_q.password.return_value.ask.side_effect = [
-                "sk-minimax",  # MiniMax API key
-            ]
-            mock_q.confirm.return_value.ask.side_effect = [True]  # Save config
-
-            result = run_onboard(
-                skip_validation=True, only_sections={"auxiliary_model"}
-            )
-
-        assert result is True
-        final_config = mock_save.call_args_list[-1].args[0]
-        assert final_config.auxiliary_provider == "minimax"
-        assert final_config.openai_auth_mode == "api_key"
-
-    def test_auxiliary_custom_provider_collects_base_url(self):
-        """Regression for the custom-provider fix: a custom auxiliary provider
-        collects its base URL (provider -> base URL -> key -> model order)."""
-        from metasci_scribe.config.onboard.wizard import run_onboard
-
-        mock_q = MagicMock()
-        with (
-            _patch_all_questionary(mock_q),
-            patch("metasci_scribe.config.onboard.wizard.load_config") as mock_load,
-            patch("metasci_scribe.config.onboard.wizard.save_config") as mock_save,
-            patch("metasci_scribe.config.onboard.wizard.console"),
-            patch("metasci_scribe.config.onboard.steps.console"),
-            patch("metasci_scribe.config.onboard.helpers.console"),
-        ):
-            mock_load.return_value = ScribeConfig()
-            mock_q.select.return_value.ask.side_effect = [
-                "assemble",  # Auxiliary: Assemble
-                "custom-openai",  # Auxiliary provider
-                "gpt-6-luna",  # Auxiliary model (from the custom-openai registry)
-            ]
-            mock_q.text.return_value.ask.side_effect = [
-                "https://my-endpoint/v1",  # Auxiliary base URL (custom provider)
-            ]
-            mock_q.password.return_value.ask.side_effect = [
-                "sk-aux-custom",  # Auxiliary provider API key
-            ]
-            mock_q.confirm.return_value.ask.side_effect = [True]  # Save
-
-            result = run_onboard(
-                skip_validation=True, only_sections={"auxiliary_model"}
-            )
-
-        assert result is True
-        final_config = mock_save.call_args_list[-1].args[0]
-        assert final_config.auxiliary_provider == "custom-openai"
-        assert final_config.auxiliary_model == "gpt-6-luna"
-        # Base URL must be collected for the custom auxiliary provider.
-        assert final_config.custom_openai_base_url == "https://my-endpoint/v1"
-        assert final_config.custom_openai_api_key == "sk-aux-custom"
+        assert mock_q.select.return_value.ask.call_count == 3
 
     def test_returns_false_on_cancel(self):
         """Test that run_onboard returns False when cancelled."""
@@ -1933,63 +1406,6 @@ class TestRunOnboard:
             "during the wizard run"
         )
 
-    def test_preset_tavily_key_rejected_by_validator_is_fatal(self):
-        """``--tavily-key`` preset must be validated like ``--api-key``;
-        a rejected key raises rather than silently saving."""
-        import pytest
-
-        from metasci_scribe.config.onboard.prompter import NonInteractivePrompter
-        from metasci_scribe.config.onboard.wizard import run_onboard
-
-        prompter = NonInteractivePrompter(answers={"tavily_key": "tvly-bad"})
-
-        with (
-            patch(
-                "metasci_scribe.config.onboard.wizard.load_config",
-                return_value=ScribeConfig(),
-            ),
-            patch("metasci_scribe.config.onboard.wizard.save_config"),
-            patch("metasci_scribe.config.onboard.wizard.console"),
-            patch(
-                "metasci_scribe.config.onboard.validators.validate_tavily_key",
-                return_value=(False, "Invalid API key"),
-            ),
-        ):
-            with pytest.raises(RuntimeError, match="--tavily-key rejected"):
-                run_onboard(
-                    skip_validation=False,
-                    prompter=prompter,
-                    only_sections={"tavily"},
-                )
-
-    def test_preset_tavily_key_skips_validation_when_flagged(self):
-        """``--skip-validation`` must bypass the preset tavily check."""
-        from metasci_scribe.config.onboard.prompter import NonInteractivePrompter
-        from metasci_scribe.config.onboard.wizard import run_onboard
-
-        prompter = NonInteractivePrompter(answers={"tavily_key": "tvly-bad"})
-
-        mock_q = MagicMock()
-        with (
-            _patch_all_questionary(mock_q),
-            patch(
-                "metasci_scribe.config.onboard.wizard.load_config",
-                return_value=ScribeConfig(),
-            ),
-            patch("metasci_scribe.config.onboard.wizard.save_config"),
-            patch("metasci_scribe.config.onboard.wizard.console"),
-            patch(
-                "metasci_scribe.config.onboard.validators.validate_tavily_key"
-            ) as mock_validate,
-        ):
-            mock_q.confirm.return_value.ask.side_effect = [True]  # Save? = Yes
-            run_onboard(
-                skip_validation=True,
-                prompter=prompter,
-                only_sections={"tavily"},
-            )
-            mock_validate.assert_not_called()
-
 
 class TestOnboardCliErrorPresentation:
     """The CLI must turn the wizard's non-interactive ``RuntimeError`` signals
@@ -2003,7 +1419,7 @@ class TestOnboardCliErrorPresentation:
         with (
             patch(
                 "metasci_scribe.config.onboard.run_onboard",
-                side_effect=RuntimeError("--tavily-key rejected by validator: nope"),
+                side_effect=RuntimeError("--api-key rejected by validator: nope"),
             ),
             patch("metasci_scribe.cli.commands.console") as mock_console,
         ):
@@ -2524,82 +1940,6 @@ class TestStepTinytex:
             mock_q.select.return_value.ask.return_value = True
             _step_tinytex()
             mock_ps.assert_called_once_with("LaTeX", "manual install needed")
-
-
-class TestXiaomiTokenPlanRegion:
-    def test_non_interactive_defaults_to_cn(self, monkeypatch):
-        from metasci_scribe.config.onboard.wizard import _configure_provider_base_url
-
-        monkeypatch.delenv("MIMO_TOKEN_PLAN_BASE_URL", raising=False)
-        config = ScribeConfig()
-        _configure_provider_base_url(config, "xiaomi-token-plan", strict=True)
-
-        assert (
-            config.mimo_token_plan_base_url
-            == "https://token-plan-cn.xiaomimimo.com/anthropic"
-        )
-
-    def test_non_interactive_blank_env_reaches_validator_as_default(self, monkeypatch):
-        from metasci_scribe.config.onboard.helpers import _provider_key_info
-        from metasci_scribe.config.onboard.wizard import _configure_provider_base_url
-
-        monkeypatch.setenv("MIMO_TOKEN_PLAN_BASE_URL", "  ")
-        config = ScribeConfig()
-        _configure_provider_base_url(config, "xiaomi-token-plan", strict=True)
-        with patch(
-            "metasci_scribe.config.provider_keys.check_xiaomi_key"
-        ) as mock_validate:
-            _provider_key_info(config, "xiaomi-token-plan")[2]("tp-key")
-
-        default = "https://token-plan-cn.xiaomimimo.com/anthropic"
-        assert config.mimo_token_plan_base_url == default
-        assert mock_validate.call_args.kwargs["base_url"] == default
-
-    def test_region_step_returns_selected_region(self):
-        from metasci_scribe.config.onboard.steps import _step_xiaomi_token_plan_region
-
-        config = ScribeConfig(
-            mimo_token_plan_base_url="https://token-plan-ams.xiaomimimo.com/anthropic"
-        )
-        with patch("questionary.select") as mock_select:
-            mock_select.return_value.ask.return_value = "sgp"
-            url = _step_xiaomi_token_plan_region(config)
-
-        assert url == "https://token-plan-sgp.xiaomimimo.com/anthropic"
-        assert mock_select.call_args.kwargs["default"] == "ams"
-
-
-@pytest.mark.parametrize(
-    ("provider", "validator", "field", "env", "default"),
-    [
-        (
-            "minimax",
-            "check_minimax_key",
-            "minimax_base_url",
-            "MINIMAX_BASE_URL",
-            "https://api.minimaxi.com/anthropic",
-        ),
-        (
-            "xiaomi-token-plan",
-            "check_xiaomi_key",
-            "mimo_token_plan_base_url",
-            "MIMO_TOKEN_PLAN_BASE_URL",
-            "https://token-plan-cn.xiaomimimo.com/anthropic",
-        ),
-    ],
-)
-def test_key_validator_ignores_blank_base_url(
-    monkeypatch, provider, validator, field, env, default
-):
-    """Whitespace in either the saved config or the env var falls back to the default."""
-    from metasci_scribe.config.onboard.helpers import _provider_key_info
-
-    monkeypatch.setenv(env, "  ")
-    config = ScribeConfig(**{field: "  "})
-    with patch(f"metasci_scribe.config.provider_keys.{validator}") as mock_validate:
-        _provider_key_info(config, provider)[2]("key")
-
-    assert mock_validate.call_args.kwargs["base_url"] == default
 
 
 class TestEnsureNpx:

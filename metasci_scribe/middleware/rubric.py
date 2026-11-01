@@ -1,4 +1,4 @@
-"""Acceptance grading shared by the main agent and the scheduler graph.
+"""Acceptance grading for the main agent.
 
 A run whose input carries ``rubric`` is graded when the agent stops and sent
 back to the model until the grader is satisfied or the pass limit is reached.
@@ -31,7 +31,6 @@ from langchain.agents.middleware.types import (
     PrivateStateAttr,
     hook_config,
 )
-from langchain.agents.structured_output import ProviderStrategy, ToolStrategy
 from langchain_core.messages import AIMessage
 from langgraph.errors import GraphBubbleUp
 from langgraph_sdk.errors import NotFoundError
@@ -52,31 +51,14 @@ logger = logging.getLogger(__name__)
 # whole-workspace scans (15s timeouts per call on large workspaces).
 GRADER_TOOLS = ("ls", "read_file")
 
-# Structured-output strategy per OpenRouter model family. langchain picks the
-# grader's strategy from the model profile plus a model-name regex table, and
-# OpenRouter breaks each family differently: Gemini tool schemas lose the
-# criteria ``oneOf`` (every entry comes back null), Anthropic JSON mode returns
-# non-JSON, OpenAI's strict JSON mode rejects that ``oneOf`` with a 400; Muse
-# Spark answers only through JSON mode and Qwen only through a tool call. Verified
-# live 2026-09-04, 2026-09-26 and 2026-10-16. Passed explicitly because a
-# profile pin loses to the name regex (``anthropic/claude-fable-5``).
-_OPENROUTER_GRADER_STRATEGY: dict[str, type[ProviderStrategy] | type[ToolStrategy]] = {
-    "google/": ProviderStrategy,
-    "anthropic/": ToolStrategy,
-    "openai/": ToolStrategy,
-    "meta/muse-spark": ProviderStrategy,
-    "qwen/": ToolStrategy,
-}
-
 # Model calls one grader attempt may spend before the run fails closed with
 # ``grader_error``. Without it a parse-error retry loop inherits the graph's
 # recursion limit and spins for minutes. Sized for a 3-5 bullet rubric over a
 # few files: ``ls`` + one ``read_file`` per file + the verdict call.
 GRADER_MAX_CALLS = 12
 
-# Grading passes per run: the main agent, and the cheaper unattended scheduler.
+# Grading passes per run.
 MAIN_RUBRIC_MAX_ITERATIONS = 3
-SCHEDULER_RUBRIC_MAX_ITERATIONS = 2
 
 # Background work still counts as unfinished only while the live status is one
 # of these; anything else, or a status that cannot be read, never holds a
@@ -171,53 +153,6 @@ GRADER_FILE_CHECK_PROMPT = (
     "other files or directories."
 )
 
-# OpenRouter ids for which neither strategy yields a verdict (re-probed 2026-09-22,
-# sonnet-5.5 probed 2026-09-29, qwen3.8-flash and muse-wonder 2026-10-16): these
-# Claude routes reject forced ``tool_choice`` and their JSON mode rejects the
-# grader schema's ``oneOf``; qwen3.8-flash returns no parsable verdict either way,
-# and muse-wonder's JSON mode often runs away into an unparsable reply hundreds of
-# thousands of tokens long. Exact ids, not families:
-# ``anthropic/claude-fable-5`` and the native ``claude-fable-5-1`` /
-# ``claude-opus-5-5`` grade fine.
-_OPENROUTER_UNGRADABLE_IDS = (
-    "anthropic/claude-fable-5.1",
-    "anthropic/claude-opus-5.5",
-    "anthropic/claude-sonnet-5.5",
-    "qwen/qwen3.8-flash",
-    "meta/muse-wonder",
-)
-
-
-def _warn_if_grader_unsupported(model: BaseChatModel) -> None:
-    from metasci_scribe.llm.errors import _provider_from_model
-
-    if _provider_from_model(model) != "openrouter":
-        return
-    model_id = (getattr(model, "model_name", None) or "").lower()
-    if model_id in _OPENROUTER_UNGRADABLE_IDS:
-        logger.warning(
-            "rubric: grader model %s via OpenRouter cannot return "
-            "structured verdicts; rubric runs will end in grader_error. Set "
-            "auxiliary_model to another model (claude-haiku-5.5, GPT and Gemini "
-            "grade through OpenRouter), or use this model's native provider if "
-            "it has one.",
-            model_id,
-        )
-
-
-def _grader_strategy(model: BaseChatModel) -> ProviderStrategy | ToolStrategy | None:
-    """Explicit grader strategy on OpenRouter routes; ``None`` defers to langchain."""
-    from metasci_scribe.llm.errors import _provider_from_model
-
-    if _provider_from_model(model) != "openrouter":
-        return None
-    model_id = (getattr(model, "model_name", None) or "").lower()
-    for prefix, strategy in _OPENROUTER_GRADER_STRATEGY.items():
-        if model_id.startswith(prefix):
-            return strategy(GraderResponse)
-    return None
-
-
 # How a marked run picks its checklist: the input text, the checklists saved
 # on the thread, or only a grading the thread already deferred.
 RUBRIC_MODES = ("input", "thread", "followup")
@@ -307,15 +242,10 @@ class EvoRubricMiddleware(RubricMiddleware):
     ``next`` checklist only when that grading used it. With
     ``require_run_marker`` an unmarked invocation drops an open grading,
     unless it is deferred and still waits for its own turn.
-    ``_ensure_grader`` mirrors upstream except for the model and
-    ``response_format``: a bare ``GraderResponse`` there lets langchain choose
-    the strategy, which is wrong on OpenRouter (see
-    ``_OPENROUTER_GRADER_STRATEGY``) and native DeepSeek (see
-    ``structured_output_for``).
+    ``_ensure_grader`` mirrors upstream except for the model.
     """
 
     state_schema = EvoRubricState
-    _warned_unsupported = False
 
     def __init__(
         self,
@@ -335,12 +265,6 @@ class EvoRubricMiddleware(RubricMiddleware):
         self._task_status = task_status
         self._process_status = process_status
         self._server_available = server_available
-
-    def _warn_unsupported_once(self, state: Any) -> None:
-        if self._warned_unsupported or not state.get("rubric"):
-            return
-        self._warned_unsupported = True
-        _warn_if_grader_unsupported(self._model)
 
     def _ungraded_run_update(self, state: Any) -> tuple[bool, dict[str, Any] | None]:
         """Whether this run must not be graded, and the update that drops its rubric."""
@@ -363,7 +287,6 @@ class EvoRubricMiddleware(RubricMiddleware):
 
     def _start_of_run(self, state: Any) -> dict[str, Any] | None:
         if not self._require_run_marker:
-            self._warn_unsupported_once(state)
             return super()._reset_for_new_rubric({**state, "_active_rubric": None})
         config = rubric_run_config()
         if config is None:
@@ -386,7 +309,6 @@ class EvoRubricMiddleware(RubricMiddleware):
             update.update(self._select_for_thread(state, view))
         else:
             update.update(self._select_for_followup(view))
-        self._warn_unsupported_once({**view, **update})
         return update or None
 
     def _select_for_thread(self, state: Any, view: Any) -> dict[str, Any]:
@@ -805,22 +727,15 @@ class EvoRubricMiddleware(RubricMiddleware):
             return self._grader
         from deepagents._models import resolve_model
 
-        from metasci_scribe.middleware.utils import structured_output_for
-
         resolved_model = resolve_model(self._model)
         self._resolved_model = resolved_model
-        model, response_format = resolved_model, _grader_strategy(resolved_model)
-        if response_format is None:
-            model, response_format = structured_output_for(
-                resolved_model, GraderResponse
-            )
         self._grader = create_agent(
-            model=model,
+            model=resolved_model,
             system_prompt=self._system_prompt,
             tools=self._tools,
             middleware=self._grader_middleware,
             name=RUBRIC_GRADER_MESSAGE_SOURCE,
-            response_format=response_format,
+            response_format=GraderResponse,
             state_schema=self._grader_state_schema,
             context_schema=self._grader_context_schema,
         )

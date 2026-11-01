@@ -10,13 +10,7 @@ import httpx
 import pytest
 
 from metasci_scribe.config import provider_keys
-from metasci_scribe.config.provider_keys import (
-    KeyCheck,
-    check_custom_anthropic,
-    check_custom_openai,
-    check_ollama,
-    check_provider_key,
-)
+from metasci_scribe.config.provider_keys import KeyCheck, check_provider_key
 
 
 def _mock_client(real, handler, http=httpx):
@@ -109,158 +103,25 @@ class TestTimeouts:
         assert client_cls.call_args.kwargs["timeout"] == 10
         assert client_cls.call_args.kwargs["max_retries"] == 0
 
-    def test_google_timeout_is_in_milliseconds(self):
-        with patch("google.genai.Client") as client_cls:
-            client_cls.return_value.models.list.return_value = iter(["m"])
-            assert provider_keys.check_google_key("k").status == "valid"
-        assert client_cls.call_args.kwargs["http_options"] == {"timeout": 10000}
-
-    def test_tavily_search_gets_timeout(self):
-        with patch("tavily.TavilyClient") as client_cls:
-            assert provider_keys.check_tavily_key("k").status == "valid"
-        assert client_cls.return_value.search.call_args.kwargs["timeout"] == 10
-
-
-class TestNvidia:
-    def test_checks_the_key_under_test(self, monkeypatch):
-        """The classmethod would build a client from ``NVIDIA_API_KEY``;
-        the instance property uses the key that is being checked."""
-        monkeypatch.setenv("NVIDIA_API_KEY", "env-key")
-        with patch("langchain_nvidia_ai_endpoints.ChatNVIDIA") as client_cls:
-            assert provider_keys.check_nvidia_key("k").status == "valid"
-        assert client_cls.call_args.kwargs["api_key"] == "k"
-        assert client_cls.call_args.kwargs["timeout"] == 10
-        client_cls.get_available_models.assert_not_called()
-        client_cls.return_value.get_available_models.assert_not_called()
-
-
-class TestCustomOpenAI:
-    def _run(self, status, body, key="sk-x", base_url="https://llm.test/v1"):
-        import openai
-
-        seen = []
-
-        def handler(request):
-            seen.append(request)
-            return httpx.Response(status, json=body)
-
-        with patch("openai.OpenAI", side_effect=_mock_client(openai.OpenAI, handler)):
-            return check_custom_openai(key, base_url), seen
-
-    def test_lists_models(self):
-        result, seen = self._run(200, {"object": "list", "data": [{"id": "m1"}]})
-        assert result.status == "valid"
-        assert result.models == ("m1",)
-        assert "listed 1 model(s)" in result.message
-        assert str(seen[0].url) == "https://llm.test/v1/models"
-        assert seen[0].headers["authorization"] == "Bearer sk-x"
-
-    @pytest.mark.parametrize(
-        ("status", "body", "expected"),
-        [
-            (401, {"error": "no"}, "invalid"),
-            (403, {"error": "no"}, "invalid"),
-            (404, {"error": "no"}, "unavailable"),
-            (200, {"models": ["m1"]}, "unavailable"),
-            (500, {"error": "down"}, "inconclusive"),
-        ],
-    )
-    def test_statuses(self, status, body, expected):
-        result, _ = self._run(status, body)
-        assert result.status == expected
-        assert result.models == ()
-
-    def test_no_key_is_empty_and_sends_nothing(self, monkeypatch):
-        monkeypatch.setenv("OPENAI_API_KEY", "real-openai-key")
-        result, seen = self._run(200, {"data": [{"id": "m1"}]}, key="")
-        assert result.status == "empty"
-        assert seen == []
-
-    def test_no_base_url_is_unavailable(self):
-        assert check_custom_openai("k", "").status == "unavailable"
-
-
-class TestCustomAnthropic:
-    def test_lists_models_on_v1(self):
-        import anthropic
-        import httpx2
-
-        seen = []
-
-        def handler(request):
-            seen.append(request)
-            return httpx2.Response(
-                200,
-                json={"data": [{"id": "claude-x", "type": "model"}], "has_more": True},
-            )
-
-        with patch(
-            "anthropic.Anthropic",
-            side_effect=_mock_client(anthropic.Anthropic, handler, httpx2),
-        ):
-            result = check_custom_anthropic("k", "https://proxy.test/")
-        assert result.models == ("claude-x",)
-        assert str(seen[0].url).startswith("https://proxy.test/v1/models")
-        assert len(seen) == 1  # first page only
-
-    def test_auth_rejection_is_invalid(self):
-        import anthropic
-        import httpx2
-
-        with patch(
-            "anthropic.Anthropic",
-            side_effect=_mock_client(
-                anthropic.Anthropic, lambda r: httpx2.Response(401, json={}), httpx2
-            ),
-        ):
-            assert check_custom_anthropic("k", "https://proxy.test").status == "invalid"
-
-
-class TestOllama:
-    def test_empty_base_url_probes_the_default(self):
-        with patch(
-            "metasci_scribe.llm.ollama_discovery.validate_ollama_connection",
-            return_value=(True, "Connected", ["llama3.2"]),
-        ) as probe:
-            result = check_ollama("", "")
-        probe.assert_called_once_with("http://localhost:11434")
-        assert (result.status, result.models) == ("valid", ("llama3.2",))
-
-    def test_unreachable_is_inconclusive(self):
-        with patch(
-            "metasci_scribe.llm.ollama_discovery.validate_ollama_connection",
-            return_value=(False, "Cannot reach Ollama: refused", []),
-        ):
-            assert check_ollama("", "http://x").status == "inconclusive"
-
 
 class TestTable:
-    def test_run_check_passes_the_base_url(self):
+    def test_run_check_takes_only_the_key(self):
         with patch.object(
-            provider_keys, "check_minimax_key", return_value=KeyCheck("valid", "ok")
+            provider_keys, "check_openai_key", return_value=KeyCheck("valid", "ok")
         ) as check:
-            check_provider_key("minimax", "k", "https://mm.test")
-        check.assert_called_once_with("k", base_url="https://mm.test")
+            check_provider_key("openai", "k", "https://ignored.test")
+        check.assert_called_once_with("k")
 
-    def test_run_check_falls_back_to_the_default_base_url(self):
-        with patch.object(
-            provider_keys, "check_xiaomi_key", return_value=KeyCheck("valid", "ok")
-        ) as check:
-            check_provider_key("xiaomi-token-plan", "k")
-        assert check.call_args.kwargs["base_url"] == (
-            "https://token-plan-cn.xiaomimimo.com/anthropic"
-        )
-
-    def test_only_custom_endpoints_need_a_base_url(self):
-        assert {
+    def test_no_provider_needs_a_base_url(self):
+        assert not [
             name
             for name, spec in provider_keys.PROVIDERS.items()
             if spec.needs_base_url
-        } == {"custom-openai", "custom-anthropic"}
+        ]
 
-    def test_tavily_is_checkable_but_not_a_provider(self):
+    def test_tavily_is_gone(self):
         assert "tavily" not in provider_keys.PROVIDERS
-        assert provider_keys.KEY_SPECS["tavily"].key_field == "tavily_api_key"
+        assert not hasattr(provider_keys, "check_tavily_key")
 
 
 def test_import_loads_no_ui_library():
@@ -277,20 +138,11 @@ def test_import_loads_no_ui_library():
     assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
-def test_custom_anthropic_without_a_key_is_empty():
-    assert check_custom_anthropic("", "https://proxy.test").status == "empty"
-
-
 @pytest.mark.parametrize(
     ("check", "client", "args"),
     [
         ("check_openai_key", "openai.OpenAI", ("k",)),
-        ("check_minimax_key", "anthropic.Anthropic", ("k",)),
-        ("check_deepseek_key", "openai.OpenAI", ("k",)),
-        ("check_dashscope_code_key", "openai.OpenAI", ("k",)),
-        ("check_kimi_key", "anthropic.Anthropic", ("k",)),
-        ("check_custom_openai", "openai.OpenAI", ("k", "https://llm.test/v1")),
-        ("check_custom_anthropic", "anthropic.Anthropic", ("k", "https://llm.test")),
+        ("check_anthropic_key", "anthropic.Anthropic", ("k",)),
     ],
 )
 def test_every_sdk_client_gets_timeout_and_no_retries(check, client, args):
@@ -301,31 +153,7 @@ def test_every_sdk_client_gets_timeout_and_no_retries(check, client, args):
 
 
 def test_each_provider_uses_its_check():
-    assert {name: spec.check for name, spec in provider_keys.KEY_SPECS.items()} == {
-        "anthropic": "check_anthropic_key",
+    assert {name: spec.check for name, spec in provider_keys.PROVIDERS.items()} == {
         "openai": "check_openai_key",
-        "google-genai": "check_google_key",
-        "minimax": "check_minimax_key",
-        "nvidia": "check_nvidia_key",
-        "siliconflow": "check_siliconflow_key",
-        "openrouter": "check_openrouter_key",
-        "atlascloud": "check_atlascloud_key",
-        "requesty": "check_requesty_key",
-        "opper": "check_opper_key",
-        "novita": "check_novita_key",
-        "deepseek": "check_deepseek_key",
-        "zhipu": "check_zhipu_key",
-        "zhipu-code": "check_zhipu_key",
-        "volcengine": "check_volcengine_key",
-        "volcengine-code": "check_volcengine_key",
-        "dashscope": "check_dashscope_key",
-        "dashscope-code": "check_dashscope_code_key",
-        "moonshot": "check_moonshot_key",
-        "kimi-coding": "check_kimi_key",
-        "xiaomi": "check_xiaomi_key",
-        "xiaomi-token-plan": "check_xiaomi_key",
-        "custom-openai": "check_custom_openai",
-        "custom-anthropic": "check_custom_anthropic",
-        "ollama": "check_ollama",
-        "tavily": "check_tavily_key",
+        "anthropic": "check_anthropic_key",
     }

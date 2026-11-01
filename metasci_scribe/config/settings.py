@@ -32,7 +32,7 @@ HITL_SHELL_TOOLS = ("execute", "run_in_background")
 
 # Armed non-shell destructive tools must always prompt — no allow-list carve-outs
 # (their args carry paths, not commands). Keep aligned with HITL_INTERRUPT_ON.
-HITL_ALWAYS_PROMPT_TOOLS = ("delete", "schedule_task")
+HITL_ALWAYS_PROMPT_TOOLS = ("delete",)
 
 
 class MemoryObservationTarget(StrEnum):
@@ -144,16 +144,6 @@ class GatewaySurface(StrEnum):
 # Configuration dataclass
 # =============================================================================
 
-# OpenRouter app-attribution defaults (issue #339). Single source of truth: the
-# ScribeConfig fields below default to these, and llm/models.py imports
-# them for its env-fallback, so the values never drift across the two layers.
-OPENROUTER_DEFAULT_HTTP_REFERER = "https://github.com/EvoScientist/EvoScientist"
-OPENROUTER_DEFAULT_APP_TITLE = "metasci-scribe"
-# OpenRouter honors only the first 2 categories per request (server-side limit)
-# and silently ignores the rest, so keep the two most relevant ones. Chosen per
-# maintainer review — creative-writing is a less competitive marketplace group.
-OPENROUTER_DEFAULT_APP_CATEGORIES = "creative-writing,personal-agent"
-
 
 @dataclass
 class ScribeConfig:
@@ -162,13 +152,10 @@ class ScribeConfig:
     Attributes:
         anthropic_api_key: Anthropic API key for Claude models.
         openai_api_key: OpenAI API key for GPT models.
-        nvidia_api_key: NVIDIA API key for NVIDIA models.
-        google_api_key: Google API key for Gemini models.
-        tavily_api_key: Tavily API key for web search.
-        provider: Default LLM provider ('anthropic', 'openai', 'google-genai', or 'nvidia').
+        provider: Default LLM provider ('openai' or 'anthropic').
         model: Default model name (short name or full ID).
         auxiliary_provider: Provider for auxiliary_model (empty = use main provider).
-        auxiliary_model: Model for memory workers + tool selector + scheduler (empty = use main model).
+        auxiliary_model: Model for memory workers + tool selector (empty = use main model).
         default_mode: Default workspace mode ('daemon' or 'run').
         default_workdir: Default workspace directory (empty = use current working directory).
         show_thinking: Whether to show thinking panels in CLI.
@@ -178,37 +165,13 @@ class ScribeConfig:
     anthropic_api_key: str = ""
     anthropic_base_url: str = ""
     openai_api_key: str = ""
-    openai_auth_mode: str = "api_key"  # "api_key" | "oauth" (ChatGPT sign-in)
-    nvidia_api_key: str = ""
-    google_api_key: str = ""
-    minimax_api_key: str = ""
-    minimax_base_url: str = ""
-    siliconflow_api_key: str = ""
-    openrouter_api_key: str = ""
-    atlascloud_api_key: str = ""
-    requesty_api_key: str = ""
-    novita_api_key: str = ""
-    mimo_api_key: str = ""
-    mimo_token_plan_api_key: str = ""
-    mimo_token_plan_base_url: str = ""
-    opper_api_key: str = ""
-    deepseek_api_key: str = ""
-    zhipu_api_key: str = ""
-    volcengine_api_key: str = ""
-    dashscope_api_key: str = ""
-    moonshot_api_key: str = ""
-    kimi_api_key: str = ""
-    custom_openai_api_key: str = ""
-    custom_openai_base_url: str = ""
-    custom_anthropic_api_key: str = ""
-    custom_anthropic_base_url: str = ""
-    ollama_base_url: str = ""
-    tavily_api_key: str = ""
+    # "api_key" is the only route that works today. "chatgpt_plan" is reserved
+    # for the ChatGPT plan connector and is refused until that connector exists.
+    openai_auth_mode: Literal["api_key", "chatgpt_plan"] = "api_key"
 
     # LLM Settings
-    provider: str = "anthropic"
-    model: str = "claude-sonnet-5-5"
-    model_fallbacks: str = ""  # "model:provider,model:provider" fallback chain
+    provider: str = "openai"
+    model: str = "gpt-6.1-sol"
     # Transient model-call failures (5xx, 429, connection drops): how long one
     # model call keeps retrying after it first fails, in seconds; 0 = no retry.
     model_retry_wait_seconds: int = 60
@@ -219,17 +182,16 @@ class ScribeConfig:
     auxiliary_model: str = ""  # empty = use main model
 
     # Async Sub-agent Settings
-    # When True (default), the metasci-scribe CLI auto-starts a langgraph dev subprocess
+    # When True, the metasci-scribe CLI auto-starts a langgraph dev subprocess
     # so any sub-agent flagged ``async: true`` in subagents/<name>.yaml runs
-    # non-blocking via AsyncSubAgent. Currently affects writing-agent and
-    # data-analysis-agent. Adds ~10-15s to CLI startup (langgraph dev cold
-    # start, mostly MCP server spawn time).
+    # non-blocking via AsyncSubAgent. Currently affects writing-agent. Adds
+    # ~10-15s to CLI startup (langgraph dev cold start, mostly MCP server
+    # spawn time).
     #
-    # Set False to run fully in-process — saves the startup cost in scenarios
-    # where async isn't useful: short scripted metasci-scribe runs (CI / one-shot
-    # ``-p "..."``), low-RAM environments, or workflows that only need the
-    # synchronous sub-agents (planner / research / code / debug).
-    enable_async_subagents: bool = True
+    # Off by default: every sub-agent runs in-process and a plain start never
+    # spawns a background server. Memory workers, skill synthesis and the
+    # scheduler also ask for that server; they are off by default too.
+    enable_async_subagents: bool = False
 
     # Port for the auto-started langgraph dev subprocess. 6174 is Kaprekar's
     # constant — a memorable Metasci-Scribe-themed default that avoids collisions
@@ -245,9 +207,8 @@ class ScribeConfig:
     langgraph_dev_host: str = "127.0.0.1"
 
     # --- Scheduled tasks (cron) ---
-    # Master switch for scheduled tasks (/schedule, NL tools, scheduler context). Defaults
-    # True so the feature is available out-of-the-box; set False to disable.
-    enable_scheduler: bool = True
+    # Master switch for the scheduler. Off by default.
+    enable_scheduler: bool = False
     # Default IANA timezone for cron schedules created without an explicit tz.
     # Empty string => the host's local IANA zone (resolved via tzlocal), falling
     # back to UTC if it can't be determined; set e.g. "Europe/London" to pin one.
@@ -322,11 +283,11 @@ class ScribeConfig:
 
     # Memory Settings
     # Profile memory injects and maintains `/memories/profile/...` files.
-    memory_profile_enabled: bool = True
+    memory_profile_enabled: bool = False
     # Observation memory indexes `/memories/observations/...` and adds
     # observation-read guidance/context. Writes require this switch plus an
     # allowed `memory_observation_writer` role below.
-    memory_observations_enabled: bool = True
+    memory_observations_enabled: bool = False
     # Which observation-writing path receives the `record_observation` tool:
     # "off" disables writes; "agent" means live agents; "worker" means
     # post-run memory workers; "all" means live agents and post-run memory
@@ -336,10 +297,10 @@ class ScribeConfig:
     )
     # Post-turn and post-subagent memory workers. Disable for no-background-memory
     # controls while still allowing live agents to read configured memory.
-    memory_workers_enabled: bool = True
+    memory_workers_enabled: bool = False
     # Slow EvoMemory maintenance that periodically scans observation clusters
     # and drafts reusable skills.
-    memory_skill_synthesis_enabled: bool = True
+    memory_skill_synthesis_enabled: bool = False
     memory_skill_synthesis_mode: MemorySkillSynthesisMode = (
         DEFAULT_MEMORY_SKILL_SYNTHESIS_MODE
     )
@@ -372,20 +333,6 @@ class ScribeConfig:
     # Empty means use the provider/model default. A non-empty value is an
     # explicit user override exported as METASCI_SCRIBE_REASONING_EFFORT.
     reasoning_effort: str = ""
-    # Anthropic prompt caching for OpenRouter anthropic/* models. Opt out if
-    # cache-write costs outweigh the benefit for a workflow.
-    openrouter_anthropic_prompt_cache: bool = True
-    # OpenRouter app attribution (issue #339). Sent only for the openrouter
-    # provider; identifies Metasci Scribe in OpenRouter's app rankings/analytics.
-    # Override (e.g. a private fork) via these fields or their env vars. A custom
-    # title only takes effect together with a custom referer: OpenRouter keys app
-    # pages by referer, so a lone title would rename the shared Metasci Scribe page.
-    # Defaults live in the module constants above (also imported by llm/models.py).
-    openrouter_http_referer: str = OPENROUTER_DEFAULT_HTTP_REFERER
-    openrouter_app_title: str = OPENROUTER_DEFAULT_APP_TITLE
-    # Comma-separated; split into a list before being passed to
-    # langchain-openrouter (its app_categories kwarg expects list[str]).
-    openrouter_app_categories: str = OPENROUTER_DEFAULT_APP_CATEGORIES
 
     # HITL (Human-in-the-Loop) Settings
     auto_approve: bool = False  # Auto-approve all tool executions without prompting
@@ -609,34 +556,8 @@ def _config_to_dict(config: ScribeConfig) -> dict[str, Any]:
     return {key: _plain_config_value(value) for key, value in asdict(config).items()}
 
 
-# Secret fields, listed by name rather than matched on it: a name rule would
-# catch ``mimo_token_plan_base_url``.
-API_KEY_FIELDS: frozenset[str] = frozenset(
-    {
-        "anthropic_api_key",
-        "openai_api_key",
-        "nvidia_api_key",
-        "google_api_key",
-        "minimax_api_key",
-        "siliconflow_api_key",
-        "openrouter_api_key",
-        "atlascloud_api_key",
-        "requesty_api_key",
-        "novita_api_key",
-        "mimo_api_key",
-        "mimo_token_plan_api_key",
-        "opper_api_key",
-        "deepseek_api_key",
-        "zhipu_api_key",
-        "volcengine_api_key",
-        "dashscope_api_key",
-        "moonshot_api_key",
-        "kimi_api_key",
-        "custom_openai_api_key",
-        "custom_anthropic_api_key",
-        "tavily_api_key",
-    }
-)
+# Secret fields, listed by name rather than matched on it.
+API_KEY_FIELDS: frozenset[str] = frozenset({"anthropic_api_key", "openai_api_key"})
 SECRET_FIELDS: frozenset[str] = API_KEY_FIELDS
 
 
@@ -956,31 +877,6 @@ _ENV_MAPPINGS = {
     "anthropic_base_url": "ANTHROPIC_BASE_URL",
     "openai_api_key": "OPENAI_API_KEY",
     "openai_auth_mode": "METASCI_SCRIBE_OPENAI_AUTH_MODE",
-    "nvidia_api_key": "NVIDIA_API_KEY",
-    "google_api_key": "GOOGLE_API_KEY",
-    "minimax_api_key": "MINIMAX_API_KEY",
-    "minimax_base_url": "MINIMAX_BASE_URL",
-    "siliconflow_api_key": "SILICONFLOW_API_KEY",
-    "openrouter_api_key": "OPENROUTER_API_KEY",
-    "atlascloud_api_key": "ATLASCLOUD_API_KEY",
-    "requesty_api_key": "REQUESTY_API_KEY",
-    "novita_api_key": "NOVITA_API_KEY",
-    "mimo_api_key": "MIMO_API_KEY",
-    "mimo_token_plan_api_key": "MIMO_TOKEN_PLAN_API_KEY",
-    "mimo_token_plan_base_url": "MIMO_TOKEN_PLAN_BASE_URL",
-    "opper_api_key": "OPPER_API_KEY",
-    "deepseek_api_key": "DEEPSEEK_API_KEY",
-    "zhipu_api_key": "ZHIPU_API_KEY",
-    "volcengine_api_key": "VOLCENGINE_API_KEY",
-    "dashscope_api_key": "DASHSCOPE_API_KEY",
-    "moonshot_api_key": "MOONSHOT_API_KEY",
-    "kimi_api_key": "KIMI_API_KEY",
-    "custom_openai_api_key": "CUSTOM_OPENAI_API_KEY",
-    "custom_openai_base_url": "CUSTOM_OPENAI_BASE_URL",
-    "custom_anthropic_api_key": "CUSTOM_ANTHROPIC_API_KEY",
-    "custom_anthropic_base_url": "CUSTOM_ANTHROPIC_BASE_URL",
-    "ollama_base_url": "OLLAMA_BASE_URL",
-    "tavily_api_key": "TAVILY_API_KEY",
     "default_mode": "METASCI_SCRIBE_DEFAULT_MODE",
     "default_workdir": "METASCI_SCRIBE_WORKSPACE_DIR",
     "ui_backend": "METASCI_SCRIBE_UI_BACKEND",
@@ -989,18 +885,11 @@ _ENV_MAPPINGS = {
     "gateway_backend_single_shot": "METASCI_SCRIBE_GATEWAY_BACKEND_SINGLE_SHOT",
     "gateway_backend_interactive": "METASCI_SCRIBE_GATEWAY_BACKEND_INTERACTIVE",
     "gateway_backend_standalone": "METASCI_SCRIBE_GATEWAY_BACKEND_STANDALONE",
-    "model_fallbacks": "METASCI_SCRIBE_MODEL_FALLBACKS",
     "model_retry_wait_seconds": "METASCI_SCRIBE_MODEL_RETRY_WAIT_SECONDS",
     "auto_mode_retry_wait_seconds": "METASCI_SCRIBE_AUTO_MODE_RETRY_WAIT_SECONDS",
     "auxiliary_provider": "METASCI_SCRIBE_AUXILIARY_PROVIDER",
     "auxiliary_model": "METASCI_SCRIBE_AUXILIARY_MODEL",
     "reasoning_effort": "METASCI_SCRIBE_REASONING_EFFORT",
-    "openrouter_anthropic_prompt_cache": (
-        "METASCI_SCRIBE_OPENROUTER_ANTHROPIC_PROMPT_CACHE"
-    ),
-    "openrouter_http_referer": "METASCI_SCRIBE_OPENROUTER_HTTP_REFERER",
-    "openrouter_app_title": "METASCI_SCRIBE_OPENROUTER_APP_TITLE",
-    "openrouter_app_categories": "METASCI_SCRIBE_OPENROUTER_APP_CATEGORIES",
     "dangerous_mode": "METASCI_SCRIBE_DANGEROUS_MODE",
     "use_responses_api": "METASCI_SCRIBE_USE_RESPONSES_API",
     "checkpoint_keep_per_thread": "METASCI_SCRIBE_CHECKPOINT_KEEP_PER_THREAD",
@@ -1254,88 +1143,12 @@ def _apply_config_to_env(config: ScribeConfig) -> None:
         os.environ["ANTHROPIC_BASE_URL"] = config.anthropic_base_url
     if config.openai_api_key and not os.environ.get("OPENAI_API_KEY"):
         os.environ["OPENAI_API_KEY"] = config.openai_api_key
-    if config.nvidia_api_key and not os.environ.get("NVIDIA_API_KEY"):
-        os.environ["NVIDIA_API_KEY"] = config.nvidia_api_key
-    if config.google_api_key and not os.environ.get("GOOGLE_API_KEY"):
-        os.environ["GOOGLE_API_KEY"] = config.google_api_key
-    if config.minimax_api_key and not os.environ.get("MINIMAX_API_KEY"):
-        os.environ["MINIMAX_API_KEY"] = config.minimax_api_key
-    if config.minimax_base_url and not os.environ.get("MINIMAX_BASE_URL"):
-        os.environ["MINIMAX_BASE_URL"] = config.minimax_base_url
-    if config.siliconflow_api_key and not os.environ.get("SILICONFLOW_API_KEY"):
-        os.environ["SILICONFLOW_API_KEY"] = config.siliconflow_api_key
-    if config.openrouter_api_key and not os.environ.get("OPENROUTER_API_KEY"):
-        os.environ["OPENROUTER_API_KEY"] = config.openrouter_api_key
-    if config.atlascloud_api_key and not os.environ.get("ATLASCLOUD_API_KEY"):
-        os.environ["ATLASCLOUD_API_KEY"] = config.atlascloud_api_key
-    if config.requesty_api_key and not os.environ.get("REQUESTY_API_KEY"):
-        os.environ["REQUESTY_API_KEY"] = config.requesty_api_key
-    if config.novita_api_key and not os.environ.get("NOVITA_API_KEY"):
-        os.environ["NOVITA_API_KEY"] = config.novita_api_key
-    if config.mimo_api_key and not os.environ.get("MIMO_API_KEY"):
-        os.environ["MIMO_API_KEY"] = config.mimo_api_key
-    if config.mimo_token_plan_api_key and not os.environ.get("MIMO_TOKEN_PLAN_API_KEY"):
-        os.environ["MIMO_TOKEN_PLAN_API_KEY"] = config.mimo_token_plan_api_key
-    if config.mimo_token_plan_base_url and not os.environ.get(
-        "MIMO_TOKEN_PLAN_BASE_URL"
-    ):
-        os.environ["MIMO_TOKEN_PLAN_BASE_URL"] = config.mimo_token_plan_base_url
-    if config.opper_api_key and not os.environ.get("OPPER_API_KEY"):
-        os.environ["OPPER_API_KEY"] = config.opper_api_key
-    if config.deepseek_api_key and not os.environ.get("DEEPSEEK_API_KEY"):
-        os.environ["DEEPSEEK_API_KEY"] = config.deepseek_api_key
-    if config.zhipu_api_key and not os.environ.get("ZHIPU_API_KEY"):
-        os.environ["ZHIPU_API_KEY"] = config.zhipu_api_key
-    if config.volcengine_api_key and not os.environ.get("VOLCENGINE_API_KEY"):
-        os.environ["VOLCENGINE_API_KEY"] = config.volcengine_api_key
-    if config.dashscope_api_key and not os.environ.get("DASHSCOPE_API_KEY"):
-        os.environ["DASHSCOPE_API_KEY"] = config.dashscope_api_key
-    if config.moonshot_api_key and not os.environ.get("MOONSHOT_API_KEY"):
-        os.environ["MOONSHOT_API_KEY"] = config.moonshot_api_key
-    if config.kimi_api_key and not os.environ.get("KIMI_API_KEY"):
-        os.environ["KIMI_API_KEY"] = config.kimi_api_key
-    if config.custom_openai_api_key and not os.environ.get("CUSTOM_OPENAI_API_KEY"):
-        os.environ["CUSTOM_OPENAI_API_KEY"] = config.custom_openai_api_key
-    if config.custom_openai_base_url and not os.environ.get("CUSTOM_OPENAI_BASE_URL"):
-        os.environ["CUSTOM_OPENAI_BASE_URL"] = config.custom_openai_base_url
-    if config.custom_anthropic_api_key and not os.environ.get(
-        "CUSTOM_ANTHROPIC_API_KEY"
-    ):
-        os.environ["CUSTOM_ANTHROPIC_API_KEY"] = config.custom_anthropic_api_key
-    if config.custom_anthropic_base_url and not os.environ.get(
-        "CUSTOM_ANTHROPIC_BASE_URL"
-    ):
-        os.environ["CUSTOM_ANTHROPIC_BASE_URL"] = config.custom_anthropic_base_url
-    if config.ollama_base_url and not os.environ.get("OLLAMA_BASE_URL"):
-        os.environ["OLLAMA_BASE_URL"] = config.ollama_base_url
-    if config.tavily_api_key and not os.environ.get("TAVILY_API_KEY"):
-        os.environ["TAVILY_API_KEY"] = config.tavily_api_key
     if config.reasoning_effort and not os.environ.get(
         "METASCI_SCRIBE_REASONING_EFFORT"
     ):
         os.environ["METASCI_SCRIBE_REASONING_EFFORT"] = config.reasoning_effort
-    if config.openrouter_http_referer and not os.environ.get(
-        "METASCI_SCRIBE_OPENROUTER_HTTP_REFERER"
-    ):
-        os.environ["METASCI_SCRIBE_OPENROUTER_HTTP_REFERER"] = (
-            config.openrouter_http_referer
-        )
-    if config.openrouter_app_title and not os.environ.get(
-        "METASCI_SCRIBE_OPENROUTER_APP_TITLE"
-    ):
-        os.environ["METASCI_SCRIBE_OPENROUTER_APP_TITLE"] = config.openrouter_app_title
-    if config.openrouter_app_categories and not os.environ.get(
-        "METASCI_SCRIBE_OPENROUTER_APP_CATEGORIES"
-    ):
-        os.environ["METASCI_SCRIBE_OPENROUTER_APP_CATEGORIES"] = (
-            config.openrouter_app_categories
-        )
-    if not config.openrouter_anthropic_prompt_cache and not os.environ.get(
-        "METASCI_SCRIBE_OPENROUTER_ANTHROPIC_PROMPT_CACHE"
-    ):
-        os.environ["METASCI_SCRIBE_OPENROUTER_ANTHROPIC_PROMPT_CACHE"] = "false"
     # Written for both values: get_chat_model reads it, and the langgraph dev
-    # subprocess re-resolves config without the CLI's --auth-mode override.
+    # subprocess re-resolves config on its own.
     os.environ["METASCI_SCRIBE_OPENAI_AUTH_MODE"] = config.openai_auth_mode
     # Round-trip dangerous_mode to env so it survives a fresh get_effective_config()
     # (warning banner, run_in_background) and is inherited by the langgraph dev

@@ -125,32 +125,26 @@ class TestScribeConfig:
 
         assert config.anthropic_api_key == ""
         assert config.openai_api_key == ""
-        assert config.tavily_api_key == ""
-        assert config.provider == "anthropic"
-        assert config.model == "claude-sonnet-5-5"
+        assert config.provider == "openai"
+        assert config.model == "gpt-6.1-sol"
         assert config.default_mode == "daemon"
         assert config.default_workdir == ""
         assert config.show_thinking is True
         assert config.ui_backend == "cli"
         assert config.log_level == "warning"
         assert config.reasoning_effort == ""
-        assert config.openrouter_anthropic_prompt_cache is True
-        assert config.openrouter_http_referer == (
-            "https://github.com/EvoScientist/EvoScientist"
-        )
-        assert config.openrouter_app_title == "metasci-scribe"
-        assert config.openrouter_app_categories == "creative-writing,personal-agent"
-        assert config.memory_profile_enabled is True
-        assert config.memory_observations_enabled is True
+        assert config.memory_profile_enabled is False
+        assert config.memory_observations_enabled is False
         assert config.memory_observation_writer == MemoryObservationWriter.ALL
-        assert config.memory_workers_enabled is True
-        assert config.memory_skill_synthesis_enabled is True
+        assert config.memory_workers_enabled is False
+        assert config.memory_skill_synthesis_enabled is False
         assert config.memory_skill_synthesis_mode == MemorySkillSynthesisMode.REVIEW
         assert (
             config.memory_skill_synthesis_cadence == MemorySkillSynthesisCadence.WEEKLY
         )
         assert config.memory_skill_synthesis_time == "03:00"
-        assert config.ollama_base_url == ""
+        assert config.enable_async_subagents is False
+        assert config.enable_scheduler is False
 
     def test_bind_hosts_default_to_loopback(self):
         """The server stays off the network until asked.
@@ -195,9 +189,10 @@ class TestScribeConfig:
         assert config.openai_auth_mode == "api_key"
 
     def test_openai_auth_mode_set(self):
-        """Test that openai_auth_mode can be set."""
-        config = ScribeConfig(openai_auth_mode="oauth")
-        assert config.openai_auth_mode == "oauth"
+        """chatgpt_plan is a reserved value; anything else falls back."""
+        config = ScribeConfig(openai_auth_mode="chatgpt_plan")
+        assert config.openai_auth_mode == "chatgpt_plan"
+        assert ScribeConfig(openai_auth_mode="oauth").openai_auth_mode == "api_key"
 
     def test_custom_values(self):
         """Test that custom values can be set."""
@@ -354,24 +349,20 @@ class TestLoadSaveReset:
         path = get_config_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
-            "provider: minimax\n"
-            "minimax_base_url:\n"
-            "mimo_token_plan_base_url:\n"
-            "langgraph_dev_port:\n"
+            "provider: anthropic\nanthropic_base_url:\nlanggraph_dev_port:\n"
         )
 
         config = load_config()
 
-        assert config.provider == "minimax"
-        assert config.minimax_base_url == ""
-        assert config.mimo_token_plan_base_url == ""
+        assert config.provider == "anthropic"
+        assert config.anthropic_base_url == ""
         assert config.langgraph_dev_port == ScribeConfig().langgraph_dev_port
 
     def test_load_returns_defaults_when_no_file(self, temp_config_dir, clean_env):
         """Test that load returns defaults when config file doesn't exist."""
         config = load_config()
-        assert config.provider == "anthropic"
-        assert config.model == "claude-sonnet-5-5"
+        assert config.provider == "openai"
+        assert config.model == "gpt-6.1-sol"
 
     def test_save_creates_file(self, temp_config_dir, clean_env):
         """Test that save creates the config file."""
@@ -630,7 +621,7 @@ class TestPriorityChain:
         ]:
             monkeypatch.delenv(key, raising=False)
         config = get_effective_config()
-        assert config.provider == "anthropic"
+        assert config.provider == "openai"
         assert config.default_mode == "daemon"
 
     def test_file_overrides_defaults(self, temp_config_dir, clean_env):
@@ -846,45 +837,10 @@ class TestPriorityChain:
     def test_env_openai_auth_mode_override(self, temp_config_dir, monkeypatch):
         """Test openai_auth_mode from env overrides file."""
         save_config(ScribeConfig(openai_auth_mode="api_key"))
-        monkeypatch.setenv("METASCI_SCRIBE_OPENAI_AUTH_MODE", "oauth")
+        monkeypatch.setenv("METASCI_SCRIBE_OPENAI_AUTH_MODE", "chatgpt_plan")
 
         config = get_effective_config()
-        assert config.openai_auth_mode == "oauth"
-
-    def test_env_openrouter_anthropic_prompt_cache_opt_out(
-        self, temp_config_dir, monkeypatch
-    ):
-        """Test OpenRouter Anthropic prompt cache opt-out env overrides file."""
-        save_config(ScribeConfig(openrouter_anthropic_prompt_cache=True))
-        monkeypatch.setenv("METASCI_SCRIBE_OPENROUTER_ANTHROPIC_PROMPT_CACHE", "false")
-
-        config = get_effective_config()
-        assert config.openrouter_anthropic_prompt_cache is False
-
-    def test_env_openrouter_app_attribution_override(
-        self, temp_config_dir, monkeypatch
-    ):
-        """OpenRouter app-attribution env vars should override file config."""
-        save_config(ScribeConfig())
-        monkeypatch.setenv(
-            "METASCI_SCRIBE_OPENROUTER_HTTP_REFERER", "https://acme.test"
-        )
-        monkeypatch.setenv("METASCI_SCRIBE_OPENROUTER_APP_TITLE", "Acme")
-        monkeypatch.setenv(
-            "METASCI_SCRIBE_OPENROUTER_APP_CATEGORIES", "cli-agent,programming-app"
-        )
-
-        config = get_effective_config()
-        assert config.openrouter_http_referer == "https://acme.test"
-        assert config.openrouter_app_title == "Acme"
-        assert config.openrouter_app_categories == "cli-agent,programming-app"
-
-    def test_set_openrouter_anthropic_prompt_cache(self, temp_config_dir, clean_env):
-        """Test OpenRouter Anthropic prompt cache can be set through config."""
-        save_config(ScribeConfig())
-
-        assert set_config_value("openrouter_anthropic_prompt_cache", "false") is True
-        assert get_config_value("openrouter_anthropic_prompt_cache") is False
+        assert config.openai_auth_mode == "chatgpt_plan"
 
 
 # =============================================================================
@@ -898,16 +854,12 @@ class TestApplyConfigToEnv:
         config = ScribeConfig(
             anthropic_api_key="config-ant-key",
             openai_api_key="config-oai-key",
-            atlascloud_api_key="config-atlas-key",
-            tavily_api_key="config-tav-key",
         )
 
         apply_config_to_env(config)
 
         assert os.environ.get("ANTHROPIC_API_KEY") == "config-ant-key"
         assert os.environ.get("OPENAI_API_KEY") == "config-oai-key"
-        assert os.environ.get("ATLASCLOUD_API_KEY") == "config-atlas-key"
-        assert os.environ.get("TAVILY_API_KEY") == "config-tav-key"
 
     def test_does_not_override_existing_env(self, monkeypatch):
         """Test that existing env vars are not overridden."""
@@ -925,78 +877,6 @@ class TestApplyConfigToEnv:
 
         assert os.environ.get("ANTHROPIC_API_KEY") is None
         assert os.environ.get("OPENAI_API_KEY") is None
-        assert os.environ.get("ATLASCLOUD_API_KEY") is None
-        assert (
-            os.environ.get("METASCI_SCRIBE_OPENROUTER_ANTHROPIC_PROMPT_CACHE") is None
-        )
-
-    def test_openrouter_anthropic_prompt_cache_opt_out_applied(
-        self, clean_env, monkeypatch
-    ):
-        """Test OpenRouter Anthropic prompt cache opt-out config is applied to env."""
-        monkeypatch.delenv(
-            "METASCI_SCRIBE_OPENROUTER_ANTHROPIC_PROMPT_CACHE", raising=False
-        )
-        config = ScribeConfig(openrouter_anthropic_prompt_cache=False)
-        apply_config_to_env(config)
-
-        assert os.environ.get("METASCI_SCRIBE_OPENROUTER_ANTHROPIC_PROMPT_CACHE") == (
-            "false"
-        )
-
-    def test_openrouter_app_attribution_applied_to_env(self, clean_env, monkeypatch):
-        """Config app-attribution values are exported to env for models.py."""
-        for env in (
-            "METASCI_SCRIBE_OPENROUTER_HTTP_REFERER",
-            "METASCI_SCRIBE_OPENROUTER_APP_TITLE",
-            "METASCI_SCRIBE_OPENROUTER_APP_CATEGORIES",
-        ):
-            monkeypatch.delenv(env, raising=False)
-        config = ScribeConfig(
-            openrouter_http_referer="https://acme.test",
-            openrouter_app_title="Acme",
-            openrouter_app_categories="cli-agent,programming-app",
-        )
-        apply_config_to_env(config)
-
-        assert os.environ.get("METASCI_SCRIBE_OPENROUTER_HTTP_REFERER") == (
-            "https://acme.test"
-        )
-        assert os.environ.get("METASCI_SCRIBE_OPENROUTER_APP_TITLE") == "Acme"
-        assert os.environ.get("METASCI_SCRIBE_OPENROUTER_APP_CATEGORIES") == (
-            "cli-agent,programming-app"
-        )
-
-    def test_openrouter_app_attribution_env_not_overwritten(
-        self, clean_env, monkeypatch
-    ):
-        """apply_config_to_env must not clobber an already-set attribution env var."""
-        monkeypatch.setenv("METASCI_SCRIBE_OPENROUTER_APP_TITLE", "existing-title")
-        config = ScribeConfig(openrouter_app_title="config-title")
-        apply_config_to_env(config)
-
-        assert os.environ.get("METASCI_SCRIBE_OPENROUTER_APP_TITLE") == "existing-title"
-
-    def test_openrouter_app_attribution_empty_config_not_applied(
-        self, clean_env, monkeypatch
-    ):
-        """Empty-string attribution config must not create env vars."""
-        for env in (
-            "METASCI_SCRIBE_OPENROUTER_HTTP_REFERER",
-            "METASCI_SCRIBE_OPENROUTER_APP_TITLE",
-            "METASCI_SCRIBE_OPENROUTER_APP_CATEGORIES",
-        ):
-            monkeypatch.delenv(env, raising=False)
-        config = ScribeConfig(
-            openrouter_http_referer="",
-            openrouter_app_title="",
-            openrouter_app_categories="",
-        )
-        apply_config_to_env(config)
-
-        assert os.environ.get("METASCI_SCRIBE_OPENROUTER_HTTP_REFERER") is None
-        assert os.environ.get("METASCI_SCRIBE_OPENROUTER_APP_TITLE") is None
-        assert os.environ.get("METASCI_SCRIBE_OPENROUTER_APP_CATEGORIES") is None
 
     def test_dangerous_mode_round_trips_to_env(self, clean_env, monkeypatch):
         """dangerous_mode set via CLI override must survive a fresh re-read.
@@ -1036,31 +916,15 @@ class TestApplyConfigToEnv:
         apply_config_to_env(ScribeConfig())  # dangerous off
         assert os.environ.get("METASCI_SCRIBE_DANGEROUS_MODE") is None
 
-    def test_ollama_base_url_applied(self, clean_env, monkeypatch):
-        """Test that ollama_base_url is applied to OLLAMA_BASE_URL env var."""
-        monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
-        config = ScribeConfig(ollama_base_url="http://localhost:11434")
-        apply_config_to_env(config)
+    def test_openai_auth_mode_chatgpt_plan_is_exported(self, clean_env):
+        apply_config_to_env(ScribeConfig(openai_auth_mode="chatgpt_plan"))
 
-        assert os.environ.get("OLLAMA_BASE_URL") == "http://localhost:11434"
-
-    def test_ollama_base_url_not_overridden(self, monkeypatch):
-        """Test that existing OLLAMA_BASE_URL env var is not overridden."""
-        monkeypatch.setenv("OLLAMA_BASE_URL", "http://existing:11434")
-        config = ScribeConfig(ollama_base_url="http://new:11434")
-        apply_config_to_env(config)
-
-        assert os.environ.get("OLLAMA_BASE_URL") == "http://existing:11434"
-
-    def test_openai_auth_mode_oauth_is_exported(self, clean_env):
-        apply_config_to_env(ScribeConfig(openai_auth_mode="oauth"))
-
-        assert os.environ["METASCI_SCRIBE_OPENAI_AUTH_MODE"] == "oauth"
+        assert os.environ["METASCI_SCRIBE_OPENAI_AUTH_MODE"] == "chatgpt_plan"
 
     def test_openai_auth_mode_api_key_replaces_a_stale_value(
         self, clean_env, monkeypatch
     ):
-        monkeypatch.setenv("METASCI_SCRIBE_OPENAI_AUTH_MODE", "oauth")
+        monkeypatch.setenv("METASCI_SCRIBE_OPENAI_AUTH_MODE", "chatgpt_plan")
 
         apply_config_to_env(ScribeConfig(openai_auth_mode="api_key"))
 
@@ -1097,10 +961,10 @@ class TestAuxiliaryModelConfig:
 
     def test_get_set_value(self, temp_config_dir, clean_env):
         save_config(ScribeConfig())
-        assert set_config_value("auxiliary_model", "qwen3.6-flash") is True
-        assert set_config_value("auxiliary_provider", "dashscope") is True
-        assert get_config_value("auxiliary_model") == "qwen3.6-flash"
-        assert get_config_value("auxiliary_provider") == "dashscope"
+        assert set_config_value("auxiliary_model", "gpt-6-luna") is True
+        assert set_config_value("auxiliary_provider", "openai") is True
+        assert get_config_value("auxiliary_model") == "gpt-6-luna"
+        assert get_config_value("auxiliary_provider") == "openai"
 
     def test_env_overrides_file(self, temp_config_dir, monkeypatch):
         save_config(ScribeConfig(auxiliary_model="claude-haiku-4-5"))
@@ -1116,25 +980,25 @@ def test_scheduler_config_defaults_and_env(monkeypatch):
     from metasci_scribe.config.settings import ScribeConfig, get_effective_config
 
     c = ScribeConfig()
-    assert c.enable_scheduler is True
+    assert c.enable_scheduler is False
     assert c.scheduler_default_timezone == ""
-    assert c.memory_skill_synthesis_enabled is True
+    assert c.memory_skill_synthesis_enabled is False
     assert c.memory_skill_synthesis_mode == MemorySkillSynthesisMode.REVIEW
     assert c.memory_skill_synthesis_cadence == MemorySkillSynthesisCadence.WEEKLY
     assert c.memory_skill_synthesis_time == "03:00"
 
-    monkeypatch.setenv("METASCI_SCRIBE_ENABLE_SCHEDULER", "false")
+    monkeypatch.setenv("METASCI_SCRIBE_ENABLE_SCHEDULER", "true")
     eff = get_effective_config({})
-    assert eff.enable_scheduler is False
+    assert eff.enable_scheduler is True
 
     monkeypatch.setenv("METASCI_SCRIBE_SCHEDULER_DEFAULT_TIMEZONE", "America/New_York")
-    monkeypatch.setenv("METASCI_SCRIBE_MEMORY_SKILL_SYNTHESIS_ENABLED", "false")
+    monkeypatch.setenv("METASCI_SCRIBE_MEMORY_SKILL_SYNTHESIS_ENABLED", "true")
     monkeypatch.setenv("METASCI_SCRIBE_MEMORY_SKILL_SYNTHESIS_MODE", "auto")
     monkeypatch.setenv("METASCI_SCRIBE_MEMORY_SKILL_SYNTHESIS_CADENCE", "monthly")
     monkeypatch.setenv("METASCI_SCRIBE_MEMORY_SKILL_SYNTHESIS_TIME", "4:30")
     eff2 = get_effective_config({})
     assert eff2.scheduler_default_timezone == "America/New_York"
-    assert eff2.memory_skill_synthesis_enabled is False
+    assert eff2.memory_skill_synthesis_enabled is True
     assert eff2.memory_skill_synthesis_mode == MemorySkillSynthesisMode.AUTO
     assert eff2.memory_skill_synthesis_cadence == MemorySkillSynthesisCadence.MONTHLY
     assert eff2.memory_skill_synthesis_time == "04:30"

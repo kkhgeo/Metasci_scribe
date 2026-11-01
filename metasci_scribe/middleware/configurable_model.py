@@ -15,7 +15,6 @@ hits this middleware and re-resolves the chat model fresh.
 When ``configurable.model`` is absent, the middleware is a pass-through —
 safe to install on the CLI's in-process agent too.
 
-The middleware mirrors the pattern used by ``ModelFallbackMiddleware``:
 ``request.override(model=new_model)`` does not break tool binding, because
 the downstream model-invocation node re-binds tools per request.
 

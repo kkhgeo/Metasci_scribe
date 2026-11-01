@@ -80,7 +80,6 @@ def _run(
         auto_mode=None,
         ask_user=False,
         dangerous=False,
-        auth_mode=None,
         host=None,
         output_format=None,
     )
@@ -251,7 +250,6 @@ def _run_prompt(
         auto_mode=None,
         ask_user=False,
         dangerous=False,
-        auth_mode=None,
         host=None,
         output_format=None,
     )

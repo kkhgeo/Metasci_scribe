@@ -4,7 +4,6 @@ Re-exports middleware classes and factory functions so that existing
 ``from metasci_scribe.middleware import X`` imports continue to work.
 """
 
-from .active_team import ActiveTeamMiddleware, create_active_team_middleware
 from .ask_user import (
     AskUserMiddleware,
     AskUserRequest,
@@ -29,12 +28,7 @@ from .memory_lifecycle import (
     create_memory_lifecycle_middleware,
     default_memory_scheduler,
 )
-from .model_fallback import ModelFallbackMiddleware
 from .runtime_context import RuntimeContextMiddleware, create_runtime_context_middleware
-from .scheduler import (
-    SchedulerMiddleware,
-    create_scheduler_middleware,
-)
 from .skill_pin import SkillPinMiddleware
 from .skills_reload import SkillsReloadMiddleware
 from .summarization import create_per_run_summarization_middleware
@@ -44,7 +38,6 @@ from .tool_selector import create_tool_selector_middleware
 from .utils import disable_thinking
 
 __all__ = [
-    "ActiveTeamMiddleware",
     "AskUserMiddleware",
     "AskUserRequest",
     "AskUserWidgetResult",
@@ -54,23 +47,19 @@ __all__ = [
     "ErrorNormalizationMiddleware",
     "EvoMemoryLifecycleMiddleware",
     "EvoMemoryMiddleware",
-    "ModelFallbackMiddleware",
     "Question",
     "RuntimeContextMiddleware",
-    "SchedulerMiddleware",
     "SkillPinMiddleware",
     "SkillsReloadMiddleware",
     "ToolErrorHandlerMiddleware",
     "ToolHistoryRepairMiddleware",
     "compute_context_editing_trigger",
-    "create_active_team_middleware",
     "create_code_interpreter_middleware",
     "create_context_editing_middleware",
     "create_memory_lifecycle_middleware",
     "create_memory_middleware",
     "create_per_run_summarization_middleware",
     "create_runtime_context_middleware",
-    "create_scheduler_middleware",
     "create_tool_selector_middleware",
     "default_memory_scheduler",
     "disable_thinking",

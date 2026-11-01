@@ -64,14 +64,6 @@ def _anthropic_model(base_url: str | None = None):
     )
 
 
-def _openrouter_model():
-    return _fake_model("langchain_openrouter.chat_models", "ChatOpenRouter")
-
-
-def _google_model():
-    return _fake_model("langchain_google_genai.chat_models", "ChatGoogleGenerativeAI")
-
-
 def _make_exc(cls_name: str = "APIError", message: str = "boom", **attrs):
     """Build a plain-Exception subclass carrying arbitrary attributes
     (``status_code``, ``code``, ``type``, ``request_id`` …).
@@ -94,15 +86,6 @@ class TestNormalize:
         assert wrapped.provider == "openai"
         assert wrapped.status_code == 429
 
-    def test_openai_routed_deepseek_tagged_by_base_url(self):
-        req = _request(_openai_model(base_url="https://api.deepseek.com"))
-        wrapped = _normalize(req, _make_exc(message="quota exceeded"))
-        assert wrapped.provider == "deepseek"
-
-    def test_openai_routed_moonshot_tagged_by_base_url(self):
-        req = _request(_openai_model(base_url="https://api.moonshot.cn/v1"))
-        assert _normalize(req, _make_exc()).provider == "moonshot"
-
     def test_unknown_openai_compat_host_tagged_openai_compat(self):
         req = _request(_openai_model(base_url="https://internal.corp/v1"))
         assert _normalize(req, _make_exc()).provider == "openai_compat"
@@ -111,23 +94,9 @@ class TestNormalize:
         req = _request(_anthropic_model(base_url="https://api.anthropic.com"))
         assert _normalize(req, _make_exc()).provider == "anthropic"
 
-    def test_anthropic_routed_minimax_tagged_by_base_url(self):
-        req = _request(_anthropic_model(base_url="https://api.minimaxi.com/anthropic"))
-        assert _normalize(req, _make_exc()).provider == "minimax"
-
     def test_unknown_anthropic_compat_host_tagged_anthropic_compat(self):
         req = _request(_anthropic_model(base_url="https://internal.corp/v1"))
         assert _normalize(req, _make_exc()).provider == "anthropic_compat"
-
-    def test_openrouter_tagged_from_class_alone(self):
-        req = _request(_openrouter_model())
-        wrapped = _normalize(req, _make_exc(cls_name="UnauthorizedResponseError"))
-        assert wrapped.provider == "openrouter"
-        assert wrapped.class_qualname.endswith(".UnauthorizedResponseError")
-
-    def test_google_genai_tagged_from_class_alone(self):
-        req = _request(_google_model())
-        assert _normalize(req, _make_exc()).provider == "google_genai"
 
     def test_sdk_subclass_tagged_from_base_class(self):
         sdk_class = type(
@@ -145,13 +114,6 @@ class TestNormalize:
 
         assert _normalize(_request(model), _make_exc()).provider == "openai"
 
-    def test_deepseek_subclass_precedes_openai_base(self, monkeypatch):
-        from metasci_scribe.llm.deepseek import EvoChatDeepSeek
-
-        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
-        req = _request(EvoChatDeepSeek(model="deepseek-v4-flash"))
-        assert _normalize(req, _make_exc()).provider == "deepseek"
-
     def test_unrecognized_model_class_returns_none(self):
         req = _request(_fake_model("some.other.pkg", "SomeModel"))
         assert _normalize(req, _make_exc()) is None
@@ -161,12 +123,10 @@ class TestNormalize:
         assert _normalize(SimpleNamespace(), _make_exc()) is None
 
     def test_already_normalized_exception_passes_through(self):
-        """``ModelFallbackMiddleware`` wraps against the failing model
-        before re-raising. The outer chain's ``_normalize`` must NOT
-        double-wrap — otherwise attribution flips back to the original
-        request's model.
+        """An error wrapped against its own model must NOT be wrapped again —
+        otherwise attribution flips back to the request's model.
         """
-        req = _request(_openrouter_model())
+        req = _request(_openai_model())
         pre_wrapped = ProviderStreamError(
             provider="moonshot",
             class_qualname="openai.RateLimitError",
@@ -294,11 +254,11 @@ class TestMiddleware:
         async def handler(_req):
             raise raised
 
-        req = _request(_openrouter_model())
+        req = _request(_openai_model())
         mw = ErrorNormalizationMiddleware()
         with pytest.raises(ProviderStreamError) as excinfo:
             self._run_awrap(mw, req, handler)
-        assert excinfo.value.provider == "openrouter"
+        assert excinfo.value.provider == "openai"
         assert excinfo.value.__cause__ is raised
 
     def test_awrap_passes_through_non_provider_model_exception(self):
@@ -346,7 +306,7 @@ class TestMiddleware:
         they're either control-flow signals (interrupts, HITL) or
         graph-level structural errors, neither is a provider incident.
         """
-        req = _request(_openrouter_model())  # recognized — would normally wrap
+        req = _request(_openai_model())  # recognized — would normally wrap
         mw = ErrorNormalizationMiddleware()
 
         for raised in self._langgraph_error_samples():
@@ -375,7 +335,7 @@ class TestMiddleware:
         async def handler(_req):
             raise raised
 
-        req = _request(_openrouter_model())  # recognized — would normally wrap
+        req = _request(_openai_model())  # recognized — would normally wrap
         mw = ErrorNormalizationMiddleware()
         with pytest.raises(ContextOverflowError) as excinfo:
             self._run_awrap(mw, req, handler)
@@ -411,17 +371,17 @@ class TestMiddleware:
         def handler(_req):
             raise raised
 
-        req = _request(_openrouter_model())
+        req = _request(_openai_model())
         mw = ErrorNormalizationMiddleware()
         with pytest.raises(ProviderStreamError) as excinfo:
             mw.wrap_model_call(request=req, handler=handler)
-        assert excinfo.value.provider == "openrouter"
+        assert excinfo.value.provider == "openai"
 
     def test_success_path_returns_handler_result(self):
         async def handler(_req):
             return "ok"
 
-        req = _request(_openrouter_model())
+        req = _request(_openai_model())
         mw = ErrorNormalizationMiddleware()
         assert self._run_awrap(mw, req, handler) == "ok"
 

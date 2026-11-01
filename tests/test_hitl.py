@@ -596,7 +596,6 @@ class TestInterruptOnWiring:
             assert set(cfg) == {
                 "execute",
                 "run_in_background",
-                "schedule_task",
                 "delete",
             }
             for entry in cfg.values():
@@ -850,29 +849,6 @@ class TestResolverUsesPolicy:
             )
         assert called.get("yes") is True
 
-    def test_schedule_task_always_prompts_not_auto_cleared(self, monkeypatch):
-        # schedule_task is armed but not a shell tool → must prompt, never fall
-        # through the "not a shell tool → auto-approve" branch.
-        from metasci_scribe.stream import display
-
-        monkeypatch.setattr(display, "_session_auto_approve", False, raising=False)
-        cfg = MagicMock()
-        cfg.auto_approve = False
-        cfg.dangerous_mode = False
-        cfg.shell_allow_list = ""
-        called = {}
-
-        def _prompt(_requests):
-            called["yes"] = True
-            return [{"type": "approve"}]
-
-        with patch("metasci_scribe.agent._ensure_config", return_value=cfg):
-            display._resolve_hitl_approval(
-                {"action_requests": [{"name": "schedule_task", "args": {}}]},
-                prompt_fn=_prompt,
-            )
-        assert called.get("yes") is True
-
     def test_malformed_request_is_not_auto_approved(self, monkeypatch):
         """A non-dict action request must never be silently approved."""
         from metasci_scribe.stream import display
@@ -963,14 +939,14 @@ class TestAsyncSubagentGuard:
     def test_async_factory_guards_research_agents(self, workspace):
         # Research async agents keep both the dangerous-command guard AND the
         # delete refusal on (no interactive approval path → relay to orchestrator).
-        for name in ("writing-agent", "data-analysis-agent"):
+        for name in ("writing-agent",):
             kw = self._factory_kwargs_for(name, workspace)
             assert kw.get("guard_dangerous") is True
             assert kw.get("refuse_delete") is True
 
     def test_async_factory_does_not_guard_internal_agents(self, workspace):
-        # Scheduler and any other internal async graph run unguarded in any mode.
-        kw = self._factory_kwargs_for("scheduler", workspace)
+        # Any other internal async graph runs unguarded in any mode.
+        kw = self._factory_kwargs_for("internal-graph", workspace)
         assert kw.get("guard_dangerous") is False
         assert kw.get("refuse_delete") is False
 

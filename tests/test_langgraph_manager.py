@@ -499,6 +499,7 @@ class TestEnsureLanggraphDev:
         cfg = ScribeConfig()
         cfg.enable_async_subagents = False
         cfg.memory_workers_enabled = True
+        cfg.memory_profile_enabled = True  # a worker needs something to maintain
         cfg.langgraph_dev_port = 6174
         cfg.langgraph_dev_file_persistence = True
         proc = MagicMock()

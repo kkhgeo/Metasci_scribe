@@ -208,27 +208,14 @@ class ResumeCommand(Command):
 
         metadata = await gateway.get_thread_metadata(resolved) or {}
         # A thread from another workspace switches everything: skills,
-        # experts, memory and the folder the agent works in.
+        # memory and the folder the agent works in.
         restored = SessionDirs.from_stored(
             metadata.get("workspace_dir"), metadata.get("run_dir")
         )
         if restored is not None:
             ctx.dirs = restored
 
-        switched_thread = resolved != ctx.thread_id
         ctx.thread_id = resolved
-
-        # Invitations are session-scoped (see SessionRuntime.active_teams);
-        # resuming a different thread is a session switch, so release them —
-        # uniform with /new. Resuming the current thread keeps them.
-        runtime = ctx.session_runtime
-        if switched_thread and runtime is not None and runtime.active_teams:
-            dismissed = list(runtime.active_teams)
-            runtime.active_teams = []
-            ctx.ui.append_system(
-                f"Dismissed experts on session switch: {', '.join(dismissed)}",
-                style="dim",
-            )
 
         # Signal session change to UI
         if hasattr(ctx.ui, "handle_session_resume"):
@@ -260,23 +247,7 @@ class NewCommand(Command):
     category = "Session"
 
     async def execute(self, ctx: CommandContext, args: list[str]) -> None:
-        # ``/new`` means fresh state — release any invited experts. Uniform
-        # with the explicit ``/expert clear`` path; avoids
-        # the "why is idea-brainstorm still active in my new thread?"
-        # surprise. Users who want to reuse an invite in the next thread can
-        # re-invite explicitly. Cleared only after the new session actually
-        # exists, so a failed start leaves the current session intact.
-        runtime = ctx.session_runtime
-        dismissed: list[str] = []
-        if runtime is not None and runtime.active_teams:
-            dismissed = list(runtime.active_teams)
         await ctx.ui.start_new_session()
-        if dismissed:
-            runtime.active_teams = []
-            ctx.ui.append_system(
-                f"Dismissed experts on new session: {', '.join(dismissed)}",
-                style="dim",
-            )
 
 
 class ClearCommand(Command):

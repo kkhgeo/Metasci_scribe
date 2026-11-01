@@ -69,8 +69,8 @@ def test_patch_table_resolves_known_model_name():
 
 
 def test_patch_table_strips_provider_prefix():
-    full = SimpleNamespace(model_name="minimax/minimax-m3", profile=None)
-    short = SimpleNamespace(model_name="minimax-m3", profile=None)
+    full = SimpleNamespace(model_name="anthropic/claude-sonnet-5-5", profile=None)
+    short = SimpleNamespace(model_name="claude-sonnet-5-5", profile=None)
 
     assert get_context_window(full) == 1_000_000
     assert get_context_window(short) == 1_000_000
@@ -109,15 +109,13 @@ def test_claude_family_pattern_covers_all_variants():
 
 
 def test_dict_entry_overrides_family_pattern():
-    # Qwen 3.6 closed-source default is 1M (family), but open-source -27b
-    # variant is 262K (dict override). Dict wins because it's checked first.
-    closed = SimpleNamespace(model_name="qwen/qwen3.6-flash", profile=None)
-    open_27b = SimpleNamespace(model_name="qwen/qwen3.6-27b", profile=None)
-    open_plus = SimpleNamespace(model_name="qwen3.6-plus", profile=None)
+    # Claude is 1M (family), but Haiku 4.5 is 200K (dict override). Dict wins
+    # because it is checked first.
+    family = SimpleNamespace(model_name="claude-opus-5-5", profile=None)
+    haiku = SimpleNamespace(model_name="anthropic/claude-haiku-4-5", profile=None)
 
-    assert get_context_window(closed) == 1_000_000
-    assert get_context_window(open_27b) == 262_000
-    assert get_context_window(open_plus) == 1_000_000
+    assert get_context_window(family) == 1_000_000
+    assert get_context_window(haiku) == 200_000
 
 
 def test_claude_3x_matches_family_but_upstream_profile_wins_in_practice():
@@ -150,15 +148,15 @@ def test_apply_injects_into_empty_profile():
 
 def test_apply_preserves_existing_profile_keys():
     model = SimpleNamespace(
-        model_name="qwen3.6-flash",
-        profile={"name": "Qwen 3.6 Flash"},
+        model_name="gpt-6-sol",
+        profile={"name": "GPT 6 Sol"},
     )
 
     apply_known_context_window(model)
 
     assert model.profile == {
-        "name": "Qwen 3.6 Flash",
-        "max_input_tokens": 1_000_000,
+        "name": "GPT 6 Sol",
+        "max_input_tokens": 1_050_000,
     }
 
 
@@ -195,15 +193,8 @@ def test_apply_handles_non_dict_profile_safely():
 
 
 def test_lookup_is_case_insensitive():
-    # MiniMax uses capitalized IDs like "MiniMax-M3"
-    minimax = SimpleNamespace(model_name="MiniMax-M3", profile=None)
-    assert get_context_window(minimax) == 1_000_000
+    claude = SimpleNamespace(model_name="Claude-Opus-5-5", profile=None)
+    assert get_context_window(claude) == 1_000_000
 
-    # GLM-5 capitalized variant
-    glm = SimpleNamespace(model_name="Pro/zai-org/GLM-5", profile=None)
-    assert get_context_window(glm) == 203_000
-
-
-def test_volcengine_glm_5_2_alias_keeps_exact_context_window():
-    model = SimpleNamespace(model_name="glm-5-2", profile=None)
-    assert get_context_window(model) == 1_000_000
+    gpt = SimpleNamespace(model_name="Vendor/GPT-6-Sol", profile=None)
+    assert get_context_window(gpt) == 1_050_000

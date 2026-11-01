@@ -4,14 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-import ssl
 from types import SimpleNamespace
 
-import aiohttp
 import httpx
 import httpx2
 import pytest
-import requests
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
 
@@ -104,26 +101,6 @@ def _anthropic(handler):
     return model
 
 
-def _openrouter(handler, *, streaming=True):
-    import openrouter
-    import openrouter.utils as oru
-    from langchain_openrouter import ChatOpenRouter
-
-    model = ChatOpenRouter(
-        model="anthropic/claude-haiku-5.5",
-        api_key="sk-or-test-xxxxxxxxxx",
-        max_retries=0,
-        streaming=streaming,
-    )
-    model.client = openrouter.OpenRouter(
-        retry_config=oru.RetryConfig("none", oru.BackoffStrategy(1, 1, 1, 1), False),
-        api_key="sk-or-test-xxxxxxxxxx",
-        async_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
-        client=httpx.Client(transport=httpx.MockTransport(handler)),
-    )
-    return model
-
-
 _AN_HEAD = [
     (
         "event: message_start\ndata: "
@@ -196,21 +173,6 @@ def _error_chunk(code):
         + "\n\n"
     ).encode()
 
-
-_OR_NO_CHOICES = (
-    "data: "
-    + json.dumps(
-        {
-            "id": "g",
-            "object": "chat.completion.chunk",
-            "created": 1,
-            "model": "m",
-            "choices": [],
-            "error": {"code": 502, "message": "Provider returned error"},
-        }
-    )
-    + "\n\n"
-).encode()
 
 CASES = [
     (
@@ -359,32 +321,6 @@ CASES = [
         lambda: _anthropic(_sse(_AN_HEAD, httpx2.RemoteProtocolError("peer closed"))),
         _astream_all,
     ),
-    (
-        "openrouter 503",
-        True,
-        lambda: _openrouter(
-            lambda r: httpx.Response(
-                503,
-                headers={"content-type": "application/json"},
-                json={"error": {"code": 503, "message": "down"}},
-            )
-        ),
-        _astream_all,
-    ),
-    (
-        "openrouter mid-stream disconnect",
-        True,
-        lambda: _openrouter(
-            _sse1([_oa_chunk("Half")], httpx.RemoteProtocolError("peer closed"))
-        ),
-        _astream_all,
-    ),
-    (
-        "openrouter error chunk without choices",
-        True,
-        lambda: _openrouter(_sse1([_oa_chunk("Half"), _OR_NO_CHOICES])),
-        _astream_all,
-    ),
 ]
 
 
@@ -395,53 +331,6 @@ def test_classification_on_real_sdk_exceptions(label, expected, make, how):
     exc = asyncio.run(_through_normalization(make(), how))
     assert exc is not None, label
     assert is_transient(exc) is expected, f"{label}: {type(exc).__name__}: {exc}"
-
-
-def _ssl_key():
-    from aiohttp.client_reqrep import ConnectionKey
-
-    return ConnectionKey("h", 443, True, True, None, None, None)
-
-
-@pytest.mark.parametrize(
-    ("make", "expected"),
-    [
-        (lambda: requests.exceptions.ReadTimeout("read timed out"), True),
-        (lambda: requests.exceptions.ConnectionError("connection reset"), True),
-        (lambda: requests.exceptions.SSLError("certificate verify failed"), False),
-        (lambda: aiohttp.ServerDisconnectedError(), True),
-        (lambda: aiohttp.ServerTimeoutError("timeout"), True),
-        (lambda: aiohttp.ClientSSLError(_ssl_key(), ssl.SSLError(1, "bad")), False),
-        (
-            lambda: aiohttp.ClientConnectorCertificateError(
-                _ssl_key(), ssl.SSLCertVerificationError(1, "self-signed")
-            ),
-            False,
-        ),
-        (lambda: aiohttp.InvalidURL("not a url"), False),
-        (lambda: requests.exceptions.InvalidURL("not a url"), False),
-    ],
-    ids=[
-        "requests-timeout",
-        "requests-reset",
-        "requests-ssl",
-        "aiohttp-disconnect",
-        "aiohttp-timeout",
-        "aiohttp-ssl",
-        "aiohttp-certificate",
-        "aiohttp-invalid-url",
-        "requests-invalid-url",
-    ],
-)
-def test_the_nvidia_clients_transport_errors(make, expected):
-    """The NVIDIA client raises these raw, past the normalization layer."""
-    exc = make()
-
-    async def _how(_model):
-        raise exc
-
-    normalized = asyncio.run(_through_normalization(SimpleNamespace(), _how))
-    assert is_transient(normalized) is expected
 
 
 def test_an_implicit_context_is_not_followed():
@@ -558,7 +447,7 @@ def test_describe_failure_prefers_normalized_fields():
 
 
 def test_body_level_4xx_is_excluded_before_any_positive_signal():
-    """A deterministic status inside a 200 body or an OpenRouter message wins over ``server_error``."""
+    """A deterministic status inside a 200 body wins over ``server_error``."""
     assert (
         is_transient(
             ValueError({"code": 401, "type": "server_error", "message": "key"})
@@ -567,8 +456,6 @@ def test_body_level_4xx_is_excluded_before_any_positive_signal():
     )
     assert is_transient(ValueError({"code": "403", "type": "server_error"})) is False
     assert is_transient(ValueError({"code": 503, "type": "server_error"})) is True
-    assert is_transient(ValueError("Provider returned error (code: 403)")) is False
-    assert is_transient(ValueError("Provider returned error (code: 502)")) is True
     assert (
         is_transient(ValueError({"code": "not-a-status", "type": "server_error"}))
         is True

@@ -1,4 +1,4 @@
-"""Deployed graphs for all yaml-flagged async sub-agents.
+"""Deployed graphs for the yaml-flagged async sub-agent and the memory workers.
 
 One module-level binding per ``async: true`` entry in
 ``metasci_scribe/subagents/<name>.yaml``. Each binding is a graph compiled by
@@ -27,11 +27,6 @@ because it follows a different mechanism (re-exporting a lazily-constructed
 attribute), not the yaml-driven factory.
 """
 
-# Records config.yaml before any graph below reads it (see main_graph.py).
-import metasci_scribe.langgraph_dev.config_baseline  # noqa: F401
-
-# isort: split
-
 from metasci_scribe.langgraph_dev.folder_check import folder_checked
 from metasci_scribe.memory.agents import (
     build_autoskills_graph,
@@ -41,9 +36,6 @@ from metasci_scribe.memory.agents import (
 from metasci_scribe.memory.types import MemorySourceType
 from metasci_scribe.paths import process_session_dirs
 from metasci_scribe.subagents._factory import build_async_subagent_graph
-from metasci_scribe.subagents.expert_container_async import (
-    build_expert_container_async_graph,
-)
 
 # The server serves the workspace it was started for, and works in the run
 # folder of a ``--mode=run`` session (the manager sets
@@ -58,25 +50,6 @@ _session = {"workspace": _workspace, "work_dir": _dirs.work_dir}
 # the workspace only.
 writing_agent = folder_checked(
     build_async_subagent_graph("writing-agent", **_session), graph_id="writing-agent"
-)
-data_analysis_agent = folder_checked(
-    build_async_subagent_graph("data-analysis-agent", **_session),
-    graph_id="data-analysis-agent",
-)
-# Scheduled tasks belong to the workspace, not to one run, so they always
-# work in the workspace root.
-scheduler = folder_checked(
-    build_async_subagent_graph("scheduler", workspace=_workspace),
-    graph_id="scheduler",
-)
-# Generic async container for expert-skill dispatch. One graph, parameterised
-# per invocation by the ``skill_name`` payload the main agent passes through
-# ``EvoAsyncSubAgentMiddleware.start_async_task``. Any installed expert skill
-# dispatches through this graph; the loader middleware resolves the skill
-# body at model-call time.
-expert_container_async = folder_checked(
-    build_expert_container_async_graph(**_session),
-    graph_id="expert-container-async",
 )
 evomemory_subagent_worker = folder_checked(
     build_memory_worker_graph(MemorySourceType.SUBAGENT, workspace=_workspace),

@@ -54,9 +54,10 @@ def test_start_sets_the_browser_boundary(monkeypatch, tmp_path, runtime_paths):
             allowed_origins="https://smith.langchain.com",
         )
     env = captured["env"]
-    cors = json.loads(env["CORS_CONFIG"])
-    assert cors["allow_origins"] == ["https://smith.langchain.com"]
-    assert json.loads(env[boundary.BOUNDARY_ENV])["origins"] == cors["allow_origins"]
+    assert json.loads(env[boundary.BOUNDARY_ENV])["origins"] == [
+        "https://smith.langchain.com"
+    ]
+    assert "CORS_CONFIG" not in env
     assert "CORS_ALLOW_ORIGINS" not in env
     assert "TUNNEL_HTTP_HOST_HEADER" not in env
 
@@ -95,7 +96,9 @@ def test_ensure_passes_backend_allowed_origins(monkeypatch, tmp_path, runtime_pa
         manager, "start_langgraph_dev", lambda *_a, **kw: started.update(kw)
     )
     config = ScribeConfig(
-        langgraph_dev_port=16178, backend_allowed_origins="https://smith.langchain.com"
+        enable_async_subagents=True,
+        langgraph_dev_port=16178,
+        backend_allowed_origins="https://smith.langchain.com",
     )
     manager.ensure_langgraph_dev(config, workspace_dir=tmp_path)
     assert started["allowed_origins"] == "https://smith.langchain.com"

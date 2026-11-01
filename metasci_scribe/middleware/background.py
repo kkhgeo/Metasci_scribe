@@ -20,7 +20,7 @@ sub-agents are *tasks*, future cron is *schedules*).
 This module intentionally does NOT use ``from __future__ import annotations``: the tools
 inject ``ToolRuntime`` and return ``Command``, and ``StructuredTool`` inspects the raw
 signature to wire the injected runtime — PEP 563 stringized annotations break that
-detection (same reason as ``middleware/expert_async_subagent.py``).
+detection.
 """
 
 from pathlib import Path

@@ -1,4 +1,4 @@
-"""Cross-step helpers: API key prompt loop, ChatGPT login, npx/node bootstrapping,
+"""Cross-step helpers: API key prompt loop, npx/node bootstrapping,
 LaTeX detection/install.
 """
 
@@ -20,16 +20,11 @@ from .validators import as_pair
 def _provider_key_info(config: ScribeConfig, provider: str):
     """Return (display_name, current_value, validate_fn) for a provider.
 
-    ``validate_fn`` takes a key and returns ``(is_valid, message)``; it is
-    ``None`` for Ollama and the custom endpoints, which the wizard sets up
-    through their base URL. Raises ``KeyError`` for an unknown provider.
+    ``validate_fn`` takes a key and returns ``(is_valid, message)``. Raises
+    ``KeyError`` for an unknown provider.
     """
     spec = provider_spec(provider)
-    if spec.key_field is None:
-        return spec.label, "__no_key__", None
     current = getattr(config, spec.key_field) or os.environ.get(spec.key_env, "")
-    if spec.lists_models:
-        return spec.label, current, None
 
     def validate_fn(key: str) -> tuple[bool, str]:
         return as_pair(run_check(spec, key, configured_base_url(spec, config)))
@@ -94,48 +89,6 @@ def _prompt_and_validate_api_key(
             return new_key if save_anyway else None
 
     return new_key or None
-
-
-def _chatgpt_status_text(state) -> str:
-    """One-line sign-in status, with the plan when the token names it."""
-    return f"ChatGPT: signed in ({state.plan})" if state.plan else "ChatGPT: signed in"
-
-
-def _open_browser_here() -> bool:
-    """Whether a browser on this machine would be in front of the user."""
-    # Linux/BSD without a display and without BROWSER naming one: webbrowser
-    # would fall back to a console browser.
-    no_display = (
-        sys.platform not in ("darwin", "win32")
-        and not os.environ.get("BROWSER")
-        and not os.environ.get("DISPLAY")
-        and not os.environ.get("WAYLAND_DISPLAY")
-    )
-    return not (
-        no_display or os.environ.get("SSH_CONNECTION") or os.environ.get("SSH_TTY")
-    )
-
-
-def _run_chatgpt_login() -> bool:
-    """Run the ChatGPT browser sign-in and print the outcome."""
-    import httpx
-    from rich.markup import escape
-
-    from ...llm import chatgpt_oauth
-
-    try:
-        state = chatgpt_oauth.login(open_browser=_open_browser_here())
-    except KeyboardInterrupt:
-        console.print("  [red]Login cancelled.[/red]")
-        return False
-    except (RuntimeError, OSError, ValueError, httpx.HTTPError) as exc:
-        console.print(f"  [red]Login failed: {escape(str(exc))}[/red]")
-        return False
-    if not state.signed_in:
-        console.print("  [red]Login failed: no token was stored.[/red]")
-        return False
-    console.print(f"  [green]✓ {_chatgpt_status_text(state)}[/green]")
-    return True
 
 
 def _check_npx() -> bool:

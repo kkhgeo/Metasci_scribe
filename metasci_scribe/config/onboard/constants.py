@@ -12,35 +12,7 @@ Single source of truth — adding a new provider here AND to the corresponding
 
 from __future__ import annotations
 
-VALID_PROVIDERS: frozenset[str] = frozenset(
-    {
-        "anthropic",
-        "openai",
-        "google-genai",
-        "minimax",
-        "zhipu",
-        "zhipu-code",
-        "volcengine",
-        "volcengine-code",
-        "dashscope",
-        "dashscope-code",
-        "deepseek",
-        "moonshot",
-        "kimi-coding",
-        "xiaomi",
-        "xiaomi-token-plan",
-        "ollama",
-        "nvidia",
-        "siliconflow",
-        "openrouter",
-        "atlascloud",
-        "requesty",
-        "novita",
-        "opper",
-        "custom-openai",
-        "custom-anthropic",
-    }
-)
+VALID_PROVIDERS: frozenset[str] = frozenset({"openai", "anthropic"})
 
 VALID_WORKSPACE_MODES: frozenset[str] = frozenset({"daemon", "run"})
 

@@ -18,14 +18,6 @@ dependencies = [
     "langchain>=1.4.6",
     "langchain-anthropic>=1.7.6",
     "langchain-openai>=1.7.2",
-    "langchain-deepseek>=1.1.1",
-    "langchain-nvidia-ai-endpoints>=1.5.0",
-    "langchain-google-genai>=4.4.2",
-    "langchain-ollama>=1.1.0",
-    "langchain-openrouter>=0.2.9",
-    # 0.11.0+ SSE regressions: teardown noise + mid-turn ReadTimeout
-    "openrouter>=0.10.8,<0.11.0",
-    "tavily-python>=0.7",
     "pyyaml>=6.0",
     "rich>=15.0",
     "prompt-toolkit>=3.0",
@@ -40,7 +32,6 @@ dependencies = [
     "psutil>=6.0",
     "filelock>=3.16",
     "lazy-loader>=0.5",
-    "markdownify>=1.2",
     "tzlocal>=5.0",
     "langchain-mcp-adapters>=0.3.2",
     # 49+ ships no Intel macOS wheel
@@ -100,7 +91,6 @@ asyncio_default_fixture_loop_scope = "function"
 # Seconds per test; a hang fails that test instead of stalling the run.
 timeout = 60
 filterwarnings = [
-    "ignore::UserWarning:langchain_nvidia_ai_endpoints",
     # The CLI uses the v3 streaming protocol on purpose and filters this too.
     "ignore:.*v3 streaming protocol on Pregel is experimental.*",
 ]

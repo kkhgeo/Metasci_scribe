@@ -129,49 +129,6 @@ def test_finished_rubric_does_not_grade_the_next_turn(tmp_path):
     assert grader.calls == 1
 
 
-def _openrouter(model_id: str):
-    from langchain_openrouter import ChatOpenRouter
-
-    return ChatOpenRouter(model=model_id, api_key="test-key")
-
-
-def test_unsupported_grader_warns_on_first_rubric_run_only(tmp_path, caplog):
-    with caplog.at_level(logging.WARNING, logger="metasci_scribe.middleware.rubric"):
-        rubric = create_rubric_middleware(
-            model=_openrouter("anthropic/claude-fable-5.1"),
-            backend=FilesystemBackend(root_dir=tmp_path, virtual_mode=True),
-            max_iterations=3,
-        )
-        assert caplog.text == ""  # quiet at build
-        rubric.before_agent({"messages": []}, None)
-        assert caplog.text == ""  # quiet without a rubric
-        rubric.before_agent({"messages": [], "rubric": "- x"}, None)
-        assert "claude-fable-5.1" in caplog.text
-        assert "auxiliary_model" in caplog.text
-        caplog.clear()
-        rubric.before_agent({"messages": [], "rubric": "- x"}, None)
-        assert caplog.text == ""  # once per instance
-
-
-@pytest.mark.parametrize(
-    "model_id",
-    [
-        "anthropic/claude-sonnet-5",
-        "anthropic/claude-fable-5",
-        "google/gemini-3.8-flash",
-    ],
-)
-def test_supported_grader_never_warns(tmp_path, caplog, model_id):
-    with caplog.at_level(logging.WARNING, logger="metasci_scribe.middleware.rubric"):
-        rubric = create_rubric_middleware(
-            model=_openrouter(model_id),
-            backend=FilesystemBackend(root_dir=tmp_path, virtual_mode=True),
-            max_iterations=3,
-        )
-        rubric.before_agent({"messages": [], "rubric": "- x"}, None)
-    assert "rubric" not in caplog.text.lower()
-
-
 def test_main_agent_grades_a_marked_run(tmp_path):
     agent, grader, _other, _rubric = _agent(
         tmp_path, [PASS], ["a"], require_run_marker=True

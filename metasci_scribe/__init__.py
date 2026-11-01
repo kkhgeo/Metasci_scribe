@@ -31,7 +31,6 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     # Prompts
     "get_system_prompt": (".prompts", "get_system_prompt"),
     # Tools
-    "tavily_search": (".tools", "tavily_search"),
     "think_tool": (".tools", "think_tool"),
     # Sessions
     "get_checkpointer": (".sessions", "get_checkpointer"),

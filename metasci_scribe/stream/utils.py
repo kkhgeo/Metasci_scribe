@@ -147,7 +147,7 @@ def format_tool_compact(name: str, args: dict | None) -> str:
 
     Adapted for deepagents tool names: execute, read_file, write_file,
     edit_file, grep, glob, ls, write_todos, read_todos, task,
-    tavily_search, think_tool.
+    think_tool.
     """
     if not args:
         return f"{name}()"
@@ -222,7 +222,7 @@ def format_tool_compact(name: str, args: dict | None) -> str:
             return f"Cooking with {sa_type}"
 
     # Web search
-    if name_lower in ("tavily_search", "internet_search"):
+    if name_lower == "internet_search":
         query = args.get("query", "")
         if len(query) > 40:
             query = query[:37] + "\u2026"

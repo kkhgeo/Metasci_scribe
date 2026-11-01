@@ -5,10 +5,10 @@ exception raised by ``ErrorNormalizationMiddleware`` in place of the
 provider SDK exception that a chat model call raised. Non-dataclass on
 purpose: since orjson 3.0, dataclass instances are serialized natively
 via their field enumeration, skipping the ``default=`` hook that
-would otherwise build our SSE envelope. Some provider SDKs (openrouter
-today) decorate their exceptions with ``@dataclass``, so their errors
-emerge on the wire as raw dataclass fields — no envelope, no way for
-the WebUI to distinguish quota / auth / rate-limit. Wrapping them in
+would otherwise build our SSE envelope. A provider SDK may decorate its
+exceptions with ``@dataclass``, in which case its errors emerge on the
+wire as raw dataclass fields — no envelope, no way for a client to
+distinguish quota / auth / rate-limit. Wrapping them in
 a plain ``Exception`` subclass here keeps orjson on the ``default=``
 path, which then calls :meth:`ProviderStreamError.model_dump`
 (upstream ``langgraph_api.serde.default`` checks that hook before its
@@ -38,10 +38,10 @@ class ProviderStreamError(Exception):
 
     Attributes mirror the SSE envelope one-for-one:
 
-    - ``provider`` — concrete provider tag (``openai`` / ``anthropic``
-      / ``deepseek`` / ``openrouter`` / ``openai_compat`` / …)
+    - ``provider`` — concrete provider tag (``openai`` / ``anthropic``,
+      or ``openai_compat`` / ``anthropic_compat`` for a gateway)
     - ``class_qualname`` — fully qualified name of the underlying
-      exception's class (e.g. ``openrouter.errors.…``)
+      exception's class (e.g. ``openai.RateLimitError``)
     - ``message`` — API-key-redacted ``str(exc)``
     - ``status_code`` — HTTP status if the SDK exposed one
     - ``code`` — provider error code (``insufficient_quota``, …)
@@ -166,17 +166,12 @@ def _redact_api_keys(message: str) -> str:
 # Provider inference from ModelRequest.model
 # ---------------------------------------------------------------------------
 #
-# Host → concrete provider. Hand-maintained snapshot mirroring the
-# routed-provider tables in ``llm/models.py``
-# (``_OPENAI_ROUTED_PROVIDERS`` + ``_ANTHROPIC_ROUTED_PROVIDERS``).
-# Kept here rather than imported from ``models.py`` to keep the
-# import surface of ``errors.py`` minimal — importing ``models.py``
-# would pull in every langchain chat-model client at first
-# middleware access. Consumed by ``_lookup_host_or_compat``; unknown
-# hosts fall back to ``<module>_compat`` so the WebUI knows
-# "openai/anthropic SDK, but not native" instead of getting a
-# misleading concrete tag. Update when a new routed provider is
-# added to ``models.py``.
+# Host → concrete provider. Kept here rather than imported from ``models.py``
+# to keep the import surface of ``errors.py`` minimal — importing ``models.py``
+# would pull in every langchain chat-model client at first middleware access.
+# Consumed by ``_lookup_host_or_compat``; unknown hosts fall back to
+# ``<module>_compat`` so a client knows "openai/anthropic SDK, but not native"
+# instead of getting a misleading concrete tag.
 #
 # Related sibling: ``_PROVIDER_EXC_MODULE_PREFIXES`` in
 # ``middleware/error_normalization.py`` — the exception-side
@@ -186,36 +181,16 @@ def _redact_api_keys(message: str) -> str:
 
 _HOST_TO_PROVIDER: dict[str, str] = {
     "api.openai.com": "openai",
-    "chatgpt.com": "openai",  # ChatGPT sign-in (Codex backend)
     "api.anthropic.com": "anthropic",
-    "api.atlascloud.ai": "atlascloud",
-    "api.deepseek.com": "deepseek",
-    "api.moonshot.cn": "moonshot",
-    "api.siliconflow.cn": "siliconflow",
-    "open.bigmodel.cn": "zhipu",  # zhipu + zhipu-code share this host
-    "ark.cn-beijing.volces.com": "volcengine",
-    "dashscope.aliyuncs.com": "dashscope",
-    "coding.dashscope.aliyuncs.com": "dashscope",
-    "api.minimaxi.com": "minimax",
-    "api.kimi.com": "kimi",  # kimi-coding shares this host
-    "openrouter.ai": "openrouter",
-    "api.novita.ai": "novita",
-    "api.opper.ai": "opper",
-    "api.xiaomimimo.com": "xiaomi",
-    # Token Plan regions share the xiaomi tag
-    "token-plan-cn.xiaomimimo.com": "xiaomi",
-    "token-plan-sgp.xiaomimimo.com": "xiaomi",
-    "token-plan-ams.xiaomimimo.com": "xiaomi",
 }
 
 
 def _provider_from_model(model: Any) -> str | None:
     """Derive the concrete provider tag from a chat model instance.
 
-    Class-based dispatch for unambiguous providers (``ChatOpenRouter``,
-    ``ChatGoogleGenerativeAI``); ``openai_api_base`` /
-    ``anthropic_api_url`` looked up in ``_HOST_TO_PROVIDER`` for
-    openai/anthropic-shape clients (native + routed). Returns ``None``
+    ``openai_api_base`` / ``anthropic_api_url`` looked up in
+    ``_HOST_TO_PROVIDER`` for openai/anthropic-shape clients (native +
+    gateway). Returns ``None``
     when the model isn't from a recognized provider SDK — the caller
     (``ErrorNormalizationMiddleware``) then passes the exception
     through unchanged.
@@ -225,12 +200,6 @@ def _provider_from_model(model: Any) -> str | None:
     def _uses_sdk(module_prefix: str) -> bool:
         return any(module.startswith(module_prefix) for module in cls_modules)
 
-    if _uses_sdk("langchain_openrouter"):
-        return "openrouter"
-    if _uses_sdk("langchain_google_genai"):
-        return "google_genai"
-    if _uses_sdk("langchain_deepseek"):
-        return "deepseek"
     if _uses_sdk("langchain_openai"):
         return _lookup_host_or_compat(
             getattr(model, "openai_api_base", None), module_tag="openai"
@@ -271,10 +240,10 @@ def _extract_status_code(exc: BaseException) -> int | None:
     """Best-effort HTTP status code from a provider SDK exception.
 
     Order matters: openai/anthropic store it on ``.status_code``;
-    httpx-wrappers expose it via ``.response.status_code``;
-    ``google.genai.errors.APIError`` (unusually) stores it as an
-    integer ``.code`` — type-disambiguated from openai/anthropic's
-    string ``.code`` (provider error code, surfaced separately).
+    httpx-wrappers expose it via ``.response.status_code``; an SDK that
+    stores it as an integer ``.code`` is type-disambiguated from
+    openai/anthropic's string ``.code`` (provider error code, surfaced
+    separately).
     """
     status_code = getattr(exc, "status_code", None)
     if isinstance(status_code, int):
@@ -305,9 +274,9 @@ def _extract_error_type(exc: BaseException) -> str | None:
     """Provider error type label.
 
     - openai exposes this as ``.type`` (``rate_limit_error`` etc.)
-    - ``google.genai.errors.APIError`` stores a string label at
-      ``.status`` (``"NOT_FOUND"``, ``"RESOURCE_EXHAUSTED"``, …) — a
-      good fit for the same field.
+    - an SDK that stores a string label at ``.status``
+      (``"NOT_FOUND"``, ``"RESOURCE_EXHAUSTED"``, …) is a good fit for the
+      same field.
 
     ``.type`` takes precedence when both are set.
     """

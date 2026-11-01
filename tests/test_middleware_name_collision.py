@@ -24,8 +24,10 @@ DEEPAGENTS_BASE_STACK_NAMES = {
 }
 
 
-def test_no_name_collision_with_deepagents_base_stack(workspace):
+def test_no_name_collision_with_deepagents_base_stack(workspace, monkeypatch):
     from metasci_scribe.agent import _get_default_middleware
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
 
     ours = {m.name for m in _get_default_middleware(workspace=workspace)}
     assert not ours & DEEPAGENTS_BASE_STACK_NAMES

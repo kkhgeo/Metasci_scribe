@@ -251,9 +251,9 @@ class TestFormatToolCompact:
         result = format_tool_compact("task", {"other": "value"})
         assert result == "task(other=value)"
 
-    def test_tavily_search(self):
-        result = format_tool_compact("tavily_search", {"query": "python testing"})
-        assert result == "tavily_search(python testing)"
+    def test_internet_search(self):
+        result = format_tool_compact("internet_search", {"query": "python testing"})
+        assert result == "internet_search(python testing)"
 
     def test_think_tool(self):
         result = format_tool_compact("think_tool", {"reflection": "need more data"})

@@ -73,15 +73,13 @@ class CommandUI(Protocol):
 class SessionRuntime:
     """Mutable handle to the session's agent + thread.
 
-    Also holds session-scoped bindings mutated by slash commands — the
-    ``active_teams`` list backs the ``/expert`` command and ``rubric`` the
-    ``/rubric`` command, both feeding into ``RunRequest.configurable_extra``
+    Also holds the session-scoped ``rubric`` binding mutated by the
+    ``/rubric`` command, which feeds into ``RunRequest.configurable_extra``
     at stream call time.
     """
 
     agent: Any = None
     thread_id: str | None = None
-    active_teams: list[str] = field(default_factory=list)
     rubric: RubricSession = field(default_factory=RubricSession)
 
     def bind(self, agent: Any, thread_id: str) -> None:
@@ -89,29 +87,8 @@ class SessionRuntime:
         self.thread_id = thread_id
 
     def clear(self) -> None:
-        # ``active_teams`` is session-scoped and reset explicitly by ``/new``
-        # (session.py) and ``/expert clear`` — not tied to the agent binding.
-        # Clearing the binding here would silently dismiss the user's invited
-        # experts, which they never asked for.
         self.agent = None
         self.thread_id = None
-
-
-def active_teams_configurable_extra(
-    runtime: SessionRuntime | None,
-) -> dict[str, Any] | None:
-    """Build ``RunRequest.configurable_extra`` from the session runtime.
-
-    Returns ``{"active_teams": [...]}`` when the runtime has invited
-    experts, or ``None`` when there is no runtime or no active invites —
-    lets stream call sites forward the field unconditionally without
-    each duplicating the "read runtime slot, build dict, drop when
-    empty" three-liner.
-    """
-    if runtime is None:
-        return None
-    invited = list(runtime.active_teams)
-    return {"active_teams": invited} if invited else None
 
 
 @dataclass
@@ -121,7 +98,7 @@ class CommandContext:
     agent: Any
     thread_id: str
     ui: CommandUI
-    # The session's workspace (skills, experts, AutoSkills), and the run
+    # The session's workspace (skills, memory), and the run
     # folder it works in under ``--mode=run``.
     dirs: SessionDirs
     checkpointer: Any = None

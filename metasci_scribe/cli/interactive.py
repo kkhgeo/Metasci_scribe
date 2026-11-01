@@ -474,7 +474,7 @@ def cmd_interactive(
         width = console.size.width
         console.print(Text("\u2500" * width, style="dim"))
 
-    from ..commands.base import SessionRuntime, active_teams_configurable_extra
+    from ..commands.base import SessionRuntime
     from ..rubric_session import (
         acknowledge_applied,
         merge_configurable_extra,
@@ -528,9 +528,7 @@ def cmd_interactive(
     # reload) because the session, not the agent, holds it.
     from ..stream.sink import SessionEventSink
 
-    event_sink = SessionEventSink(
-        fallback_display=lambda text, style: console.print(text, style=style)
-    )
+    event_sink = SessionEventSink()
 
     runtime_gateways = create_runtime_gateways_for_config(
         config, backend=gateway_backend, events=event_sink
@@ -606,9 +604,8 @@ def cmd_interactive(
     def _run_configurable_extra(
         mode: str | None, thread_id: str | None = None
     ) -> dict[str, Any] | None:
-        """Invited experts plus, on the session's own thread, the rubric marker."""
+        """On the session's own thread, the rubric marker."""
         return merge_configurable_extra(
-            active_teams_configurable_extra(session_runtime),
             thread_run_extra(
                 session_runtime.rubric,
                 runtime_gateways.graph_gateway,
@@ -835,13 +832,6 @@ def cmd_interactive(
             # in scope — define the ``rich_ui`` adapter here rather than
             # at the outer function level.
 
-            def _print_pending_skill_proposals_notice() -> None:
-                from .commands import _pending_skill_proposals_message
-
-                message = _pending_skill_proposals_message(state["dirs"].workspace.root)
-                if message:
-                    console.print(message, style="yellow")
-
             async def _on_start_new_session() -> None:
                 """NewCommand callback — move to a fresh run folder (run mode),
                 issue a new thread id, reset session-scoped status fields,
@@ -870,7 +860,6 @@ def cmd_interactive(
                     f"[dim]Workspace:[/dim] [cyan]"
                     f"{_shorten_path(str(state['dirs'].work_dir))}[/cyan]\n"
                 )
-                _print_pending_skill_proposals_notice()
 
             async def _on_handle_session_resume(
                 thread_id: str, dirs: SessionDirs | None
@@ -917,7 +906,6 @@ def cmd_interactive(
                 )
                 console.print()
                 await _render_history(thread_id)
-                _print_pending_skill_proposals_notice()
 
             # Rich CLI collapses ``request_quit`` / ``force_quit`` into the
             # same "break the prompt loop" effect — there's no equivalent
@@ -967,7 +955,6 @@ def cmd_interactive(
                     model,
                     provider,
                 )
-            _print_pending_skill_proposals_notice()
 
             # ---- Notification queue processing ----
 

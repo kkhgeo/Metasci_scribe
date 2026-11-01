@@ -12,26 +12,10 @@ DEFAULT_CONTEXT_WINDOW_FALLBACK = 200_000
 # remove one only once the provider ships it at its pyproject floor, not just the lock.
 # Keys are matched against ``model.model_name`` (or ``model.model`` /
 # ``model.name``); lookup tries exact match first, then ``split('/')[-1]``
-# to also accept OpenRouter-style ``vendor/model`` IDs.
+# to also accept ``vendor/model`` IDs served by a gateway.
 _KNOWN_MODEL_CONTEXT_WINDOWS: dict[str, int] = {
-    # Qwen 3.6 open-source variants — exceptions to the ``qwen3.6`` family.
-    "qwen3.6-27b": 262_000,
-    "qwen3.6-35b-a3b": 262_000,
-    # Qwen 3.8 Flash (1M); Max and its dated snapshots are covered by a family below.
-    "qwen3.8-flash": 1_000_000,
-    # Qwen 3.7 closed-source tiers — Max flagship and Plus (1M).
-    "qwen3.7-max": 1_000_000,
-    "qwen3.7-plus": 1_000_000,
-    # xAI Grok — per-model windows (build-0.1: 256K, 4.5–4.7: 500K).
-    "grok-build-0.1": 256_000,
-    "grok-4.7": 500_000,
-    "grok-4.6": 500_000,
-    "grok-4.5": 500_000,
     # Claude Haiku 4.5 — exception to the ``claude-`` family (200K, not 1M).
     "claude-haiku-4-5": 200_000,
-    # Volcengine Coding Plan's OpenAI-compatible alias for GLM-5.2 (1M); the
-    # dashed id misses the ``glm-5.2`` family pattern below.
-    "glm-5-2": 1_000_000,
 }
 
 # Family-level fallbacks: tried only after exact-name lookup misses.
@@ -44,35 +28,6 @@ _KNOWN_MODEL_FAMILIES: list[tuple[str, int]] = [
     ("gpt-6", 1_050_000),
     # OpenAI GPT-5.5 family — base, pro, future variants
     ("gpt-5.5", 1_050_000),
-    # Google Gemini 3.x family — flash, flash-lite, pro (1.05M). Excludes 2.5.
-    ("gemini-3", 1_050_000),
-    # Google Gemini 4 family — argon, future variants (1M).
-    ("gemini-4", 1_048_576),
-    # Moonshot Kimi K3 family — 1M context; covers ``kimi-k3`` / ``kimi-k3.1-pro``
-    # (native Moonshot), OpenRouter ``moonshotai/...`` and dated slugs.
-    ("kimi-k3", 1_048_576),
-    # Zhipu GLM-5.3 / 5.2 — 1M context; covers flash, flashx, future variants.
-    ("glm-5.3", 1_000_000),
-    ("glm-5.2", 1_000_000),
-    # Zhipu GLM-5 family — base, 5.1, 5-turbo, 5v-turbo, etc.
-    ("glm-5", 203_000),
-    # DeepSeek V4 family — pro, flash, future variants
-    ("deepseek-v4", 1_050_000),
-    # MiniMax M3 family — m3, m3.1-flash (1M).
-    ("minimax-m3", 1_000_000),
-    # Xiaomi MiMo v2.6 family — pro, flash, future variants
-    ("mimo-v2.6", 1_048_576),
-    # Xiaomi MiMo v2.5 family — base, pro, future variants
-    ("mimo-v2.5", 1_050_000),
-    # Meta Muse Spark family — 1.1/1.2/1.3 (OpenRouter ``meta/muse-spark-*``, 1M).
-    ("muse-spark", 1_048_576),
-    # Meta Muse Wonder (OpenRouter ``meta/muse-wonder``, 1M).
-    ("muse-wonder", 1_048_576),
-    # Qwen 3.8 Max — flagship and dated snapshots such as ``-0902`` (1M).
-    ("qwen3.8-max", 1_000_000),
-    # Qwen 3.6 closed-source family — flash, plus, max-preview, etc.
-    # Open-source ``-<size>b`` variants are 262K — listed in the dict above.
-    ("qwen3.6", 1_000_000),
 ]
 
 _DIRECT_WINDOW_ATTRS = (
@@ -124,8 +79,7 @@ def _lookup_by_model_name(model_obj: Any) -> int | None:
     Lookup is case-insensitive. Matching order:
         1. exact lowercased ``model_name`` value;
         2. last ``/``-segment of the lowercased value (handles
-           OpenRouter-style ``vendor/model`` and SiliconFlow-style
-           ``Pro/vendor/Model`` IDs);
+           gateway-style ``vendor/model`` IDs);
         3. family-level substring patterns (e.g. all ``claude-*``).
     """
     for attr in _NAME_ATTRS:

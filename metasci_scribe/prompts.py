@@ -103,23 +103,10 @@ _EXPERIMENT_WORKFLOW_EXECUTION = """## Step 2: Plan (Recommended Structure)
   - `success_criteria.md` for success signals
 
 ## Step 3: Execute & Debug
-Before any code delegation, you MUST complete the Code Generation Mode Selection below.
-
-### Code Generation Mode Selection
-Before delegating code tasks to code-agent, ask the user which code generation mode they prefer. Do not skip this step or assume a default silently.
-
-- **Lite** (default): Delegate to code-agent normally via the `task` tool.
-- **More Effort**: Check whether the `experiment-iterative-coder` skill is installed.
-  - If NOT installed → STOP. Do NOT fall back to Lite silently. Inform the user and suggest installing it, or choosing Lite mode. Then re-select.
-  - If installed → delegate to code-agent with the `experiment-iterative-coder` skill.
-
 ### Task Delegation
 - Delegate tasks to sub-agents using the `task` tool:
   - Planning/structuring → planner-agent
   - Methods/baselines/datasets → research-agent
-  - Implementation → code-agent
-  - Debugging → debug-agent
-  - Analysis/visualization → data-analysis-agent
   - Report drafting → writing-agent
 - Prefer the research-agent for web search; avoid searching directly.
 - Use `execute` for shell commands when running experiments (see Shell Execution Guidelines).
@@ -363,9 +350,6 @@ For most tasks, a single sub-agent is sufficient:
 - "Plan experimental stages" → planner-agent
 - "Reflect and update the plan after a stage" → planner-agent
 - "Find related methods/baselines/datasets" → research-agent
-- "Implement baseline or training loop" → code-agent
-- "Debug runtime failures" → debug-agent
-- "Analyze metrics and plot figures" → data-analysis-agent
 - "Draft report sections" → writing-agent
 
 ## Task Granularity
@@ -452,7 +436,7 @@ NEVER:
 For EACH task in the batch, independently:
 - Result needed for the CURRENT step → fetch the result, integrate,
   continue your work in the same turn.
-- Otherwise → acknowledge in ONE short line (e.g. "Noted: data-analysis-agent
+- Otherwise → acknowledge in ONE short line (e.g. "Noted: writing-agent
   finished — will fetch when relevant"), then RESUME what you were doing.
 - `status="error"` → surface briefly to the user even if not currently
   relevant; ask whether to retry or wait.

@@ -1,7 +1,7 @@
 """ErrorNormalizationMiddleware — catch provider-SDK exceptions at the
 model boundary and re-raise as a normalized non-dataclass wrapper.
 
-Some provider SDKs (openrouter.errors.* today) decorate their exception
+A provider SDK may decorate its exception
 classes with ``@dataclass``. When langgraph_api emits an SSE error
 frame via ``json_dumpb`` → ``orjson.dumps(obj, default=default,
 option=OPT_SERIALIZE_DATACLASS)``, orjson's dataclass fast-path
@@ -212,21 +212,15 @@ def _should_pass_through(exc: BaseException) -> bool:
 _PROVIDER_EXC_MODULE_PREFIXES: tuple[str, ...] = (
     "openai",
     "anthropic",
-    "google.genai",
-    "google.api_core",
-    "openrouter",
     "langchain_openai",
-    "langchain_deepseek",
     "langchain_anthropic",
-    "langchain_google_genai",
-    "langchain_openrouter",
     "httpx",
 )
 
 
 def _is_provider_error(exc: BaseException) -> bool:
     """True if *exc* looks like it originated inside a provider SDK
-    (openai, anthropic, google.genai, openrouter, httpx, or their
+    (openai, anthropic, httpx, or their
     langchain wrappers), as opposed to a shape / config error (structured
     output not supported, malformed schema, missing tool, …).
 
@@ -259,9 +253,7 @@ def _normalize(
     - LangGraph control-flow / structural errors — see
       ``_should_pass_through``. This gate lives here so every caller
       of ``_normalize`` (not just the wrap sites of this middleware)
-      gets the protection automatically. Notably
-      ``ModelFallbackMiddleware`` also calls ``_normalize`` at the
-      raise point of its fallback chain.
+      gets the protection automatically.
     - ``ContextOverflowError`` — a cross-layer control signal that
       deepagents' ``SummarizationMiddleware`` catches by type from
       **outside** the user middleware stack to compress history and
@@ -280,9 +272,7 @@ def _normalize(
         _redact_api_keys,
     )
 
-    # Already normalized (e.g. by ModelFallbackMiddleware wrapping against
-    # the actual failing model rather than the original request's model).
-    # Pass through — re-wrapping would double-attribute.
+    # Already normalized. Pass through — re-wrapping would double-attribute.
     if isinstance(exc, ProviderStreamError):
         return None
 

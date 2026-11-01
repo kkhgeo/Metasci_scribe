@@ -6,8 +6,8 @@ import logging
 import os
 import re
 import sys
+from contextlib import nullcontext
 from importlib.metadata import version as _pkg_version
-from pathlib import Path
 from typing import Annotated, Any, cast
 
 import click
@@ -76,53 +76,6 @@ def _get_cli_async_runtime(ctx: typer.Context) -> AsyncRuntime:
     return runtime
 
 
-def _interactive_start(prompt: str | None) -> bool:
-    """True when a person is at the terminal: no ``-p`` and both streams are ttys."""
-    streams = (sys.stdin, sys.stdout)
-    return not prompt and all(s is not None and s.isatty() for s in streams)
-
-
-def _providers_in_use(config: Any) -> set[str]:
-    """Providers of the main, auxiliary and fallback models."""
-    from ..config.onboard.wizard import _active_llm_providers
-
-    fallbacks = {
-        entry.rsplit(":", 1)[1].strip()
-        for entry in (config.model_fallbacks or "").split(",")
-        if ":" in entry
-    }
-    return _active_llm_providers(config) | fallbacks
-
-
-def _require_chatgpt_sign_in(config: Any, *, interactive: bool) -> None:
-    """Stop startup when OpenAI uses ChatGPT sign-in and nobody is signed in.
-
-    An interactive start offers the browser sign-in first.
-    """
-    if getattr(config, "openai_auth_mode", "api_key") != "oauth":
-        return
-
-    from ..llm import chatgpt_oauth
-
-    state = chatgpt_oauth.status()
-    if state.signed_in:
-        return
-    if state.problem:
-        console.print(f"[yellow]ChatGPT: {state.problem}[/yellow]")
-    if interactive:
-        import questionary
-
-        from ..config.onboard.helpers import _run_chatgpt_login
-
-        if questionary.confirm("Sign in with ChatGPT now?", default=True).ask():
-            if _run_chatgpt_login():
-                return
-        console.print(f"[red]{chatgpt_oauth.SIGN_IN_AGAIN}[/red]")
-        raise typer.Exit(1)
-    console.print(f"[red]{chatgpt_oauth.SIGN_IN_HINT}[/red]")
-    raise typer.Exit(1)
-
-
 # =============================================================================
 # Onboard command
 # =============================================================================
@@ -141,9 +94,6 @@ def onboard(
     model: str | None = typer.Option(None, "--model", help="Pre-set model name"),
     api_key: str | None = typer.Option(
         None, "--api-key", help="Pre-set API key for the chosen --provider"
-    ),
-    tavily_key: str | None = typer.Option(
-        None, "--tavily-key", help="Pre-set Tavily API key"
     ),
     workspace_mode: str | None = typer.Option(
         None,
@@ -220,8 +170,6 @@ def onboard(
         answers["model"] = model
     if api_key is not None:
         answers["api_key"] = api_key
-    if tavily_key is not None:
-        answers["tavily_key"] = tavily_key
     if workspace_mode is not None:
         answers["workspace_mode"] = workspace_mode
     if show_thinking is not None:
@@ -285,7 +233,6 @@ def setup(
     Runs every stage that applies to this platform, in order. With ``--json``
     stdout carries only the JSON event lines; everything else goes to stderr.
     """
-    import sys
 
     from ..config import load_config, set_config_value
     from ..setup import STAGES, get_stage, run_stages
@@ -350,9 +297,8 @@ def setup(
 
 _CONFIGURE_SECTIONS = {
     "port": "LangGraph server port",
-    "provider": "LLM provider + auth + API key",
+    "provider": "LLM provider + API key",
     "model": "Model + reasoning effort",
-    "tavily": "Tavily search key",
     "workspace": "Workspace mode",
     "thinking": "Thinking panel",
     "skills": "Skills",
@@ -366,8 +312,8 @@ def _run_onboard_cli(**kwargs: Any) -> None:
     message + exit code 1 instead of a raw Python traceback.
 
     The wizard raises ``RuntimeError`` for *expected* non-interactive
-    failures: rejected ``--api-key`` / ``--tavily-key`` presets, missing
-    required flags under ``--non-interactive``, or a missing base URL. A
+    failures: a rejected ``--api-key`` preset or missing
+    required flags under ``--non-interactive``. A
     refused config file (one that does not parse, or the lock held
     elsewhere) or a write that keeps failing raises ``ConfigError``, a
     ``RuntimeError`` too. Those are user-input problems, not bugs — surface them like any other
@@ -410,7 +356,7 @@ def configure_port():
 def configure_provider(
     skip_validation: bool = typer.Option(False, "--skip-validation"),
 ):
-    """Re-run LLM provider, auth mode, and API key prompts.
+    """Re-run LLM provider and API key prompts.
 
     Model selection is automatically re-run after provider — the model list
     depends on the provider, and silently leaving e.g. ``model="claude-...""``
@@ -425,16 +371,8 @@ def configure_provider(
 
 @configure_app.command("model")
 def configure_model():
-    """Re-run model selection (and reasoning effort for OpenRouter and OpenAI)."""
+    """Re-run model selection (and reasoning effort for OpenAI)."""
     _configure_section("model")
-
-
-@configure_app.command("tavily")
-def configure_tavily(
-    skip_validation: bool = typer.Option(False, "--skip-validation"),
-):
-    """Re-run Tavily search-key prompt."""
-    _configure_section("tavily", skip_validation=skip_validation)
 
 
 @configure_app.command("workspace")
@@ -580,13 +518,21 @@ def _ensure_async_subagent_server(
         _is_loopback_host,
         ensure_langgraph_dev,
         is_async_subagents_available,
+        needs_langgraph_dev,
     )
 
-    try:
-        with console.status(
+    # With the defaults nothing asks for the server: no spinner, no message,
+    # and ``ensure_langgraph_dev`` returns without starting anything.
+    status = (
+        console.status(
             "[dim]Starting background agent server (langgraph dev)...[/dim]",
             spinner="dots",
-        ):
+        )
+        if needs_langgraph_dev(config, backend=backend)
+        else nullcontext()
+    )
+    try:
+        with status:
             ensure_langgraph_dev(
                 config,
                 workspace_dir=dirs.workspace.root,
@@ -594,7 +540,6 @@ def _ensure_async_subagent_server(
                 backend=backend,
             )
             _reconcile_autoskill_schedule(config, workspace=dirs.workspace)
-            _adopt_stale_scheduled_tasks(workspace=dirs.workspace)
     except WorkspaceMismatchError as exc:
         console.print(f"[red]{exc}[/red]")
         _remove_unused_run_dir(dirs.run_dir)
@@ -658,8 +603,8 @@ def _reconcile_autoskill_schedule(config: Any, *, workspace: Workspace) -> None:
 
     The cron belongs to the workspace, whichever run folder the session
     works in. Only for a server known to serve *workspace*, as for
-    ``_adopt_stale_scheduled_tasks``: the reconcile replaces crons it counts as
-    the workspace's, and in another workspace's store those are not.
+    the reconcile replaces crons it counts as the workspace's, and in another
+    workspace's store those are not.
     """
     try:
         from ..langgraph_dev import manager
@@ -672,50 +617,6 @@ def _reconcile_autoskill_schedule(config: Any, *, workspace: Workspace) -> None:
         logging.getLogger(__name__).warning(
             "Failed to reconcile EvoMemory AutoSkills schedule", exc_info=True
         )
-
-
-def _adopt_stale_scheduled_tasks(*, workspace: Workspace) -> None:
-    """Best-effort re-tagging of the served store's untagged and moved tasks.
-
-    Their runs then work in *workspace* and pass the server's folder check.
-    Only for a server known to serve *workspace*: a reused server without a
-    workspace record, or one another session has since moved, may hold another
-    workspace's store, whose crons this must not take over.
-    """
-    try:
-        from ..cron import schedule as crons
-        from ..langgraph_dev import manager
-
-        if manager.SERVED_WORKSPACE != workspace.root:
-            return
-        if crons.is_available():
-            crons.adopt_stale_tasks(
-                crons._client(), workspace, run_kind=crons.SCHEDULED_RUN_KIND
-            )
-    except Exception:
-        logging.getLogger(__name__).warning(
-            "Failed to re-tag stale scheduled tasks", exc_info=True
-        )
-
-
-def _pending_skill_proposals_message(workspace_dir: str | Path) -> str | None:
-    """Return a concise review reminder when autoskill proposals are waiting."""
-    try:
-        from .. import paths
-        from ..memory.autoskills.proposals import pending_skill_proposal_count
-
-        count = pending_skill_proposal_count(
-            paths.MEMORIES_DIR,
-            workspace_dir=workspace_dir,
-        )
-    except Exception:
-        return None
-    if not count:
-        return None
-    return (
-        f"EvoMemory has {count} autoskill proposal(s) ready for review. "
-        "Run /autoskills review."
-    )
 
 
 # How long a CLI waits for EvoMemory work before it exits or moves the server.
@@ -824,7 +725,6 @@ async def _sync_background_agent_server_workspace(
             config,
             workspace=dirs.workspace,
         )
-        await asyncio.to_thread(_adopt_stale_scheduled_tasks, workspace=dirs.workspace)
 
 
 async def _move_server_or_keep_session(
@@ -1512,7 +1412,7 @@ def mcp_edit(
 
     \b
     Examples:
-      metasci-scribe mcp edit filesystem --expose-to main,code-agent
+      metasci-scribe mcp edit filesystem --expose-to main,research-agent
       metasci-scribe mcp edit filesystem -t read_file,write_file
       metasci-scribe mcp edit my-api --url http://new-host:9090/mcp
       metasci-scribe mcp edit my-api --tools none
@@ -1760,12 +1660,6 @@ def _main_callback(
         "--dangerous",
         help="DANGEROUS: real-filesystem access (no workspace confinement); implies --auto-approve",
     ),
-    auth_mode: str | None = typer.Option(
-        None,
-        "--auth-mode",
-        help="Auth mode: api_key (default) or oauth, which is ChatGPT sign-in "
-        "for OpenAI when the main, auxiliary or a fallback model uses it.",
-    ),
     host: str | None = typer.Option(
         None,
         "--host",
@@ -1867,16 +1761,8 @@ def _main_callback(
             cli_overrides["enable_ask_user"] = True
     if dangerous:
         cli_overrides["dangerous_mode"] = True
-    if auth_mode:
-        if auth_mode not in ("api_key", "oauth"):
-            raise typer.BadParameter("--auth-mode must be 'api_key' or 'oauth'")
 
     config = get_effective_config(cli_overrides)
-    if auth_mode:
-        # oauth (ChatGPT sign-in) only when a configured model uses OpenAI;
-        # api_key always.
-        if auth_mode == "api_key" or "openai" in _providers_in_use(config):
-            config.openai_auth_mode = auth_mode
     apply_config_to_env(config)
 
     if rubric_text is not None:
@@ -1891,8 +1777,6 @@ def _main_callback(
                 "langgraph_server the agent runs in the server process, which "
                 "still dispatches background sub-agents the grader cannot wait for"
             )
-
-    _require_chatgpt_sign_in(config, interactive=_interactive_start(prompt))
 
     show_thinking = config.show_thinking if not no_thinking else False
 
@@ -2199,7 +2083,3 @@ def _configure_logging():
         root_logger.removeHandler(h)
     root_logger.addHandler(handler)
     root_logger.setLevel(resolved_level)
-
-    # Suppress noisy schema warnings from langchain_google_genai
-    # (e.g. "Key '$schema' is not supported in schema, ignoring")
-    logging.getLogger("langchain_google_genai._function_utils").setLevel(logging.ERROR)

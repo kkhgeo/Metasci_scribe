@@ -92,18 +92,6 @@ def test_exit_code(rubric, result, expected):
     assert RUBRIC_UNMET_EXIT_CODE == 3
 
 
-def test_background_dispatch_switch_also_covers_experts(tmp_path):
-    from types import SimpleNamespace
-
-    from metasci_scribe.paths import Workspace
-    from metasci_scribe.subagents.expert_container_async import (
-        build_expert_async_subagent_specs,
-    )
-
-    cfg = SimpleNamespace(enable_async_subagents=False)
-    assert build_expert_async_subagent_specs(cfg, workspace=Workspace(tmp_path)) == []
-
-
 def _invoke(monkeypatch, argv, config=None):
     """Run the CLI up to get_effective_config and return (overrides, result)."""
     from typer.testing import CliRunner
@@ -142,7 +130,7 @@ def test_the_process_config_keeps_the_users_background_dispatch(monkeypatch, arg
 def test_only_the_agents_copy_turns_background_dispatch_off():
     from metasci_scribe.config import ScribeConfig
 
-    config = ScribeConfig()
+    config = ScribeConfig(enable_async_subagents=True)
     agent_config = _single_shot_agent_config(config, "- a")
     assert agent_config is not config
     assert agent_config.enable_async_subagents is False
@@ -163,7 +151,7 @@ def _single_shot(monkeypatch, tmp_path, *, load_agent, verdict=None):
     from metasci_scribe.config import ScribeConfig
     from metasci_scribe.langgraph_dev.manager import _server_config_fingerprint
 
-    config = ScribeConfig(ui_backend="cli")
+    config = ScribeConfig(ui_backend="cli", enable_async_subagents=True)
     seen: dict[str, object] = {"plain": _server_config_fingerprint(config)}
 
     @asynccontextmanager
@@ -314,12 +302,9 @@ def root_logging():
     """Let a test install the CLI's handler, then put the root logger back."""
     root = logging.getLogger()
     handlers, level = root.handlers[:], root.level
-    genai = logging.getLogger("langchain_google_genai._function_utils")
-    genai_level = genai.level
     yield root
     root.handlers[:] = handlers
     root.setLevel(level)
-    genai.setLevel(genai_level)
 
 
 @pytest.mark.parametrize(

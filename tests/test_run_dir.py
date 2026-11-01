@@ -144,7 +144,6 @@ async def test_resume_into_another_workspace_switches_workspace_and_run_dir(
 def test_run_mode_memory_is_keyed_to_the_workspace_root(run_dirs, monkeypatch):
     import metasci_scribe.agent as evo
     import metasci_scribe.middleware as mw_mod
-    import metasci_scribe.middleware.model_fallback as fallback
 
     seen: list = []
 
@@ -155,7 +154,6 @@ def test_run_mode_memory_is_keyed_to_the_workspace_root(run_dirs, monkeypatch):
     monkeypatch.setattr(mw_mod, "create_memory_middleware", _spy)
     monkeypatch.setattr(evo, "_ensure_config", lambda *_a: MagicMock())
     monkeypatch.setattr(evo, "_ensure_chat_model", lambda: object())
-    monkeypatch.setattr(fallback, "seed_fallback_chain", lambda _cfg: None)
     monkeypatch.setattr(
         evo.MemoryControls, "from_config", classmethod(lambda cls, _cfg: MagicMock())
     )
@@ -270,14 +268,10 @@ def test_owned_server_restarts_for_another_run_folder(
     assert started[0]["run_dir"] == workspace.runs_dir / "b"
 
 
-def test_server_graphs_work_in_the_run_folder_and_crons_in_the_root(
-    run_dirs, monkeypatch
-):
-    """Deployed sub-agents work where the session works; scheduled tasks
-    belong to the workspace and work in its root."""
+def test_server_graphs_work_in_the_run_folder(run_dirs, monkeypatch):
+    """Deployed sub-agents work where the session works."""
     import metasci_scribe.memory.agents as memory_agents
     import metasci_scribe.subagents._factory as factory
-    import metasci_scribe.subagents.expert_container_async as expert_async
     from metasci_scribe.paths import process_session_dirs, process_workspace
 
     built: dict[str, dict] = {}
@@ -290,9 +284,6 @@ def test_server_graphs_work_in_the_run_folder_and_crons_in_the_root(
         return _build
 
     monkeypatch.setattr(factory, "build_async_subagent_graph", _record("async"))
-    monkeypatch.setattr(
-        expert_async, "build_expert_container_async_graph", _record("expert")
-    )
     for name in (
         "build_memory_worker_graph",
         "build_observation_linker_graph",
@@ -314,8 +305,6 @@ def test_server_graphs_work_in_the_run_folder_and_crons_in_the_root(
         sys.modules.pop("metasci_scribe.langgraph_dev.graphs", None)
 
     assert built["writing-agent"]["work_dir"] == run_dirs.run_dir
-    assert built["expert"]["work_dir"] == run_dirs.run_dir
-    assert built["scheduler"] == {"workspace": run_dirs.workspace}
 
 
 # ---------------------------------------------------------------------------

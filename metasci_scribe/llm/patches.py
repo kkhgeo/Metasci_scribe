@@ -9,9 +9,6 @@ Patches:
     - _patch_openai_capture_reasoning_content: capture provider
       reasoning_content into AIMessage.additional_kwargs (module-level,
       applied at import)
-    - _patch_openai_responses_whole_tool_args: keep tool-call arguments the
-      ChatGPT Codex backend sends only in ``function_call_arguments.done``
-      (installed by the first sign-in model, then applies to every Responses stream)
     - _patch_langgraph_goto_none_crash: handle Command(goto=None)
       defensively in langgraph and langgraph-api (langgraph 1.2.9 workaround)
     - _patch_deepagents_bound_reasoning_claude_only: after a summary, drop
@@ -640,23 +637,21 @@ _patch_langgraph_schema_generator_silence_warnings()
 # Patch (lazy, Anthropic protocol): strip foreign reasoning blocks from
 # outgoing assistant messages.
 #
-# History produced on OpenAI-compatible providers (Qwen/DashScope, DeepSeek, …)
-# can carry `reasoning_content` content blocks in AI messages. When a session
-# switches to an Anthropic-protocol endpoint (native Anthropic, custom-anthropic,
-# kimi-coding, minimax), langchain-anthropic's `_format_messages` passes unknown
+# History produced on OpenAI-compatible endpoints can carry
+# `reasoning_content` content blocks in AI messages. When a session
+# switches to Anthropic, langchain-anthropic's `_format_messages` passes unknown
 # block types through verbatim (`else: content.append(block)`), and strict
-# Anthropic-compatible backends (e.g. Moonshot's Kimi For Coding endpoint at
-# api.kimi.com) reject the request with an opaque HTTP 400. Upstream already
+# Anthropic-compatible backends reject the request with an opaque HTTP 400.
+# Upstream already
 # skips the OpenAI-Responses `reasoning` / `function_call` types the same way;
 # `reasoning_content` is simply missing from that list. These blocks are display
 # metadata — no Anthropic-protocol block type has this name — so stripping is
-# always safe. Anthropic `thinking` blocks are preserved (Kimi backends require
-# them on tool-call turns, even unsigned), but a missing `signature` is
-# defaulted to "": Anthropic-compatible backends stream thinking without a
-# signature_delta, so the aggregated block lacks the key, and strict edges
-# (e.g. OpenRouter's Anthropic schema) reject replay with 400
-# ("signature: expected string, received undefined"). Native Anthropic thinking
-# always carries a signature string, so the default never fires there.
+# always safe. Anthropic `thinking` blocks are preserved, but a missing
+# `signature` is defaulted to "": Anthropic-compatible backends stream thinking
+# without a signature_delta, so the aggregated block lacks the key, and strict
+# edges reject replay with 400 ("signature: expected string, received
+# undefined"). Native Anthropic thinking always carries a signature string, so
+# the default never fires there.
 # ---------------------------------------------------------------------------
 _anthropic_foreign_reasoning_patched = False
 _FOREIGN_REASONING_BLOCK_TYPES = frozenset({"reasoning_content"})
@@ -714,100 +709,7 @@ def _patch_anthropic_strip_foreign_reasoning() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Patch (lazy, OpenRouter only): default structured output to json_schema for
-# Moonshot's always-thinking models (the kimi-k3 family).
-#
-# Moonshot rejects a forced tool choice while thinking is enabled with HTTP 400:
-#   "tool_choice 'specified' is incompatible with thinking enabled"
-# and kimi-k3's thinking cannot be disabled, so the function_calling default of
-# ChatOpenRouter.with_structured_output fails every structured-output call
-# (LLMToolSelectorMiddleware included). These endpoints support
-# response_format json_schema, which needs no tool_choice — route them there.
-# Moonshot-specific: other mandatory-reasoning models keep function_calling.
-# Gated on the instance's model_name, so copies behave correctly and other
-# models keep the function_calling default.
-# ---------------------------------------------------------------------------
-_openrouter_structured_output_patched = False
-
-
-def _patch_openrouter_structured_output() -> None:
-    global _openrouter_structured_output_patched
-    if _openrouter_structured_output_patched:
-        return
-    try:
-        from langchain_openrouter import ChatOpenRouter
-
-        _orig = ChatOpenRouter.with_structured_output
-
-        def _patched(
-            self: Any,
-            schema: Any = None,
-            *,
-            method: str = "function_calling",
-            **kwargs: Any,
-        ) -> Any:
-            if method == "function_calling":
-                from .models import _openrouter_needs_json_schema
-
-                if _openrouter_needs_json_schema(self.model_name):
-                    method = "json_schema"
-            return _orig(self, schema, method=method, **kwargs)
-
-        ChatOpenRouter.with_structured_output = _patched
-        _openrouter_structured_output_patched = True
-    except Exception:
-        pass
-
-
-# ---------------------------------------------------------------------------
-# Patch (lazy, Anthropic protocol): default structured output to json_schema
-# for mandatory-thinking Kimi models (K3 / Kimi For Coding).
-#
-# These endpoints run with thinking always on and reject a forced tool choice
-# with HTTP 400 ("tool_choice 'specified' is incompatible with thinking
-# enabled") — ChatAnthropic's function_calling default forces tool_choice, so
-# every structured-output call (LLMToolSelectorMiddleware included) fails.
-# With thinking declared, langchain-anthropic falls back to tool_choice auto,
-# but the model then calls the tool only sometimes (OutputParserException).
-# These endpoints accept output_config.format (verified live via OpenRouter's
-# Anthropic-compatible edge), which needs no tool_choice — route them there.
-# Gated on the instance's model, so copies behave correctly and Claude models
-# keep the function_calling default.
-# ---------------------------------------------------------------------------
-_anthropic_structured_output_patched = False
-
-
-def _patch_anthropic_structured_output() -> None:
-    global _anthropic_structured_output_patched
-    if _anthropic_structured_output_patched:
-        return
-    try:
-        from langchain_anthropic import ChatAnthropic
-
-        _orig = ChatAnthropic.with_structured_output
-
-        def _patched(
-            self: Any,
-            schema: Any = None,
-            *,
-            method: str = "function_calling",
-            **kwargs: Any,
-        ) -> Any:
-            if method == "function_calling":
-                from .models import _is_mandatory_thinking_kimi
-
-                if _is_mandatory_thinking_kimi(self.model):
-                    method = "json_schema"
-            return _orig(self, schema, method=method, **kwargs)
-
-        ChatAnthropic.with_structured_output = _patched
-        _anthropic_structured_output_patched = True
-    except Exception:
-        pass
-
-
-# ---------------------------------------------------------------------------
-# Explicit client composition for EvoAsyncSubAgentMiddleware and memory runs.
+# Explicit client composition for memory runs.
 # Inject the live model into runs.create without mutating upstream factories.
 #
 # The failed-run reason (``_RunErrors``) retires once deepagents' check tool
@@ -1184,7 +1086,7 @@ _patch_langgraph_goto_none_crash()
 # Patch: deepagents (0.7.30+) drops the ``thinking`` blocks of messages kept
 # across a summary whenever they are tagged ``model_provider == "anthropic"``.
 # Only Claude binds them to the earlier history; every Anthropic-protocol reply
-# carries that tag, and Kimi backends reject a tool-call turn without thinking.
+# carries that tag, and other backends reject a tool-call turn without thinking.
 # ---------------------------------------------------------------------------
 def _patch_deepagents_bound_reasoning_claude_only() -> None:
     """Keep thinking of models named other than Claude (upstream's Bedrock rule).
@@ -1215,80 +1117,3 @@ def _patch_deepagents_bound_reasoning_claude_only() -> None:
 
     _patched._scribe_claude_only = True  # type: ignore[attr-defined]
     _summ_mod._bound_reasoning_types = _patched
-
-
-# ---------------------------------------------------------------------------
-# Patch: the ChatGPT Codex backend usually sends parallel tool calls whole
-# (only ``response.function_call_arguments.done``), while langchain-openai
-# builds tool-call arguments from ``.delta`` events alone, leaving them empty.
-# Hand the full arguments through as a single delta when none was streamed.
-# ---------------------------------------------------------------------------
-# Calls whose delivered arguments are remembered at once (across all streams).
-_WHOLE_TOOL_ARGS_RECORD = 256
-
-
-def _patch_openai_responses_whole_tool_args() -> None:
-    """Keep tool-call arguments that arrive only in the ``done`` event.
-
-    Process-wide: every ``ChatOpenAI`` Responses stream passes through it, so it
-    changes nothing unless a call's arguments would otherwise be lost.
-    """
-    try:
-        import langchain_openai.chat_models.base as _base
-        from openai.types.responses import ResponseFunctionCallArgumentsDeltaEvent
-
-        _orig = _base._convert_responses_chunk_to_generation_chunk
-    except (ImportError, AttributeError):
-        return
-    if hasattr(_orig, "_scribe_whole_tool_args"):
-        return
-    # Arguments delivered so far per call; insertion-ordered so a stream cut
-    # before ``done`` cannot grow it forever. A call pushed out is left to upstream;
-    # only with more than twice the record's calls open at once is one forgotten.
-    delivered: dict[str, str] = {}
-    dropped: dict[str, None] = {}
-
-    def _add(item_id: str, text: str) -> None:
-        if item_id in dropped:
-            return
-        delivered[item_id] = delivered.get(item_id, "") + text
-        if len(delivered) > _WHOLE_TOOL_ARGS_RECORD:
-            oldest = next(iter(delivered))
-            del delivered[oldest]
-            dropped[oldest] = None
-            if len(dropped) > _WHOLE_TOOL_ARGS_RECORD:
-                del dropped[next(iter(dropped))]
-
-    @functools.wraps(_orig)
-    def _convert(chunk: Any, *args: Any, **kwargs: Any) -> Any:
-        kind = getattr(chunk, "type", None)
-        if kind == "response.output_item.added":
-            item = getattr(chunk, "item", None)
-            # Some servers open the call with (part of) its arguments filled in.
-            if getattr(item, "type", None) == "function_call":
-                # A new call: whatever an earlier, cut stream left under this id is stale.
-                delivered.pop(item.id, None)
-                dropped.pop(item.id, None)
-                if item.arguments:
-                    _add(item.id, item.arguments)
-        elif kind == "response.function_call_arguments.delta":
-            _add(chunk.item_id, chunk.delta)
-        elif kind == "response.function_call_arguments.done":
-            sent = delivered.pop(chunk.item_id, "")
-            full = chunk.arguments or ""
-            missing = full[len(sent) :] if full.startswith(sent) else ""
-            if chunk.item_id in dropped:
-                del dropped[chunk.item_id]
-                missing = ""
-            if missing:
-                chunk = ResponseFunctionCallArgumentsDeltaEvent.construct(
-                    type="response.function_call_arguments.delta",
-                    delta=missing,
-                    item_id=chunk.item_id,
-                    output_index=chunk.output_index,
-                    sequence_number=chunk.sequence_number,
-                )
-        return _orig(chunk, *args, **kwargs)
-
-    _convert._scribe_whole_tool_args = True  # type: ignore[attr-defined]
-    _base._convert_responses_chunk_to_generation_chunk = _convert

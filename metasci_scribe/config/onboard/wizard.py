@@ -29,22 +29,16 @@ from ..store import (
 from .steps import (
     _asks_reasoning_effort,
     _step_auxiliary_enable,
-    _step_base_url,
     _step_langgraph_dev_port,
     _step_mcp_servers,
-    _step_minimax_region,
     _step_model,
-    _step_ollama_base_url,
-    _step_openai_auth_mode,
     _step_provider,
     _step_provider_api_key,
     _step_reasoning_effort,
     _step_skills,
-    _step_tavily_key,
     _step_thinking,
     _step_tinytex,
     _step_workspace,
-    _step_xiaomi_token_plan_region,
 )
 from .style import (
     CONFIRM_STYLE,
@@ -62,7 +56,6 @@ STEPS = [
     "API Key",
     "Model",
     "Auxiliary Model",
-    "Tavily Key",
     "Workspace",
     "Thinking",
     "Skills",
@@ -124,13 +117,6 @@ _PROVIDER_KEY_ATTR = {
     name: spec.key_field for name, spec in PROVIDERS.items() if spec.key_field
 }
 
-_MINIMAX_GLOBAL_BASE_URL = "https://api.minimax.io/anthropic"
-_XIAOMI_TOKEN_PLAN_DEFAULT_BASE_URL = "https://token-plan-cn.xiaomimimo.com/anthropic"
-_CUSTOM_PROVIDER_BASE_URL = {
-    "custom-openai": ("custom_openai_base_url", "CUSTOM_OPENAI_BASE_URL"),
-    "custom-anthropic": ("custom_anthropic_base_url", "CUSTOM_ANTHROPIC_BASE_URL"),
-}
-
 
 def _autosave(config: ScribeConfig) -> None:
     """Persist current config to disk between phases.
@@ -153,92 +139,6 @@ def _skills_workspace(config: ScribeConfig) -> Workspace:
             os.environ.get("METASCI_SCRIBE_WORKSPACE_DIR"), config.default_workdir
         )
     )
-
-
-def _configure_provider_base_url(
-    config: ScribeConfig,
-    provider: str,
-    *,
-    strict: bool,
-) -> list[str]:
-    """Configure provider-specific base URL/region and return Ollama models."""
-    if provider in _CUSTOM_PROVIDER_BASE_URL:
-        attr_name, env_name = _CUSTOM_PROVIDER_BASE_URL[provider]
-        current_base_url = getattr(config, attr_name) or os.environ.get(env_name, "")
-        if strict:
-            if not current_base_url:
-                raise RuntimeError(
-                    f"--non-interactive: {provider} provider needs a base URL. "
-                    f"Set the {env_name} env var or run without --non-interactive."
-                )
-            setattr(config, attr_name, current_base_url)
-        else:
-            setattr(
-                config,
-                attr_name,
-                _step_base_url(config, current_value=current_base_url),
-            )
-    elif provider == "minimax":
-        if strict:
-            config.minimax_base_url = (
-                config.minimax_base_url.strip() or _MINIMAX_GLOBAL_BASE_URL
-            )
-        else:
-            config.minimax_base_url = _step_minimax_region(config)
-    elif provider == "xiaomi-token-plan":
-        if strict:
-            config.mimo_token_plan_base_url = (
-                config.mimo_token_plan_base_url.strip()
-                or os.environ.get("MIMO_TOKEN_PLAN_BASE_URL", "").strip()
-                or _XIAOMI_TOKEN_PLAN_DEFAULT_BASE_URL
-            )
-        else:
-            config.mimo_token_plan_base_url = _step_xiaomi_token_plan_region(config)
-    elif provider == "ollama":
-        if strict:
-            config.ollama_base_url = (
-                config.ollama_base_url
-                or os.environ.get("OLLAMA_BASE_URL", "")
-                or "http://localhost:11434"
-            )
-        else:
-            ollama_url, ollama_detected_models = _step_ollama_base_url(config)
-            config.ollama_base_url = ollama_url
-            return ollama_detected_models
-    return []
-
-
-def _configure_provider_auth_mode(
-    config: ScribeConfig,
-    provider: str,
-    *,
-    strict: bool,
-) -> None:
-    """Configure OpenAI auth mode (API key or ChatGPT sign-in) when it is selected."""
-    if provider == "openai":
-        if strict:
-            config.openai_auth_mode = "api_key"
-        else:
-            config.openai_auth_mode = _step_openai_auth_mode(config)
-
-
-def _active_llm_providers(config: ScribeConfig) -> set[str]:
-    """Return providers currently selected by the main and auxiliary models."""
-    providers = {config.provider}
-    if config.auxiliary_provider:
-        providers.add(config.auxiliary_provider)
-    return providers
-
-
-def _reconcile_oauth_modes(config: ScribeConfig) -> None:
-    """Clear the ChatGPT sign-in flag when no selected model uses OpenAI."""
-    active_providers = _active_llm_providers(config)
-    if "openai" not in active_providers:
-        config.openai_auth_mode = "api_key"
-
-
-def _provider_uses_oauth(config: ScribeConfig, provider: str) -> bool:
-    return provider == "openai" and config.openai_auth_mode == "oauth"
 
 
 def _apply_preset_provider_api_key(
@@ -281,10 +181,7 @@ def _configure_provider_api_key(
     preset_api_key: str | None = None,
     require_api_key=None,
 ) -> None:
-    """Configure provider API key unless the provider does not need one."""
-    if provider == "ollama" or _provider_uses_oauth(config, provider):
-        return
-
+    """Configure the provider's API key."""
     key_attr = _PROVIDER_KEY_ATTR.get(provider, "openai_api_key")
     if preset_api_key is not None:
         _apply_preset_provider_api_key(
@@ -306,18 +203,6 @@ def _configure_provider_api_key(
 
 def _provider_connection_configured(config: ScribeConfig, provider: str) -> bool:
     """Return True when provider-level setup can be safely reused."""
-    if provider == "ollama":
-        return bool(config.ollama_base_url)
-    if provider == "custom-openai" and not config.custom_openai_base_url:
-        return False
-    if provider == "custom-anthropic" and not config.custom_anthropic_base_url:
-        return False
-    if provider == "minimax" and not config.minimax_base_url:
-        return False
-    if provider == "xiaomi-token-plan" and not config.mimo_token_plan_base_url:
-        return False
-    if _provider_uses_oauth(config, provider):
-        return True
     key_attr = _PROVIDER_KEY_ATTR.get(provider, "openai_api_key")
     return bool(getattr(config, key_attr))
 
@@ -326,22 +211,11 @@ def _configure_provider_connection(
     config: ScribeConfig,
     provider: str,
     *,
-    strict: bool,
     skip_validation: bool,
     preset_api_key: str | None = None,
     require_api_key=None,
-) -> list[str]:
-    """Configure provider base URL/region, auth mode, and API key."""
-    ollama_detected_models = _configure_provider_base_url(
-        config,
-        provider,
-        strict=strict,
-    )
-    _configure_provider_auth_mode(
-        config,
-        provider,
-        strict=strict,
-    )
+) -> None:
+    """Configure the provider's API key."""
     _configure_provider_api_key(
         config,
         provider,
@@ -349,16 +223,14 @@ def _configure_provider_connection(
         preset_api_key=preset_api_key,
         require_api_key=require_api_key,
     )
-    return ollama_detected_models
 
 
 # Sections offered in Keep/Modify/Reset → which step labels they enable.
 _SECTION_LABELS: list[tuple[str, str]] = [
     ("port", "LangGraph server port"),
-    ("provider", "LLM provider + auth + API key"),
+    ("provider", "LLM provider + API key"),
     ("model", "Model + reasoning effort"),
     ("auxiliary_model", "Auxiliary model (optional)"),
-    ("tavily", "Tavily search key"),
     ("workspace", "Workspace mode"),
     ("thinking", "Thinking panel"),
     ("skills", "Skills"),
@@ -377,7 +249,6 @@ _FLAG_TO_SECTIONS: dict[str, frozenset[str]] = {
     # cascade to model for the same reason ``--provider`` does.
     "api_key": frozenset({"provider", "model"}),
     "model": frozenset({"model"}),
-    "tavily_key": frozenset({"tavily"}),
     "workspace_mode": frozenset({"workspace"}),
     "show_thinking": frozenset({"thinking"}),
 }
@@ -489,8 +360,8 @@ def run_onboard(
 ) -> bool:
     """Run the onboarding wizard while holding the config lock.
 
-    The lock is held from start to end, so no other writer (the settings
-    API, ``metasci-scribe config set``, the TUI) changes the file under the wizard;
+    The lock is held from start to end, so no other writer (``metasci-scribe config set``)
+    changes the file under the wizard;
     they are refused with a message that names ``metasci-scribe onboard``. A file
     that does not parse is refused before anything is asked, since the
     wizard would otherwise start from defaults and autosave them over it.
@@ -678,18 +549,14 @@ def _run_onboard(
                     config.langgraph_dev_port = _step_langgraph_dev_port(config)
                 _autosave(config)
 
-            ollama_detected_models: list[str] = []
             if "provider" in sections_to_run:
                 from .prompter import GoBack
 
                 _print_section("Metasci Scribe · Pilot (Main model)")
                 _require("provider", "LLM provider")
-                # Provider sub-loop: auth_mode can raise GoBack to re-pick provider.
-                # We snapshot config at the top of each iteration so a GoBack can
-                # roll back partial writes (base_url, minimax region, ollama URL,
-                # provider id itself) — otherwise picking `custom-openai`, entering
-                # a base URL, going Back, then picking `anthropic` would leave a
-                # stale ``custom_openai_base_url`` in the final saved config.
+                # Provider sub-loop: a step can raise GoBack to re-pick the
+                # provider. We snapshot config at the top of each iteration so a
+                # GoBack can roll back partial writes (the provider id itself).
                 while True:
                     loop_snapshot = copy.deepcopy(config)
                     preset_provider = _preset("provider")
@@ -705,10 +572,9 @@ def _run_onboard(
                         config.provider = provider
 
                     try:
-                        ollama_detected_models = _configure_provider_connection(
+                        _configure_provider_connection(
                             config,
                             provider,
-                            strict=strict,
                             skip_validation=skip_validation,
                             preset_api_key=_preset("api_key"),
                             require_api_key=lambda provider=provider: _require(
@@ -717,8 +583,8 @@ def _run_onboard(
                         )
                     except GoBack:
                         # User picked "← Back" — restore config to its state at the
-                        # top of this iteration (drops any base_url / region /
-                        # provider writes), then discard ALL provider-coupled
+                        # top of this iteration (drops the provider write), then
+                        # discard ALL provider-coupled
                         # presets and re-prompt. Clearing only ``provider``
                         # leaves a stale ``--model`` / ``--api-key`` that would
                         # be re-applied under a different provider, producing
@@ -731,12 +597,10 @@ def _run_onboard(
                         if p:
                             for stale_key in ("provider", "model", "api_key"):
                                 p.answers.pop(stale_key, None)
-                        ollama_detected_models = []
                         console.print("  [dim]↩ Returning to provider selection.[/dim]")
                         continue
                     break  # Provider setup succeeded — exit sub-loop
 
-                _reconcile_oauth_modes(config)
                 _autosave(config)
             else:
                 # Provider section skipped — keep prior provider value to drive
@@ -752,9 +616,7 @@ def _run_onboard(
                         f"  [green]✓ Model: {preset_model}[/green]   [dim](--model)[/dim]"
                     )
                 else:
-                    config.model = _step_model(
-                        config, provider, ollama_detected_models=ollama_detected_models
-                    )
+                    config.model = _step_model(config, provider)
                 if _asks_reasoning_effort(provider) and _preset("model") is None:
                     config.reasoning_effort = _step_reasoning_effort(config, provider)
                 _autosave(config)
@@ -771,7 +633,6 @@ def _run_onboard(
                 elif _step_auxiliary_enable(config):
                     from .prompter import GoBack
 
-                    aux_ollama_detected_models: list[str] = []
                     while True:
                         loop_snapshot = copy.deepcopy(config)
                         aux_provider = _step_provider(
@@ -784,21 +645,16 @@ def _run_onboard(
                             aux_provider == config.provider
                             and _provider_connection_configured(config, aux_provider)
                         ):
-                            if aux_provider == "ollama":
-                                aux_ollama_detected_models = ollama_detected_models
                             _print_step_skipped(
                                 "Co-pilot credentials",
                                 "reusing main provider settings",
                             )
                         else:
                             try:
-                                aux_ollama_detected_models = (
-                                    _configure_provider_connection(
-                                        config,
-                                        aux_provider,
-                                        strict=False,
-                                        skip_validation=skip_validation,
-                                    )
+                                _configure_provider_connection(
+                                    config,
+                                    aux_provider,
+                                    skip_validation=skip_validation,
                                 )
                             except GoBack:
                                 for field_name in vars(loop_snapshot):
@@ -807,7 +663,6 @@ def _run_onboard(
                                         field_name,
                                         getattr(loop_snapshot, field_name),
                                     )
-                                aux_ollama_detected_models = []
                                 console.print(
                                     "  [dim]↩ Returning to co-pilot provider "
                                     "selection.[/dim]"
@@ -817,7 +672,6 @@ def _run_onboard(
                     config.auxiliary_model = _step_model(
                         config,
                         aux_provider,
-                        ollama_detected_models=aux_ollama_detected_models,
                         label="co-pilot",
                         default_value=config.auxiliary_model,
                     )
@@ -825,50 +679,6 @@ def _run_onboard(
                     # Skip: single driver — clear any prior auxiliary config.
                     config.auxiliary_provider = ""
                     config.auxiliary_model = ""
-                _reconcile_oauth_modes(config)
-                _autosave(config)
-
-            if "tavily" in sections_to_run:
-                preset_tavily = _preset("tavily_key")
-                if preset_tavily is not None:
-                    # Validate the preset key like the --api-key path does;
-                    # the non-interactive flow can't show a "Save anyway?"
-                    # prompt, so a failed validation is fatal.
-                    if not skip_validation:
-                        from .validators import validate_tavily_key
-
-                        console.print(
-                            "  [dim]Validating preset Tavily key...[/dim]", end=""
-                        )
-                        valid, msg = validate_tavily_key(preset_tavily)
-                        if valid:
-                            console.print(f"\r  [green]✓ {msg}[/green]      ")
-                        else:
-                            console.print(f"\r  [red]✗ {msg}[/red]      ")
-                            raise RuntimeError(
-                                f"--tavily-key rejected by validator: {msg}. "
-                                "Pass --skip-validation to override."
-                            )
-                    config.tavily_api_key = preset_tavily
-                    console.print(
-                        f"  [green]✓ Tavily key: ***{preset_tavily[-4:]}[/green]"
-                        "   [dim](--tavily-key)[/dim]"
-                    )
-                elif strict:
-                    # ``--non-interactive`` without ``--tavily-key`` — Tavily
-                    # is optional (web search). Keep whatever's in config
-                    # (likely empty for first-time setup); never open the
-                    # interactive password prompt under strict.
-                    if config.tavily_api_key:
-                        _print_step_skipped("Tavily Key", "kept current")
-                    else:
-                        _print_step_skipped("Tavily Key", "not set")
-                else:
-                    new_tavily_key = _step_tavily_key(config, skip_validation)
-                    if new_tavily_key is not None:
-                        config.tavily_api_key = new_tavily_key
-                    elif not config.tavily_api_key:
-                        _print_step_skipped("Tavily Key", "not set")
                 _autosave(config)
 
             if "workspace" in sections_to_run:

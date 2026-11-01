@@ -24,29 +24,32 @@ class TestExtractModelAndProvider:
             extract_model_and_provider,
         )
 
-        name, prov = extract_model_and_provider(["claude-sonnet-5-5", "openrouter"])
+        name, prov = extract_model_and_provider(["claude-sonnet-5-5", "anthropic"])
         assert name == "claude-sonnet-5-5"
-        assert prov == "openrouter"
+        assert prov == "anthropic"
 
-    def test_short_name_stays_on_current_provider(self):
-        """``/model <name>`` must not hop a Token Plan user to pay-as-you-go."""
+    def test_unsupported_provider_override_is_refused(self):
         from metasci_scribe.commands.implementation.model import (
             extract_model_and_provider,
         )
 
-        assert extract_model_and_provider(["mimo-v2.6-flash"], "xiaomi-token-plan") == (
-            "mimo-v2.6-flash",
-            "xiaomi-token-plan",
+        with pytest.raises(ValueError, match="Unknown provider"):
+            extract_model_and_provider(["claude-sonnet-5-5", "openrouter"])
+
+    def test_short_name_stays_on_current_provider(self):
+        """/model <name> keeps the provider that serves the name."""
+        from metasci_scribe.commands.implementation.model import (
+            extract_model_and_provider,
         )
-        # A provider that doesn't serve the name keeps the registry default.
-        assert extract_model_and_provider(["mimo-v2.6-flash"], "anthropic") == (
-            "mimo-v2.6-flash",
-            "xiaomi",
+
+        assert extract_model_and_provider(["gpt-6-sol"], "openai") == (
+            "gpt-6-sol",
+            "openai",
         )
-        # An explicit provider still wins.
-        assert extract_model_and_provider(
-            ["mimo-v2.6-flash", "xiaomi"], "xiaomi-token-plan"
-        ) == ("mimo-v2.6-flash", "xiaomi")
+        assert extract_model_and_provider(["claude-opus-5-5"], "anthropic") == (
+            "claude-opus-5-5",
+            "anthropic",
+        )
 
     def test_unknown_model_no_provider_raises(self):
         from metasci_scribe.commands.implementation.model import (
@@ -64,36 +67,6 @@ class TestExtractModelAndProvider:
         # Unknown models are always rejected, even with an explicit provider
         with pytest.raises(ValueError, match="Unknown model"):
             extract_model_and_provider(["my-custom-model", "custom-openai"])
-
-    def test_provider_override_on_known_model(self):
-        from metasci_scribe.commands.implementation.model import (
-            extract_model_and_provider,
-        )
-
-        # Known model with explicit provider override uses the override
-        name, prov = extract_model_and_provider(["claude-sonnet-5-5", "openrouter"])
-        assert name == "claude-sonnet-5-5"
-        assert prov == "openrouter"
-
-    def test_ollama_provider_accepts_arbitrary_name(self):
-        """Ollama models are locally-installed — the registry doesn't know
-        them. The ``ollama`` provider must pass any name through verbatim."""
-        from metasci_scribe.commands.implementation.model import (
-            extract_model_and_provider,
-        )
-
-        name, prov = extract_model_and_provider(["llama3.3:8b", "ollama"])
-        assert name == "llama3.3:8b"
-        assert prov == "ollama"
-
-    def test_ollama_provider_accepts_dotted_tag(self):
-        from metasci_scribe.commands.implementation.model import (
-            extract_model_and_provider,
-        )
-
-        name, prov = extract_model_and_provider(["qwen3-coder-next:latest", "ollama"])
-        assert name == "qwen3-coder-next:latest"
-        assert prov == "ollama"
 
 
 class TestModelCommandUnknownModel:
@@ -905,225 +878,3 @@ class TestApplyModelLoadAgentFailureTransactional:
         # User sees an error message.
         msg = ctx.ui.append_system.call_args[0][0]
         assert "Failed to switch model" in msg
-
-
-class TestModelCommandOllamaPicker:
-    """Verify Ollama discovery augments the picker entries and the sentinel
-    is always present when Ollama is configured."""
-
-    def _make_ctx_and_cfg(self, *, ollama_base_url: str | None):
-        cfg = SimpleNamespace(
-            model="claude-sonnet-5-5",
-            provider="anthropic",
-            ollama_base_url=ollama_base_url,
-        )
-        ui = MagicMock()
-        ui.supports_interactive = True
-        ui.wait_for_model_pick = AsyncMock(return_value=None)
-        ctx = MagicMock()
-        ctx.ui = ui
-        return ctx, cfg, ui
-
-    async def test_picker_entries_include_detected_ollama_models(self):
-        """When Ollama is reachable, detected models appear in entries with
-        provider='ollama' and the Custom sentinel is appended."""
-        from metasci_scribe.commands.implementation.model import ModelCommand
-
-        ctx, cfg, ui = self._make_ctx_and_cfg(ollama_base_url="http://localhost:11434")
-
-        async def fake_discover(base_url, *, timeout):
-            return ["llama3.3:latest", "qwen3:8b"]
-
-        with (
-            patch(
-                "metasci_scribe.agent._ensure_config",
-                return_value=cfg,
-            ),
-            patch(
-                "metasci_scribe.llm.ollama_discovery.discover_ollama_models",
-                side_effect=fake_discover,
-            ),
-        ):
-            await ModelCommand().execute(ctx, [])
-
-        entries = ui.wait_for_model_pick.call_args[0][0]
-        ollama_rows = [(n, mid, p) for (n, mid, p) in entries if p == "ollama"]
-        assert ("llama3.3:latest", "llama3.3:latest", "ollama") in ollama_rows
-        assert ("qwen3:8b", "qwen3:8b", "ollama") in ollama_rows
-        assert (
-            "Custom Ollama model...",
-            "__custom_ollama__",
-            "ollama",
-        ) in ollama_rows
-
-    async def test_picker_entries_include_sentinel_when_discovery_empty(self):
-        """Daemon unreachable / no models pulled — sentinel is the user's
-        escape hatch and must always be present."""
-        from metasci_scribe.commands.implementation.model import ModelCommand
-
-        ctx, cfg, ui = self._make_ctx_and_cfg(ollama_base_url="http://localhost:11434")
-
-        async def fake_discover(base_url, *, timeout):
-            return []
-
-        with (
-            patch(
-                "metasci_scribe.agent._ensure_config",
-                return_value=cfg,
-            ),
-            patch(
-                "metasci_scribe.llm.ollama_discovery.discover_ollama_models",
-                side_effect=fake_discover,
-            ),
-        ):
-            await ModelCommand().execute(ctx, [])
-
-        entries = ui.wait_for_model_pick.call_args[0][0]
-        ollama_rows = [(n, mid, p) for (n, mid, p) in entries if p == "ollama"]
-        assert ollama_rows == [
-            ("Custom Ollama model...", "__custom_ollama__", "ollama")
-        ]
-
-    async def test_picker_skips_ollama_section_when_not_configured(self):
-        """ollama_base_url unset → no discovery call, no ollama entries,
-        no sentinel (issue non-goal: no implicit localhost detection)."""
-        from metasci_scribe.commands.implementation.model import ModelCommand
-
-        ctx, cfg, ui = self._make_ctx_and_cfg(ollama_base_url="")
-
-        discovery = AsyncMock(return_value=["should-never-appear"])
-
-        with (
-            patch(
-                "metasci_scribe.agent._ensure_config",
-                return_value=cfg,
-            ),
-            patch(
-                "metasci_scribe.llm.ollama_discovery.discover_ollama_models",
-                discovery,
-            ),
-        ):
-            await ModelCommand().execute(ctx, [])
-
-        discovery.assert_not_called()
-        entries = ui.wait_for_model_pick.call_args[0][0]
-        assert not any(p == "ollama" for (_, _, p) in entries)
-
-    async def test_picker_handles_cfg_without_ollama_base_url_attr(self):
-        """getattr(cfg, 'ollama_base_url', None) fallback: old configs
-        (or SimpleNamespace test fixtures) may not carry the attribute
-        at all. Must not raise AttributeError, must not probe."""
-        from metasci_scribe.commands.implementation.model import ModelCommand
-
-        # Deliberately omit ollama_base_url from the namespace.
-        cfg = SimpleNamespace(model="claude-sonnet-5-5", provider="anthropic")
-        ui = MagicMock()
-        ui.supports_interactive = True
-        ui.wait_for_model_pick = AsyncMock(return_value=None)
-        ctx = MagicMock()
-        ctx.ui = ui
-
-        discovery = AsyncMock(return_value=["should-never-appear"])
-
-        with (
-            patch(
-                "metasci_scribe.agent._ensure_config",
-                return_value=cfg,
-            ),
-            patch(
-                "metasci_scribe.llm.ollama_discovery.discover_ollama_models",
-                discovery,
-            ),
-        ):
-            await ModelCommand().execute(ctx, [])
-
-        discovery.assert_not_called()
-        entries = ui.wait_for_model_pick.call_args[0][0]
-        assert not any(p == "ollama" for (_, _, p) in entries)
-
-    async def test_picker_sentinel_result_is_treated_as_cancel(self):
-        """Defense-in-depth: if the widget ever returns the sentinel name
-        itself (shouldn't happen — it should substitute the typed name),
-        dispatch treats it as a cancel and does NOT call _apply_model."""
-        from metasci_scribe.commands.implementation.model import ModelCommand
-
-        ctx, cfg, ui = self._make_ctx_and_cfg(ollama_base_url="http://localhost:11434")
-        ui.wait_for_model_pick = AsyncMock(return_value=("__custom_ollama__", "ollama"))
-
-        async def fake_discover(base_url, *, timeout):
-            return []
-
-        with (
-            patch(
-                "metasci_scribe.agent._ensure_config",
-                return_value=cfg,
-            ),
-            patch(
-                "metasci_scribe.llm.ollama_discovery.discover_ollama_models",
-                side_effect=fake_discover,
-            ),
-            patch("metasci_scribe.cli.agent._load_agent") as load_agent,
-        ):
-            await ModelCommand().execute(ctx, [])
-
-        load_agent.assert_not_called()
-        assert cfg.model == "claude-sonnet-5-5"  # unchanged
-
-    async def test_picker_applies_detected_ollama_model(self):
-        """User picks a live-detected Ollama model → _apply_model is invoked
-        with (name, "ollama") and the agent is rebuilt."""
-        from metasci_scribe.commands.implementation.model import ModelCommand
-
-        ctx, cfg, ui = self._make_ctx_and_cfg(ollama_base_url="http://localhost:11434")
-        ctx.work_dir = Path("/tmp/test")
-        ctx.checkpointer = MagicMock()
-        ui.wait_for_model_pick = AsyncMock(return_value=("llama3.3", "ollama"))
-
-        async def fake_discover(base_url, *, timeout):
-            return ["llama3.3"]
-
-        with (
-            patch(
-                "metasci_scribe.agent._ensure_config",
-                return_value=cfg,
-            ),
-            patch(
-                "metasci_scribe.llm.ollama_discovery.discover_ollama_models",
-                side_effect=fake_discover,
-            ),
-            patch("metasci_scribe.agent._build_chat_model"),
-            patch("metasci_scribe.agent.set_active_config") as set_cfg,
-            patch("metasci_scribe.agent.set_chat_model_instance"),
-            patch(
-                "metasci_scribe.cli.agent._load_agent",
-                return_value=MagicMock(),
-            ),
-        ):
-            await ModelCommand().execute(ctx, [])
-
-        # Committed via set_active_config(temp_cfg); original cfg untouched.
-        set_cfg.assert_called_once()
-        committed = set_cfg.call_args[0][0]
-        assert committed.model == "llama3.3"
-        assert committed.provider == "ollama"
-
-
-@pytest.mark.asyncio
-async def test_fallback_add_short_name_stays_on_current_provider():
-    from metasci_scribe.commands.implementation.model_fallback import (
-        ModelFallbackCommand,
-    )
-
-    ctx = MagicMock()
-    with (
-        patch(
-            "metasci_scribe.agent._ensure_config",
-            return_value=SimpleNamespace(provider="xiaomi-token-plan"),
-        ),
-        patch(
-            "metasci_scribe.middleware.model_fallback.add_fallback", return_value=True
-        ) as add,
-    ):
-        await ModelFallbackCommand().execute(ctx, ["add", "mimo-v2.6-flash"])
-
-    add.assert_called_once_with("mimo-v2.6-flash", "xiaomi-token-plan")

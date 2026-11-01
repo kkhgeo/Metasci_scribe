@@ -1,13 +1,11 @@
 """Individual wizard step functions.
 
 Each ``_step_*`` prompts the user for one logical decision and returns the
-chosen value. Conditional steps (auth mode, base URL) are only called by
-``run_onboard`` when the provider needs them.
+chosen value.
 """
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import questionary
@@ -15,12 +13,10 @@ from prompt_toolkit.formatted_text import FormattedText
 from questionary import Choice
 
 from ...llm import DEFAULT_MODEL, get_models_for_provider
-from ...llm.ollama_discovery import validate_ollama_connection
 from ...paths import Workspace
 from ..settings import ScribeConfig
 from .helpers import (
     _auto_install_latexmk,
-    _chatgpt_status_text,
     _check_latex_components,
     _detect_tinytex_install_method,
     _ensure_npx,
@@ -28,10 +24,8 @@ from .helpers import (
     _print_latex_status,
     _prompt_and_validate_api_key,
     _provider_key_info,
-    _run_chatgpt_login,
 )
 from .style import (
-    CONFIRM_STYLE,
     QMARK,
     WIZARD_STYLE,
     _checkbox_ask,
@@ -39,20 +33,18 @@ from .style import (
     _print_step_skipped,
     console,
 )
-from .validators import validate_tavily_key
 
 
 def _step_langgraph_dev_port(config: ScribeConfig) -> int:
     """Step 0.5: Choose the local TCP port for the langgraph dev subprocess.
 
     metasci-scribe auto-starts a ``langgraph dev`` server in the background to host
-    deployed sub-agents (writing-agent, data-analysis-agent) when
-    ``enable_async_subagents`` is True. This step lets the user pick a free
+    deployed sub-agents (writing-agent) when ``enable_async_subagents`` is True. This step lets the user pick a free
     port, with a live conflict check on the configured default.
 
     Returns the chosen port; caller assigns it to ``config.langgraph_dev_port``.
     """
-    if not getattr(config, "enable_async_subagents", True):
+    if not getattr(config, "enable_async_subagents", False):
         # User has async disabled — port is irrelevant, no prompt.
         return getattr(config, "langgraph_dev_port", 6174)
 
@@ -151,97 +143,14 @@ def _step_provider(
         Selected provider name.
     """
     choices = [
-        # Direct providers
+        Choice(title="OpenAI (GPT models — API key)", value="openai"),
         Choice(title="Anthropic (Claude models — API key)", value="anthropic"),
-        Choice(title="OpenAI (GPT models — API key / ChatGPT sign-in)", value="openai"),
-        Choice(title="Google GenAI (Gemini models)", value="google-genai"),
-        Choice(
-            title="MiniMax (M3.1 Flash, M3 — 1M context, thinking)",
-            value="minimax",
-        ),
-        Choice(title="ZhipuAI (智谱 — GLM models)", value="zhipu"),
-        Choice(
-            title="ZhipuAI CodePlan (智谱代码计划 — GLM models for coding)",
-            value="zhipu-code",
-        ),
-        Choice(
-            title="Volcengine (火山引擎 — Doubao models)",
-            value="volcengine",
-        ),
-        Choice(
-            title="Volcengine Coding Plan (火山引擎代码计划 — coding models)",
-            value="volcengine-code",
-        ),
-        Choice(
-            title="DashScope (阿里云 — Qwen models)",
-            value="dashscope",
-        ),
-        Choice(
-            title="DashScope Coding Plan (阿里云代码计划 — Qwen models)",
-            value="dashscope-code",
-        ),
-        Choice(
-            title="DeepSeek (DeepSeek-R1, DeepSeek-V3)",
-            value="deepseek",
-        ),
-        Choice(
-            title="Moonshot (月之暗面 — Moonshot models)",
-            value="moonshot",
-        ),
-        Choice(
-            title="Kimi Coding Plan (Kimi 代码计划 — coding-focused)",
-            value="kimi-coding",
-        ),
-        Choice(
-            title="Xiaomi MiMo (MiMo v2.6 models, 1M context, thinking)",
-            value="xiaomi",
-        ),
-        Choice(
-            title="Xiaomi MiMo Token Plan (subscription — coding tools only)",
-            value="xiaomi-token-plan",
-        ),
-        # Local
-        Choice(title="Ollama (local models)", value="ollama"),
-        # Third-party / aggregator
-        Choice(title="NVIDIA (third party — limited free requests)", value="nvidia"),
-        Choice(
-            title="SiliconFlow (aggregator — GLM models)",
-            value="siliconflow",
-        ),
-        Choice(
-            title="OpenRouter (aggregator — Grok, Gemini, Qwen, etc.)",
-            value="openrouter",
-        ),
-        Choice(
-            title="Atlas Cloud (aggregator — DeepSeek, Qwen, etc.)",
-            value="atlascloud",
-        ),
-        Choice(
-            title="Requesty (aggregator — OpenAI, Anthropic, Gemini, xAI, etc.)",
-            value="requesty",
-        ),
-        Choice(
-            title="Novita (aggregator — DeepSeek, Qwen, GLM, etc.)",
-            value="novita",
-        ),
-        Choice(
-            title="Opper (EU-hosted aggregator — OpenAI, Anthropic, Gemini, Mistral, etc.)",
-            value="opper",
-        ),
-        Choice(
-            title="OpenAI-compatible (third-party OpenAI endpoint)",
-            value="custom-openai",
-        ),
-        Choice(
-            title="Claude-compatible (third-party Anthropic endpoint)",
-            value="custom-anthropic",
-        ),
     ]
 
     # Set default based on current config (or an explicit override).
     valid_providers = {c.value for c in choices}
     preferred = default_value or config.provider
-    default = preferred if preferred in valid_providers else "anthropic"
+    default = preferred if preferred in valid_providers else "openai"
 
     provider = questionary.select(
         f"Select {label} provider:" if label else "Select your LLM provider:",
@@ -256,152 +165,6 @@ def _step_provider(
         raise KeyboardInterrupt()
 
     return provider
-
-
-_MINIMAX_REGIONS: dict[str, str] = {
-    "global": "https://api.minimax.io/anthropic",
-    "cn": "https://api.minimaxi.com/anthropic",
-}
-
-
-def _step_minimax_region(config: ScribeConfig) -> str:
-    """Step 2a (MiniMax): Select API region.
-
-    MiniMax has two regional endpoints — Global (api.minimax.io) and
-    Mainland China (api.minimaxi.com).  API keys are region-bound.
-
-    Returns:
-        The selected base URL.
-    """
-    current = config.minimax_base_url or os.environ.get("MINIMAX_BASE_URL", "")
-    if current == _MINIMAX_REGIONS["global"]:
-        default = "global"
-    else:
-        default = "cn"
-
-    region = questionary.select(
-        "Select MiniMax API region (must match where your key was created):",
-        choices=[
-            Choice(
-                title="Global (api.minimax.io — platform.minimax.io keys)",
-                value="global",
-            ),
-            Choice(
-                title="Mainland China (api.minimaxi.com — platform.minimaxi.com keys)",
-                value="cn",
-            ),
-        ],
-        default=default,
-        style=WIZARD_STYLE,
-        qmark=QMARK,
-        use_indicator=True,
-    ).ask()
-
-    if region is None:
-        raise KeyboardInterrupt()
-
-    return _MINIMAX_REGIONS[region]
-
-
-_XIAOMI_TOKEN_PLAN_REGIONS: dict[str, str] = {
-    "cn": "https://token-plan-cn.xiaomimimo.com/anthropic",
-    "sgp": "https://token-plan-sgp.xiaomimimo.com/anthropic",
-    "ams": "https://token-plan-ams.xiaomimimo.com/anthropic",
-}
-
-
-def _step_xiaomi_token_plan_region(config: ScribeConfig) -> str:
-    """Step 2a (Xiaomi Token Plan): Select the subscription's API region.
-
-    Returns:
-        The selected base URL.
-    """
-    current = config.mimo_token_plan_base_url or os.environ.get(
-        "MIMO_TOKEN_PLAN_BASE_URL", ""
-    )
-    default = next(
-        (k for k, url in _XIAOMI_TOKEN_PLAN_REGIONS.items() if url == current), "cn"
-    )
-
-    region = questionary.select(
-        "Select Xiaomi MiMo Token Plan region (must match your subscription):",
-        choices=[
-            Choice(title="China (token-plan-cn.xiaomimimo.com)", value="cn"),
-            Choice(title="Singapore (token-plan-sgp.xiaomimimo.com)", value="sgp"),
-            Choice(title="Europe (token-plan-ams.xiaomimimo.com)", value="ams"),
-        ],
-        default=default,
-        style=WIZARD_STYLE,
-        qmark=QMARK,
-        use_indicator=True,
-    ).ask()
-
-    if region is None:
-        raise KeyboardInterrupt()
-
-    return _XIAOMI_TOKEN_PLAN_REGIONS[region]
-
-
-def _step_openai_auth_mode(config: ScribeConfig) -> str:
-    """Step 2: Select OpenAI authentication mode (API key vs ChatGPT sign-in).
-
-    Args:
-        config: Current configuration.
-
-    Returns:
-        Selected auth mode: "api_key" or "oauth".
-    """
-    from .prompter import BACK_SENTINEL, GoBack, install_navigation_keys
-
-    choices = [
-        Choice(title="API Key (direct OpenAI access)", value="api_key"),
-        Choice(title="ChatGPT sign-in (no API key needed)", value="oauth"),
-        questionary.Separator(),
-        Choice(title="← Back (re-pick provider)", value=BACK_SENTINEL),
-    ]
-    current = config.openai_auth_mode
-    if current not in ("api_key", "oauth"):
-        current = "api_key"
-
-    question = questionary.select(
-        "OpenAI authentication mode  [Esc/← to go back]:",
-        choices=choices,
-        default=current,
-        style=WIZARD_STYLE,
-        qmark=QMARK,
-        use_indicator=True,
-    )
-    install_navigation_keys(question, with_back=True)
-    auth_mode = question.ask()
-
-    if auth_mode is None:
-        raise KeyboardInterrupt()
-    if auth_mode == BACK_SENTINEL:
-        raise GoBack()
-    if auth_mode != "oauth":
-        return auth_mode
-
-    from ...llm import chatgpt_oauth
-
-    console.print(
-        "  [dim]Uses your ChatGPT plan through OpenAI's Codex sign-in. "
-        "Unofficial; OpenAI's terms apply.[/dim]"
-    )
-    state = chatgpt_oauth.status()
-    if state.signed_in:
-        console.print(f"  [green]✓ {_chatgpt_status_text(state)}[/green]")
-        question_text, default = "Re-authenticate to refresh credentials?", False
-    else:
-        console.print("  [yellow]ChatGPT: not signed in[/yellow]")
-        question_text, default = "Log in to ChatGPT now?", True
-    answer = questionary.confirm(
-        question_text, default=default, style=CONFIRM_STYLE, qmark=QMARK
-    ).ask()
-    if answer is None:
-        raise KeyboardInterrupt()
-    if answer:
-        _run_chatgpt_login()
-    return auth_mode
 
 
 def _step_provider_api_key(
@@ -432,74 +195,10 @@ def _step_provider_api_key(
     )
 
 
-def _step_base_url(config: ScribeConfig, current_value: str | None = None) -> str:
-    """Prompt for custom provider base URL.
-
-    Args:
-        config: Current configuration.
-        current_value: Current base URL value (if None, defaults to empty).
-
-    Returns:
-        Base URL string.
-    """
-    current = current_value if current_value is not None else ""
-    hint = f"Current: {current}" if current else ""
-    default = current or ""
-
-    url = questionary.text(
-        f"Base URL{' (' + hint + ', Enter to keep)' if hint else ''}:",
-        default=default,
-        style=WIZARD_STYLE,
-        qmark=QMARK,
-        placeholder=FormattedText([("fg:#858585", " e.g. https://api.example.com/v1")])
-        if not default
-        else None,
-    ).ask()
-    if url is None:
-        raise KeyboardInterrupt()
-    return url.strip()
-
-
-def _step_ollama_base_url(config: ScribeConfig) -> tuple[str, list[str]]:
-    """Prompt for Ollama server base URL and validate connection.
-
-    Args:
-        config: Current configuration.
-
-    Returns:
-        Tuple of (base_url, detected_model_names).
-    """
-    current = config.ollama_base_url or os.environ.get("OLLAMA_BASE_URL", "")
-    default = current or "http://localhost:11434"
-
-    url = questionary.text(
-        f"Ollama base URL (Enter for {default}):",
-        default=default,
-        style=WIZARD_STYLE,
-        qmark=QMARK,
-    ).ask()
-    if url is None:
-        raise KeyboardInterrupt()
-    url = url.strip()
-
-    detected_models: list[str] = []
-    if url:
-        console.print("  [dim]Checking Ollama connection...[/dim]", end="")
-        valid, msg, detected_models = validate_ollama_connection(url)
-        if valid:
-            console.print(f"\r  [green]\u2713 {msg}[/green]      ")
-        else:
-            console.print(f"\r  [yellow]\u2717 {msg}[/yellow]      ")
-            console.print("  [dim]You can start Ollama later and it will work.[/dim]")
-
-    return url, detected_models
-
-
 def _step_model(
     config: ScribeConfig,
     provider: str,
     *,
-    ollama_detected_models: list[str] | None = None,
     label: str | None = None,
     default_value: str | None = None,
 ) -> str:
@@ -508,7 +207,6 @@ def _step_model(
     Args:
         config: Current configuration.
         provider: Selected provider name.
-        ollama_detected_models: Model names detected from a live Ollama server.
         label: Optional role label (e.g. "co-pilot") for the prompt. When omitted,
             the generic main-model prompt is used.
         default_value: Preselect this model instead of ``config.model`` (e.g. the
@@ -519,57 +217,11 @@ def _step_model(
     """
     model_prompt = f"Select {label} model:" if label else "Select model:"
     model_default = default_value or config.model
-    # Ollama: show only what's actually pulled on the server
-    if provider == "ollama":
-        if ollama_detected_models:
-            _CUSTOM_SENTINEL = "__custom__"
-            choices = [
-                Choice(title=name, value=name) for name in ollama_detected_models
-            ]
-            choices.append(Choice(title="Type a model name...", value=_CUSTOM_SENTINEL))
-
-            default = ollama_detected_models[0]
-            if model_default in ollama_detected_models:
-                default = model_default
-
-            selected = questionary.select(
-                model_prompt,
-                choices=choices,
-                default=default,
-                style=WIZARD_STYLE,
-                qmark=QMARK,
-                use_indicator=True,
-            ).ask()
-            if selected is None:
-                raise KeyboardInterrupt()
-
-            if selected != _CUSTOM_SENTINEL:
-                return selected
-
-        # No detected models (server down or empty) — direct text input
-        if not ollama_detected_models:
-            console.print(
-                "  [dim]No models detected — type the model name you plan to pull.[/dim]"
-            )
-        model = questionary.text(
-            "Model name:",
-            style=WIZARD_STYLE,
-            qmark=QMARK,
-            placeholder=FormattedText([("fg:#858585", " e.g. qwen3-coder-next")]),
-        ).ask()
-        if model is None:
-            raise KeyboardInterrupt()
-        model = model.strip()
-        if not model:
-            model = "qwen3-coder-next"
-            console.print(f"  [dim]Using default: {model}[/dim]")
-        return model
-
     # Get models for the selected provider
     entries = get_models_for_provider(provider)
 
     if not entries:
-        # Custom / unknown provider: direct text input.
+        # Unknown provider: direct text input.
         # Keep prompting until a non-empty model name is provided — saving an
         # empty string here leaves the first request broken with an opaque
         # "model required" error from the provider SDK.
@@ -587,8 +239,7 @@ def _step_model(
             if model:
                 return model
             console.print(
-                "  [yellow]Model name cannot be empty for a custom provider. "
-                "Press Ctrl+C to cancel.[/yellow]"
+                "  [yellow]Model name cannot be empty. Press Ctrl+C to cancel.[/yellow]"
             )
 
     provider_models = [name for name, _ in entries]
@@ -683,19 +334,9 @@ def _step_auxiliary_enable(config: ScribeConfig) -> bool:
     return choice == "assemble"
 
 
-# Levels offered per provider; each one is sent unchanged on every route of
-# that provider (see ``llm.models._ROUTE_REASONING_LEVELS``). "" stores nothing,
-# so each model keeps its own default.
+# Levels offered per provider. "" stores nothing, so each model keeps its own
+# default.
 _REASONING_EFFORT_CHOICES: dict[str, list[tuple[str, str]]] = {
-    # https://openrouter.ai/docs/guides/best-practices/reasoning-tokens
-    "openrouter": [
-        ("xhigh", "xhigh  — ~95% of max_tokens for reasoning"),
-        ("high", "high   — ~80% of max_tokens (recommended)"),
-        ("medium", "medium — ~50% of max_tokens"),
-        ("low", "low    — ~20% of max_tokens"),
-        ("minimal", "minimal — ~10% of max_tokens"),
-        ("none", "none   — disable reasoning entirely"),
-    ],
     "openai": [
         ("", "default — Metasci Scribe's level for each model (recommended)"),
         ("low", "low    — fast responses with lighter reasoning"),
@@ -713,7 +354,7 @@ def _asks_reasoning_effort(provider: str) -> bool:
 
 
 def _step_reasoning_effort(config: ScribeConfig, provider: str) -> str:
-    """Step 3.5: Pick the reasoning effort level for OpenRouter or OpenAI.
+    """Step 3.5: Pick the reasoning effort level for OpenAI.
 
     Args:
         config: Current configuration.
@@ -743,33 +384,6 @@ def _step_reasoning_effort(config: ScribeConfig, provider: str) -> str:
         raise KeyboardInterrupt()
 
     return effort
-
-
-def _step_tavily_key(
-    config: ScribeConfig,
-    skip_validation: bool = False,
-) -> str | None:
-    """Step 4: Enter Tavily API key for web search.
-
-    Args:
-        config: Current configuration.
-        skip_validation: Skip API key validation.
-
-    Returns:
-        New API key or None if unchanged.
-    """
-    current = config.tavily_api_key or os.environ.get("TAVILY_API_KEY", "")
-
-    hint = f"Current: ***{current[-4:]}" if current else "Not set"
-    prompt_text = f"Tavily API key for web search ({hint}, Enter to keep):"
-
-    return _prompt_and_validate_api_key(
-        prompt_text,
-        current,
-        validate_tavily_key,
-        skip_validation,
-        placeholder=FormattedText([("fg:#858585", " (recommended for web search)")]),
-    )
 
 
 def _step_workspace(config: ScribeConfig) -> str:

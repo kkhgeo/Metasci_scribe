@@ -39,26 +39,22 @@ def extract_model_and_provider(
         ``(model_name, provider)`` tuple.
 
     Raises:
-        ValueError: If the model is not in the registry. Skipped when
-            ``provider_override == "ollama"``, since Ollama models are
-            locally-installed and never appear in ``MODELS``.
+        ValueError: If the model is not in the registry, or the provider is
+            not one Metasci Scribe supports.
     """
+    from ...config.provider_keys import PROVIDERS
     from ...llm.models import MODELS
     from ...llm.registry import resolve_provider
 
     model_name = args[0]
     provider_override = args[1] if len(args) > 1 else None
 
-    # Ollama models are locally-installed — not in the registry. Pass the name
-    # through verbatim; get_chat_model's "Assume full model ID" fallback
-    # (models.py) accepts them.
-    if provider_override == "ollama":
-        return model_name, "ollama"
-
     if model_name not in MODELS:
         raise ValueError(f"Unknown model '{model_name}'")
 
     if provider_override:
+        if provider_override not in PROVIDERS:
+            raise ValueError(f"Unknown provider '{provider_override}'")
         provider = provider_override
     else:
         provider = resolve_provider(model_name, current_provider)
@@ -78,7 +74,7 @@ class ModelCommand(Command):
         Argument(
             name="model_name",
             type=str,
-            description="Model short name (e.g. claude-sonnet-5-5). Opens picker if omitted.",
+            description="Model short name (e.g. gpt-6.1-sol). Opens picker if omitted.",
             required=False,
         ),
         Argument(
@@ -124,10 +120,7 @@ class ModelCommand(Command):
             )
             return
 
-        entries = await list_model_picker_entries(
-            getattr(cfg, "ollama_base_url", None),
-            include_custom_ollama=True,
-        )
+        entries = list_model_picker_entries()
 
         result = await ctx.ui.wait_for_model_pick(
             entries,
@@ -138,14 +131,6 @@ class ModelCommand(Command):
             return
 
         name, provider = result
-        # Defense-in-depth: the widget should have replaced the sentinel with
-        # the user-typed name. If it didn't, treat as cancel rather than try
-        # to switch to a literal "__custom_ollama__" model.
-        if provider == "ollama" and name in (
-            "Custom Ollama model...",
-            "__custom_ollama__",
-        ):
-            return
         await self._apply_model(ctx, name, provider, save=save)
 
     async def _apply_model(
@@ -226,7 +211,7 @@ class ModelCommand(Command):
         temp_cfg.provider = provider
 
         # Re-thread the session's frontend event sink so the rebuilt agent's
-        # middleware keeps driving the tool-selection widget / fallback notices
+        # middleware keeps driving the tool-selection widget
         # after a /model switch (the sink lives on the gateway, not the agent).
         events = ctx.graph_gateway.events
 

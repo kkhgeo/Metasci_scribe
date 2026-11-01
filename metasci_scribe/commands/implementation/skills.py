@@ -8,17 +8,6 @@ from ..base import Argument, Command, CommandContext
 from ..manager import manager
 
 
-def _announce_expert_install(ctx: CommandContext, results: list[dict]) -> None:
-    """Print the /new hint once if any installed directory declares an expert."""
-    from pathlib import Path
-
-    from ...tools.skills_manager import is_expert_skill_dir
-    from .experts import NEW_EXPERT_DISPATCH_HINT
-
-    if any(r.get("path") and is_expert_skill_dir(Path(r["path"])) for r in results):
-        ctx.ui.append_system(NEW_EXPERT_DISPATCH_HINT, style="dim")
-
-
 class SkillsCommand(Command):
     """List installed skills."""
 
@@ -143,14 +132,12 @@ class InstallSkill(Command):
                 ctx.ui.append_system(
                     f"{installed_count} skill(s) installed.", style="dim"
                 )
-            _announce_expert_install(ctx, result.get("installed", []))
         elif result.get("success"):
             ctx.ui.append_system(f"Installed: {result['name']}", style="green")
             ctx.ui.append_system(
                 f"Description: {result.get('description', '(none)')}", style="dim"
             )
             ctx.ui.append_system(f"Path: {_shorten_path(result['path'])}", style="dim")
-            _announce_expert_install(ctx, [result])
         else:
             ctx.ui.append_system(f"Failed: {result['error']}", style="red")
 
@@ -278,7 +265,6 @@ class InstallSkills(Command):
             ctx.ui.append_system(
                 f"Successfully installed {installed_count} skill(s).", style="dim"
             )
-            _announce_expert_install(ctx, installed_results)
         elif not non_interactive:
             ctx.ui.append_system("No skills were installed.", style="yellow")
 
@@ -300,7 +286,6 @@ class UninstallSkill(Command):
 
     async def execute(self, ctx: CommandContext, args: list[str]) -> None:
         from ...tools.skills_manager import uninstall_skill
-        from .experts import REMOVED_EXPERT_DISPATCH_HINT
 
         name = args[0] if args else ""
         if not name:
@@ -311,8 +296,6 @@ class UninstallSkill(Command):
         result = uninstall_skill(name, workspace=ctx.workspace)
         if result["success"]:
             ctx.ui.append_system(f"Uninstalled: {name}", style="green")
-            if result.get("expert"):
-                ctx.ui.append_system(REMOVED_EXPERT_DISPATCH_HINT, style="dim")
         else:
             ctx.ui.append_system(f"Failed: {result['error']}", style="red")
 

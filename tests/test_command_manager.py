@@ -34,18 +34,6 @@ class TestCommandManagerSubcommands:
         names = {name for name, _desc in scs}
         assert names == {"list", "config", "add", "edit", "remove", "install"}
 
-    def test_model_fallback_has_subcommands(self):
-        """``/model-fallback`` must expose its subcommands."""
-        manager = CommandManager()
-        from metasci_scribe.commands.implementation.model_fallback import (
-            ModelFallbackCommand,
-        )
-
-        manager.register(ModelFallbackCommand())
-        scs = manager.list_subcommands("/model-fallback")
-        names = {name for name, _desc in scs}
-        assert {"list", "add", "remove", "clear", "save", "help"} <= names
-
     def test_command_without_subcommands_returns_empty(self):
         """A command with no subcommands must return an empty list."""
         manager = CommandManager()
@@ -63,12 +51,24 @@ class TestCommandManagerSubcommands:
 
     def test_subcommand_via_alias(self):
         """Registry by alias should still expose subcommands."""
-        manager = CommandManager()
-        from metasci_scribe.commands.implementation.model_fallback import (
-            ModelFallbackCommand,
-        )
+        from typing import ClassVar
 
-        manager.register(ModelFallbackCommand())
-        scs = manager.list_subcommands("/fallback")
+        from metasci_scribe.commands.base import Command, SubCommand
+
+        class _Aliased(Command):
+            name = "/aliased"
+            alias: ClassVar[list[str]] = ["/al"]
+            description = "test"
+            subcommands: ClassVar[list[SubCommand]] = [
+                SubCommand("list", "List things"),
+                SubCommand("add", "Add a thing"),
+            ]
+
+            async def execute(self, ctx, args):
+                return None
+
+        manager = CommandManager()
+        manager.register(_Aliased())
+        scs = manager.list_subcommands("/al")
         names = {name for name, _desc in scs}
-        assert {"list", "add", "remove"} <= names
+        assert {"list", "add"} <= names

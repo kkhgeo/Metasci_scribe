@@ -1,11 +1,10 @@
-"""Tests for the backend's browser boundary (Host/Origin guard and CORS settings)."""
+"""Tests for the backend's browser boundary (the Host/Origin guard)."""
 
 from __future__ import annotations
 
 import json
 import logging
 import os
-import re
 import socket
 from collections import namedtuple
 from pathlib import Path
@@ -13,7 +12,6 @@ from pathlib import Path
 import pytest
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
-from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route, WebSocketRoute
 from starlette.testclient import TestClient
@@ -135,66 +133,19 @@ def test_server_env_network_bind_trusts_own_addresses(bind, interfaces):
     assert ("myhost.local" in names) == (bind == "myhost.local")
 
 
-def test_server_env_cors_and_guard_trust_the_same_pages(interfaces):
-    """One set, two serialisations: CORS must allow exactly the guard's pages."""
+def test_server_env_sets_the_guard_only(interfaces):
+    """The guard's trust set is the one thing the server is started with."""
     env = boundary.server_env("0.0.0.0", "https://smith.langchain.com")
-    cors = json.loads(env["CORS_CONFIG"])
+    assert set(env) == {boundary.BOUNDARY_ENV}
     guard = json.loads(env[boundary.BOUNDARY_ENV])
-    assert cors["allow_origins"] == guard["origins"] == ["https://smith.langchain.com"]
-    regex = re.compile(cors["allow_origin_regex"])
-    for name in guard["names"]:
-        host = f"[{name}]" if ":" in name else name
-        assert regex.fullmatch(f"http://{host}:4716"), name
-    assert not regex.fullmatch(EVIL)
+    assert guard["origins"] == ["https://smith.langchain.com"]
+    assert set(boundary.LOOPBACK_NAMES) <= set(guard["names"])
 
 
-def test_langgraph_json_cors_is_loopback_only():
-    """A plain ``langgraph dev`` gets loopback pages and an explicit
-    ``allow_origins``: langgraph-api fills a missing one with ``["*"]``."""
+def test_langgraph_json_has_no_cors_block():
+    """The guard runs in front of the server; no CORS rules are served."""
     path = Path(boundary.__file__).with_name("langgraph.json")
-    cors = json.loads(path.read_text())["http"]["cors"]
-    assert cors == boundary.cors_config(list(boundary.LOOPBACK_NAMES), [])
-
-
-# --- CORS settings, as langgraph-api applies them --------------------------
-
-
-def _cors_client():
-    async def ok(_request):
-        return PlainTextResponse("ok", headers={"x-pagination-total": "3"})
-
-    app = Starlette(
-        routes=[Route("/threads", ok, methods=["GET", "POST"])],
-        middleware=[
-            Middleware(
-                CORSMiddleware,
-                **boundary.cors_config(list(boundary.LOOPBACK_NAMES), []),
-            )
-        ],
-    )
-    return TestClient(app, base_url="http://127.0.0.1:6174")
-
-
-def test_cors_config_allows_a_json_preflight_from_a_loopback_page():
-    response = _cors_client().options(
-        "/threads",
-        headers={
-            "Origin": "http://localhost:3000",
-            "Access-Control-Request-Method": "POST",
-            "Access-Control-Request-Headers": "content-type,x-api-key",
-        },
-    )
-    assert response.status_code == 200
-    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
-
-
-def test_cors_config_keeps_the_headers_the_webui_reads():
-    response = _cors_client().get(
-        "/threads", headers={"Origin": "http://127.0.0.1:4716"}
-    )
-    exposed = response.headers["access-control-expose-headers"].lower()
-    for header in ("x-pagination-total", "x-pagination-next", "content-location"):
-        assert header in exposed
+    assert "cors" not in json.loads(path.read_text(encoding="utf-8"))["http"]
 
 
 # --- the guard -------------------------------------------------------------

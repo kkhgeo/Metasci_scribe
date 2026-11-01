@@ -89,7 +89,7 @@ def compute_completions(
     """Parse *text* up to *cursor_pos* and return completion candidates.
 
     ``workspace`` is the session's workspace, forwarded to commands whose
-    completions list what is installed there (e.g. ``/expert``).
+    completions list what is installed there.
 
     This is the shared engine used by both the Rich CLI
     (``SlashCommandCompleter``) and the TUI (``on_text_area_changed``).

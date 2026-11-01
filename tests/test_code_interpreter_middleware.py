@@ -23,6 +23,12 @@ from metasci_scribe.middleware.code_interpreter import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _openai_key(monkeypatch):
+    """The served main graph builds the default (OpenAI) chat model."""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+
+
 def test_task_excluded_from_ptc_allowlist():
     # Exposing `task` via ptc raises on quickjs >=0.3 — it is the REPL global.
     assert "task" not in _DEFAULT_PTC_ALLOWLIST

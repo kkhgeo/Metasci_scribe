@@ -157,7 +157,7 @@ def load_subagents(
             ...
         research-agent:
           description: "..."
-          tools: [tavily_search, think_tool]
+          tools: [think_tool]
           system_prompt: |
             ...
 

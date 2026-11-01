@@ -2,8 +2,7 @@
 
 Classification walks only ``__cause__`` and exception-group members, never
 ``__context__``: an error raised while another was being handled says nothing
-about that other one. A fallback chain that ran out lists each model's failure
-on the error it raises, and one transient model is enough to try again.
+about that other one.
 
 ``ModelCallBoundaryMiddleware`` marks each provider call on the custom stream
 so the stream decoder can drop what a failed call had already emitted.
@@ -15,7 +14,6 @@ import asyncio
 import logging
 import math
 import random
-import re
 import time
 import uuid
 from collections.abc import Awaitable, Callable, Iterator
@@ -55,10 +53,6 @@ _TRANSIENT_CLASSES = frozenset(
         ("httpcore", "TimeoutException"),
         ("httpcore2", "NetworkError"),
         ("httpcore2", "TimeoutException"),
-        # The NVIDIA client: requests for sync calls, aiohttp for async ones.
-        ("requests", "ConnectionError"),
-        ("requests", "Timeout"),
-        ("aiohttp", "ClientConnectionError"),
     }
 )
 _EXCLUDED_CLASSES = frozenset(
@@ -67,15 +61,11 @@ _EXCLUDED_CLASSES = frozenset(
         ("httpx", "LocalProtocolError"),
         ("httpx2", "UnsupportedProtocol"),
         ("httpx2", "LocalProtocolError"),
-        # A certificate or TLS setup failure repeats on every attempt.
-        ("requests", "SSLError"),
-        ("aiohttp", "ClientSSLError"),
     }
 )
 _ANTHROPIC_TRANSIENT_TYPES = frozenset(
     {"overloaded_error", "api_error", "rate_limit_error"}
 )
-_OPENROUTER_CODE = re.compile(r"\(code: (\d+)\)")
 _REASON_MAX = 200
 
 
@@ -129,14 +119,6 @@ def _code_status(code: object) -> int | None:
         return None
 
 
-def _message_status(exc: BaseException) -> int | None:
-    """The ``(code: N)`` an OpenRouter error message carries, if any."""
-    if not isinstance(exc, ValueError):
-        return None
-    match = _OPENROUTER_CODE.search(str(exc))
-    return int(match.group(1)) if match else None
-
-
 def _body_of(exc: BaseException) -> dict[str, Any] | None:
     body = getattr(exc, "body", None)
     if isinstance(body, dict):
@@ -164,19 +146,49 @@ def _error_finished(exc: BaseException) -> Any | None:
     return None
 
 
+_CONTEXT_LIMIT_PATTERNS: tuple[str, ...] = (
+    "context_length_exceeded",
+    "context length exceeded",
+    "too many tokens",
+    "maximum context length",
+    "output too large",
+    "context_window_exceeded",
+    "string_too_long",
+    "max_tokens_exceeded",
+)
+"""Substrings that identify a context-length error in provider messages."""
+
+_MALFORMED_REQUEST_PATTERNS: tuple[str, ...] = (
+    "invalid_request_error",
+    "invalid request",
+    "malformed",
+)
+"""Substrings that identify a malformed request (client-side bug)."""
+
+
+def _is_deterministic_request_error(exc: Exception) -> bool:
+    """Whether the provider rejected the request itself (HTTP 400): a context
+    breach or a malformed request. The same request fails the same way again."""
+    err_msg = str(exc).lower()
+    if "400" not in err_msg and "bad request" not in err_msg:
+        return False
+    return any(p in err_msg for p in _CONTEXT_LIMIT_PATTERNS) or any(
+        p in err_msg for p in _MALFORMED_REQUEST_PATTERNS
+    )
+
+
 def _hard_exclusion(exc: BaseException) -> bool:
     from langchain_core.exceptions import ContextOverflowError
     from langgraph.errors import GraphBubbleUp
 
     from ..llm.errors import ProviderStreamError
     from .error_normalization import ModelOutputTruncatedError
-    from .model_fallback import _is_non_fallbackable
 
     if isinstance(
         exc, GraphBubbleUp | ContextOverflowError | ModelOutputTruncatedError
     ):
         return True
-    if isinstance(exc, Exception) and _is_non_fallbackable(exc) is not None:
+    if isinstance(exc, Exception) and _is_deterministic_request_error(exc):
         return True
     code = (
         exc.code if isinstance(exc, ProviderStreamError) else getattr(exc, "code", None)
@@ -186,8 +198,8 @@ def _hard_exclusion(exc: BaseException) -> bool:
         return True
     if _has_class(exc, _EXCLUDED_CLASSES):
         return True
-    # A deterministic status reported in the body or the message counts too.
-    statuses = (_status_of(exc), _code_status(body.get("code")), _message_status(exc))
+    # A deterministic status reported in the body counts too.
+    statuses = (_status_of(exc), _code_status(body.get("code")))
     return any(_status_signal(status) is False for status in statuses)
 
 
@@ -213,8 +225,6 @@ def _signal(exc: BaseException) -> bool | None:
             return True
         if body.get("type") in _ANTHROPIC_TRANSIENT_TYPES:
             return True
-    if _status_signal(_message_status(exc)) is True:
-        return True
     return None
 
 
@@ -231,14 +241,8 @@ def _transient_alone(exc: BaseException) -> bool:
 
 
 def retryable_failures(exc: BaseException) -> list[BaseException]:
-    """The failures that make another attempt worth it; empty when none does.
-
-    After an exhausted fallback chain these are the models that failed
-    transiently: the next attempt starts from the primary again.
-    """
-    from .model_fallback import chain_failures
-
-    return [f for f in chain_failures(exc) or (exc,) if _transient_alone(f)]
+    """The failures that make another attempt worth it; empty when none does."""
+    return [exc] if _transient_alone(exc) else []
 
 
 def is_transient(exc: BaseException) -> bool:
@@ -375,7 +379,6 @@ def _spend_run(run: dict[str, Any] | None) -> None:
 class ModelRetryMiddleware(AgentMiddleware):
     """Retry a transient model-call failure until its budget, or another call's in the run, is spent.
 
-    Sits outside the fallback chain: one attempt is primary plus fallbacks.
     The budget starts at the first failure: the waits and the retried attempts
     count against it, the first attempt's own time does not.
 
@@ -590,7 +593,6 @@ class ModelCallBoundaryMiddleware(AgentMiddleware):
 
     The stream decoder drops a failed call's output by these marks. They travel
     as custom events because the server transport strips message metadata.
-    Mounted inside the fallback chain, so every model of a chain gets its own pair.
     """
 
     name = "model_call_boundary"
