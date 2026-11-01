@@ -1,125 +1,108 @@
 # Contributing to Metasci Scribe
 
-We appreciate your interest and the time you spend helping improve Metasci Scribe. Please read the following guidelines before contributing.
+Thank you for helping. Metasci Scribe is a terminal agent for writing scientific
+manuscripts. Please read this before you open an issue or a pull request.
 
 ## How you can contribute
 
-- **Report bugs and request features:** open an issue using the provided templates. Make sure to use the correct template and labels.
-- **Propose design changes:** use issues or discussion threads to outline the problem, alternatives, and trade-offs before implementing.
-- **Contribute code or docs:** submit PRs that address an open issue. They must have a clear rationale and tests where applicable.
+- **Report bugs and request features:** open an issue with the provided templates.
+- **Propose design changes:** use an issue to describe the problem, the
+  alternatives and the trade-offs before you implement anything.
+- **Contribute code or docs:** submit a pull request that addresses an open
+  issue, with a clear rationale and tests where they apply.
 
-## What we are looking for in PRs
+## What fits
 
-We aim to keep Metasci Scribe focused on core functionality that benefits the majority of users. PRs should only include:
+The project stays small on purpose. A pull request should be one of:
 
-- Bug fixes / improvements to existing features
-- New features that were proposed in an issue and agreed upon with maintainers
-- Documentation updates and examples
-- Meaningful additions to the test suite
+- a bug fix or an improvement to an existing feature,
+- a feature that was proposed in an issue and agreed with the maintainers,
+- a documentation update,
+- a meaningful addition to the test suite.
 
-If you want to add a niche or specialized workflow, consider contributing to the [EvoSkills repository](https://github.com/EvoScientist/EvoSkills) instead.
+Out of scope: web or full-screen interfaces, messaging channels, web search,
+scheduled or background jobs, memory that carries between papers, and
+connections to Claude subscriptions. The reasons are in
+`docs/superpowers/specs/2026-11-01-metasci-scribe-design.md`.
 
 ## Development setup
 
-1. **Fork and clone** the repository:
-   ```bash
-   git clone https://github.com/<your-username>/metasci_scribe.git
-   cd Metasci Scribe
-   ```
-
-2. **Install dependencies** (requires [uv](https://docs.astral.sh/uv/)):
+1. Fork and clone the repository.
+2. Install the dependencies (needs [uv](https://docs.astral.sh/uv/) and Python
+   3.11 to 3.13):
    ```bash
    uv sync --dev
    ```
-
-3. **Run the test suite** (no API keys or network needed):
+3. Run the tests. They need no API key and no network:
    ```bash
-   uv run pytest -n auto --dist worksteal
+   uv run pytest -n auto -q
    ```
-   `-n auto` runs one worker per CPU; plain `uv run pytest` runs serially.
-
-4. **Run the linter:**
+4. Run the linter:
    ```bash
    uv run ruff check .
    ```
 
+On Windows with a non-UTF-8 default locale, a few tests can fail for reasons that
+have nothing to do with the code. The list is in [docs/baseline.md](docs/baseline.md).
+
 ## Submitting a pull request
 
-1. Create a branch from `main` with a descriptive name (e.g. `fix/session-crash`, `feat/export-csv`).
-2. Make your changes, keeping commits focused and well-described.
-3. Ensure `uv run ruff check .` and `uv run pytest` pass locally — these also run in CI.
-4. Open a PR against `main` and fill in the PR template.
-5. A maintainer will review your PR. Please be responsive to feedback.
-
-## Releases
-
-The release PR (`release: vX.Y.Z`) also refreshes `constraints.txt`, which pins every dependency to its version in `uv.lock`, so installs from the release tag get the tested set:
-
-```bash
-uv lock
-uv export --frozen --no-hashes --no-dev --no-emit-project --all-extras --no-header --no-annotate -o constraints.txt
-```
-
-The file is generated; never edit it by hand. A check on the release PR flags a `uv.lock` that is out of date or a `constraints.txt` that does not match it, and the publish workflows refuse such a release. Other PRs do not need to regenerate it.
-
-Installs read the file from the release tag. A release that the publish guard refuses, or that shipped a wrong `constraints.txt`, is fixed by a new patch release. The repository uses immutable releases: a published release's tag never moves, and its name cannot be reused even after the release is deleted. jsDelivr also caches tagged files for a year.
+1. Create a branch from `main` with a descriptive name (for example
+   `fix/session-crash`).
+2. Keep commits focused and well described.
+3. Make sure `uv run ruff check .` and `uv run pytest -n auto -q` pass. Both also
+   run in CI.
+4. Open a pull request against `main` and fill in the template.
 
 ## Code style
 
-- We use [Ruff](https://docs.astral.sh/ruff/) for linting. Run `uv run ruff check .` before pushing.
-- Follow the existing code patterns and conventions in the area you're modifying.
-- Keep changes minimal and focused on the task at hand.
-
----
+- Ruff does the linting and formatting (`uv run ruff check .`,
+  `uv run ruff format .`).
+- Follow the patterns of the code around your change, and keep changes minimal.
+- The command is `metasci-scribe`, the package is `metasci_scribe`, and
+  environment variables start with `METASCI_SCRIBE_`.
 
 ## Project overview
 
-Metasci Scribe is a multi-agent AI system for automated scientific experimentation and discovery. It orchestrates specialized sub-agents that plan experiments, search literature, write code, debug, analyze data, and draft reports.
-
 | Fact | Value |
-|------|-------|
-| Language | Python 3.11+ |
+|---|---|
+| Language | Python 3.11 to 3.13 |
 | License | Apache 2.0 |
-| Framework | [DeepAgents](https://github.com/langchain-ai/deepagents) + [LangChain](https://python.langchain.com/) + [LangGraph](https://langchain-ai.github.io/langgraph/) |
-| Default model | `claude-sonnet-5-5` (Anthropic) |
-| Tests | ~890 across 36 files, no API keys needed |
+| Framework | [DeepAgents](https://github.com/langchain-ai/deepagents), [LangChain](https://python.langchain.com/), [LangGraph](https://langchain-ai.github.io/langgraph/) |
+| Models | OpenAI (ChatGPT plan or API key) and Anthropic (API key) |
 | Config file | `~/.config/metasci-scribe/config.yaml` |
+| Data folder | `~/.metasci-scribe` |
 
-### Sub-Agents (defined in `metasci_scribe/subagent.yaml`)
+### Sub-agents (`metasci_scribe/subagents/*.yaml`)
 
 | Agent | Purpose |
-|-------|---------|
-| `planner-agent` | Creates and updates experimental plans (no web search, no implementation) |
-| `research-agent` | Web research for methods, baselines, and datasets (Tavily search) |
-| `code-agent` | Implements experiment code and runnable scripts |
-| `debug-agent` | Reproduces failures, identifies root causes, applies minimal fixes |
-| `data-analysis-agent` | Computes metrics, creates plots, summarizes insights |
-| `writing-agent` | Drafts paper-ready Markdown experiment reports |
+|---|---|
+| `planner-agent` | Organizes the outline map (sections, paragraph claims, order, gaps in the evidence); does not draft text. |
+| `research-agent` | Collects what the paper folder and the extracted PDF text say about a topic, with file names and page markers; no web access. |
+| `writing-agent` | Drafts one paragraph or section from a given claim and source passages; returns text and saves nothing. |
 
 ### Data flow
 
-```txt
-User Input (CLI / TUI)
+```text
+User input (terminal)
     |
-CLI (cli/) / TUI (cli/tui_*)
+CLI (cli/interactive.py)            metasci-scribe run (run.py, run_agent.py)
+    |                                    |
+Main agent (agent.py) -- create_deep_agent()
+    +-- System prompt (prompts.py)
+    +-- Chat model (llm/: ChatGPT plan, OpenAI key, Anthropic key)
+    +-- Middleware (middleware/)
+    +-- Backends (backends.py): the paper folder, guarded (the agent cannot
+    |     write .env, .metasci-scribe/ or .git); /skills/ is read only
+    +-- MCP tools (mcp/, optional, chat only)
     |
-Main Agent (agent.py) -- create_deep_agent()
-    +-- System Prompt (prompts.py)
-    +-- Chat Model (llm/ -- multi-provider)
-    +-- Middleware: Memory (middleware/memory.py)
-    +-- Backend: CompositeBackend (backends.py)
-    |     / --> CustomSandboxBackend (workspace read/write + execute)
-    |     /skills/ --> MergedReadOnlyBackend (user > built-in)
-    |     /memory/ --> FilesystemBackend (persistent cross-session)
-    +-- MCP Tools (mcp/ -- optional, cached by config signature)
+task tool --> sub-agents
     |
-task tool --> Delegates to Sub-Agents
-    |
-Stream Events --> Emitter --> Tracker --> State --> Rich Display / TUI
+Stream events --> display --> Rich terminal output
 ```
 
----
+## License of contributions
 
-## Need help?
-
-Reach us on [Discord](https://discord.gg/AZ9ZMXkunY) or WeChat (linked in README).
+By contributing you agree that your work is licensed under the Apache License
+2.0, as the rest of the project. Parts derived from the upstream project are
+listed in [NOTICE](NOTICE).

@@ -1,6 +1,6 @@
 # Grading a run against a rubric
 
-A rubric is a checklist of acceptance criteria. Each time the agent stops, a separate grader checks the work against it; if a criterion is not met, the agent gets the gaps back and keeps working. `--rubric` grades one single-shot run; `/rubric` grades the turns of a thread in the TUI or the interactive CLI (see [Interactive sessions](#interactive-sessions)).
+A rubric is a checklist of acceptance criteria. Each time the agent stops, a separate grader checks the work against it; if a criterion is not met, the agent gets the gaps back and keeps working. `--rubric` grades one single-shot run; `/rubric` grades the turns of a thread in the interactive CLI (see [Interactive sessions](#interactive-sessions)).
 
 ```bash
 metasci-scribe -p "Reproduce table 2 and plot the ablation" --auto-mode --rubric "- results/table2.csv has one row per baseline
@@ -15,7 +15,7 @@ metasci-scribe -p "Reproduce table 2" --auto-mode --rubric @criteria.md
 
 - The grader runs after the agent stops, at most 3 times per run.
 - It sees this run's conversation and can list and read files in the workspace. It cannot run commands, so a criterion such as "the tests pass" is judged from what the conversation shows.
-- The rubric applies to this run only. Later turns on the same thread are not graded unless the thread holds a `/rubric` checklist, and a run that is parked at an approval and then continued from another client (for example the WebUI) finishes without grading.
+- The rubric applies to this run only. Later turns on the same thread are not graded unless the thread holds a `/rubric` checklist,.
 - Sub-agents run in-turn during a `--rubric` run instead of in the background.
 - Only runs the CLI marks are graded (`configurable.rubric_run` in the run's config): a single-shot run started with `--rubric`, and in an interactive session the turns of a thread that holds a `/rubric` checklist. A `rubric` that another client sends in a run's input is dropped and the run is not graded, unless that client also sets the marker.
 - The grader's own work is not shown: a line says a check is running, then the verdict follows.
@@ -33,7 +33,7 @@ With `--output-format stream-json` each pass also emits `rubric_evaluation_start
 
 ## Interactive sessions
 
-In the TUI and the interactive CLI, `/rubric` stores checklists on the current thread:
+In the interactive CLI, `/rubric` stores checklists on the current thread:
 
 | Command | Effect |
 |---------|--------|
@@ -50,7 +50,7 @@ The text can span lines; quotes inside it are kept as typed. `@file` is relative
 - The status bar shows `rubric: on`, `rubric: next` or `rubric: on+next`.
 - A thread's [goal](goal.md) keeps its criteria in the place of the `/rubric set` checklist, so `/rubric set` and `/rubric clear` cancel the goal (the command says so).
 - Approvals work as usual; revisions can bring more of them, within the existing per-turn limits.
-- Not graded: single-shot runs without `--rubric`, the WebUI, `metasci-scribe serve`, and a notification turn for a thread other than the current one. `/rubric` is refused in channel sessions and when the session executes its runs on the `langgraph_server` gateway.
+- Not graded: single-shot runs without `--rubric`, and a notification turn for a thread other than the current one. `/rubric` is refused when the session executes its runs on the `langgraph_server` gateway.
 
 ## Limits
 

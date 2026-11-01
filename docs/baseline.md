@@ -1,6 +1,6 @@
 # Test baseline
 
-Measured on the unmodified EvoScientist v0.3.8 import (commit aa55c60, upstream e2eef14),
+Measured on the unmodified upstream v0.3.8 import (commit aa55c60, upstream e2eef14),
 before any rename. Windows 11, Python 3.13.14 (uv-managed), default locale cp949.
 
 Command: `uv run pytest -n auto -q` (with `UV_PROJECT_ENVIRONMENT=C:\dev\venvs\metasci-scribe`)
@@ -228,3 +228,46 @@ The same round made the agent's file tools refuse, in every mode, to write `.env
 project's `.metasci-scribe/` (its skills tier included: writing a skill is an install, which needs a person),
 the data and config folders, `.git`, `.ssh`, shell and Python startup files and the Python environment the
 app runs in; an agent `skill_manager install` pauses for approval and is unavailable in autonomous runs.
+
+## Task 15: install notes, documentation and cleanup
+
+What was removed: the `build`, `docker`, `publish` and `release-check` workflows with
+`.github/scripts/release_guard.sh`, `.github/dependabot.yml` (it only watched Docker images) and
+`constraints.txt` (only the release guard read it); `docs/recipes/` (the macOS 24/7 deployment and the
+Claude/ChatGPT subscription recipes), `docs/guides/install.md` (the install scripts are gone) and
+`docs/examples/` (a literature survey that needs web search); `tools/rename_map.py` (the one-shot rename
+script). Only the `lint` and `test` workflows remain. The Discord link and the EvoSkills links are gone from
+the issue and pull request templates and from `CONTRIBUTING.md`; `.env.example` lists only
+`OPENAI_API_KEY` and `ANTHROPIC_API_KEY` (a workspace `.env` honors nothing else, see Task 7). The prose in
+`docs/guides/` about the TUI, the WebUI, channels, `serve`, scheduled tasks and `model_fallbacks` was fixed.
+
+Where the upstream project's name still appears, on purpose:
+
+- `NOTICE` and the README origin note: the attribution the Apache License asks for.
+- `LICENSE`: the upstream copyright line, which must stay.
+- The coordinate `EvoScientist/EvoSkills`, which `/evoskills`, the bare-name form of `/install-skill` and
+  `skill_manager install`, the MCP marketplace index (`mcp/registry.py`) and the onboarding skills step
+  use as a skill catalog: `commands/implementation/skills.py`, `config/onboard/steps.py`,
+  `mcp/registry.py` and `tools/skills_manager.py`. It is a public third-party repository, not code that
+  ships here. Removing the feature was not smaller than keeping it. `tests/test_identity.py` allows exactly
+  this coordinate and nothing else in the package source.
+- Class and function names that begin with `Evo` (`EvoMemory`, `EvoMemoryMiddleware`,
+  `EvoRubricMiddleware`, `EvoFilteredGraph`, ...) stay in code. Renaming them touches every import and
+  test and changes nothing for a user. The upstream name itself does not appear in code or user-facing text.
+
+Other decisions:
+
+- **`enable_async_subagents` is unsupported.** The async sub-agent path (`agent.py`, `langgraph_dev/manager.py`,
+  `subagents/`, the onboarding step and many tests) is too large to remove here. It stays off by default,
+  `ScribeConfig` carries a comment saying so, and nothing sets it: do not turn it on.
+- **Python 3.11 to 3.13.** `requires-python` is `>=3.11,<3.14` (and `uv.lock` was re-resolved; no package
+  version changed), so `uv tool install` never picks a newer interpreter that the dependencies are not tested on.
+- **`packaging` is a dev dependency** (both the `dev` group and the `dev` extra). `tests/test_llm.py` and
+  `tests/test_tool_selector_middleware.py` import it; it used to arrive transitively and `build` is not
+  a promise to keep it.
+- **Test leftovers.** `test_removed_surfaces.py` now looks the CLI commands up instead of invoking them;
+  `test_policy.py` no longer uses the removed `browse` action of `skill_manager`; the stale
+  `gateway_backend_serve` / `gateway_backend_tui` (now the real `gateway_backend_interactive` /
+  `gateway_backend_standalone`), `channel_send_thinking` and "channel" test name were fixed.
+- **Cp949 baseline.** `.env.example` is ASCII now, so `test_copied_template_does_not_shadow_config_keys`
+  passes on a cp949 machine.

@@ -1,6 +1,6 @@
 # Working toward a goal
 
-`/goal` gives the current thread an objective. Metasci Scribe drafts acceptance criteria for it, you review them, and from then on every turn of the thread is graded against those criteria until they are met. It is available in the TUI and the interactive CLI.
+`/goal` gives the current thread an objective. Metasci Scribe drafts acceptance criteria for it, you review them, and from then on every turn of the thread is graded against those criteria until they are met. It is available in the interactive CLI.
 
 ```text
 /goal Reproduce table 2 of the paper and plot the ablation
@@ -23,7 +23,7 @@
 
 The review shows the objective and the drafted criteria. Accept them, cancel, or type what to change; with feedback the criteria are drafted again and shown again. Nothing enters the conversation until you accept. To use criteria you wrote yourself, use [`/rubric set`](rubric.md#interactive-sessions) instead.
 
-In the TUI an unanswered review is cancelled after 5 minutes. With `--auto-mode` there is nobody to ask, so the draft is adopted as it is; the adopted criteria are then shown as a warning (`Goal accepted without review (auto mode).`), so you can see what was accepted for you.
+In the interactive CLI an unanswered review is cancelled after 5 minutes. With `--auto-mode` there is nobody to ask, so the draft is adopted as it is; the adopted criteria are then shown as a warning (`Goal accepted without review (auto mode).`), so you can see what was accepted for you.
 
 ## While a goal is active
 
@@ -39,9 +39,9 @@ A goal's criteria take the place of the `/rubric set` checklist. `/rubric set` a
 
 ## Limits
 
-- `/goal` is refused in channel sessions and when the session executes its runs on the `langgraph_server` gateway.
-- On other surfaces (the WebUI, `metasci-scribe serve`, single-shot runs) a thread's goal is ignored: turns are not graded against it and the agent is not told about it. The goal is still there when you come back to the thread in the TUI or the interactive CLI.
-- The criteria are drafted by the main model, which may list and read files in the workspace; when that model fails, drafting follows the `model_fallbacks` chain as a turn does. A draft may make at most 12 model calls.
+- `/goal` is refused when the session executes its runs on the `langgraph_server` gateway.
+- In single-shot runs a thread's goal is ignored: turns are not graded against it and the agent is not told about it. The goal is still there when you come back to the thread in the interactive CLI.
+- The criteria are drafted by the main model, which may list and read files in the workspace; a draft may make at most 12 model calls.
 - An objective is limited to 8,000 characters; the objective and its criteria together to 12,000.
 - A review that was left open (the app was closed, or the turn was stopped with Ctrl+C) is discarded by your next message; run `/goal` again. The same happens, without a message, when the review is answered from a surface that does not support goals.
-- Model retries and a switch to a fallback model during drafting are not announced; a draft that fails is reported with its reason.
+- Model retries during drafting are not announced; a draft that fails is reported with its reason.
