@@ -189,7 +189,7 @@ class InstallSkills(Command):
             if not isinstance(e, GitNotFoundError):
                 # The suggested install needs git too.
                 ctx.ui.append_system(
-                    "Try: /install-skill metasci_scribe/EvoSkills@skills", style="dim"
+                    "Try: /install-skill EvoScientist/EvoSkills@skills", style="dim"
                 )
             return
 

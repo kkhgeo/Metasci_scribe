@@ -461,7 +461,7 @@ def _scan_mcp_dir(mcp_root: Path) -> list[MCPServerEntry]:
 
 
 def fetch_marketplace_index(
-    repo: str = "metasci_scribe/EvoSkills",
+    repo: str = "EvoScientist/EvoSkills",
     ref: str | None = None,
     path: str = "mcp",
 ) -> list[MCPServerEntry]:

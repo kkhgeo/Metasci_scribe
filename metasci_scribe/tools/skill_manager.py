@@ -45,7 +45,7 @@ def make_skill_manager_tool(
           Built-in skills evolve over time, so use action="list" to see the current set.
 
         action="browse" (optional tag):
-          Browse available skills from the EvoSkills repository (metasci_scribe/EvoSkills).
+          Browse available skills from the EvoSkills repository (EvoScientist/EvoSkills).
           Set tag to filter by category (e.g. tag="core", tag="writing", tag="experiments").
           Returns skill names, descriptions, tags, and install sources you can pass to action="install".
 

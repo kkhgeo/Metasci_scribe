@@ -1103,7 +1103,7 @@ _RECOMMENDED_SKILLS = [
     # ── Official (Metasci Scribe) ──
     {
         "label": "metasci-scribe Skills  (optimized for Metasci Scribe — paper planning, writing, review, etc.) 👈 Recommended",
-        "source": "metasci_scribe/EvoSkills@skills",
+        "source": "EvoScientist/EvoSkills@skills",
     },
     # ── Third-party (K-Dense) ──
     {

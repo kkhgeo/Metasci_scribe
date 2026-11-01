@@ -60,6 +60,8 @@ PROTECT = re.compile(
     r"https?://[^\s\"'`)>\]]*"
     r"|(?:ghcr\.io|github\.com|api\.star-history\.com)/[^\s\"'`)>\]]*"
     r"|pkgs/container/evoscientist"
+    # owner/repo shorthand (skills repo, install-skill source): not our package path
+    r"|\bevoscientist/evo(?:skills|scientist(?!\.py))(?:@[\w.-]+)?"
     r"|@evoscientist(?:/|%2F)webui"
     r"|evoscientist\.ai(?:@gmail\.com)?"
     r"|mailto:[^)\s]*",

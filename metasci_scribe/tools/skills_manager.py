@@ -1375,7 +1375,7 @@ _REMOTE_INDEX_TTL = 600  # 10 minutes
 
 
 def fetch_remote_skill_index(
-    repo: str = "metasci_scribe/EvoSkills",
+    repo: str = "EvoScientist/EvoSkills",
     ref: str | None = None,
     path: str = "skills",
 ) -> list[dict]:
