@@ -270,3 +270,20 @@ M0가 실패하면 M1 이후를 진행하지 않고 대안을 다시 판단한�
 - [Preview limitations](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)
 - [Claude Code legal and compliance](https://code.claude.com/docs/en/legal-and-compliance)
 - [EvoScientist](https://github.com/EvoScientist/EvoScientist)
+
+## 11. 구현 중 변경
+
+구현과 보안 검토에서 다음이 바뀌었다. 이 절이 앞 절보다 우선한다.
+
+- 저장소 위치는 `C:\dev\Metasci_scribe`다.
+- 자율 실행에는 셸, MCP 도구, 삭제, 스킬 설치가 없다. 메타 스킬이 자율 실행에서 스크립트를 쓰려면 별도의 안전한 실행 방식을 설계해야 한다.
+- 대화의 셸 명령은 "모두 승인"을 눌러도 건별로 승인받는다.
+- 에이전트 파일 도구는 토큰 폴더, 시작 설정 파일, `.metasci-scribe/` 쓰기, `.env` 읽기를 거부한다.
+- 작업 폴더 `.env`는 공급자 API 키만 반영한다. `*_BASE_URL`과 앱 설정은 전역 설정에서만 읽는다.
+- `--dangerous`, `--mode`, `--name`, `--host`를 제거했다.
+- 데이터 폴더를 포함하는 작업 폴더는 거부한다.
+- API 401은 토큰을 유지하고 `/login`을 안내한다. 확인된 취소나 복구 불가능한 갱신 오류만 토큰을 지운다.
+- 도구는 `additional_tools` 입력 항목으로 보낸다.
+- 단락 상태는 `mark_paragraph` 도구로 받아 앱이 기록한다.
+- `/logout`은 OpenAI에 토큰 폐기를 요청하고 계정 등록을 지운다.
+- 자율 실행은 패스마다 원고를 백업하고, 기존 줄이 사라지면 멈춘다.
