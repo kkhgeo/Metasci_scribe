@@ -423,23 +423,29 @@ def cmd_login(fresh: bool) -> int:
     verifier, challenge = make_pkce()
     state, nonce = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
     server, redirect_uri = start_callback_server()
-    url = build_authorize_url(
+    url_args = dict(
         client_id=client_id,
         redirect_uri=redirect_uri,
         state=state,
         nonce=nonce,
         code_challenge=challenge,
         ext_agent_host_id=host_id,
+    )
+    url = build_authorize_url(
+        **url_args,
         id_token_hint=(existing or {}).get("id_token") if issued else None,
         login_hint=(existing or {}).get("email") if issued else None,
     )
+    # Printable twin without the hints: same state/nonce/challenge, so the same attempt
+    # completes with it (the hints only skip the account selector). Never print the hints.
+    printable_url = build_authorize_url(**url_args)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
         print(f"callback listener: {redirect_uri}")
         print(f"mode: {'re-login with saved client_id' if issued else 'first-time registration'}")
         if not webbrowser.open(url):
-            print("could not open a browser; open this URL yourself:\n" + url)
+            print("could not open a browser; open this URL yourself:\n" + printable_url)
         else:
             print(f"browser opened; waiting up to {LOGIN_TIMEOUT_S}s for the callback ...")
         if not server.done.wait(LOGIN_TIMEOUT_S):

@@ -471,3 +471,31 @@ def test_sample_file_has_unique_sentinel():
     assert 35000 <= len(txt) <= 45000
     assert txt.count(T.SENTINEL_CODE) == 1
     assert txt.rstrip().endswith(f"{T.SENTINEL_CODE}.")
+
+
+def test_failed_browser_open_never_prints_id_token_or_email(tmp_path, monkeypatch, capsys):
+    """Re-login with a stored ID token: the fallback URL must not leak id_token_hint / login_hint."""
+    id_token = "AAAA.SECRET-ID-TOKEN-PAYLOAD.BBBB"
+    email = "someone@example.com"
+    monkeypatch.setenv("METASCI_SPIKE_DIR", str(tmp_path))
+    L.save_token({"client_id": "oaiapp_saved", "ext_agent_host_id": "urn:uuid:host", "id_token": id_token,
+                  "email": email, "subject": "sub-1", "scopes": [L.DIRECT_SCOPE]}, L.token_path())
+    opened = []
+    monkeypatch.setattr(L.webbrowser, "open", lambda u: opened.append(u) or False)
+    monkeypatch.setattr(L, "LOGIN_TIMEOUT_S", 0.2)
+    assert L.cmd_login(fresh=False) == 2  # times out: no callback arrives, no network used
+    out = capsys.readouterr()
+    text = out.out + out.err
+    # the browser itself still gets the hinted URL ...
+    assert len(opened) == 1 and "id_token_hint=" in opened[0] and "login_hint=" in opened[0]
+    # ... but nothing printed contains the token or the email
+    assert id_token not in text and "SECRET-ID-TOKEN" not in text
+    assert email not in text and "someone%40example.com" not in text
+    assert "id_token_hint" not in text and "login_hint" not in text
+    # the printed URL is still a usable twin of the same attempt
+    printed = next(w for w in text.split() if w.startswith("https://auth.openai.com/api/accounts/authorize"))
+    _, pq = _qs(printed)
+    _, bq = _qs(opened[0])
+    assert pq["client_id"] == "oaiapp_saved"
+    for k in ("state", "nonce", "code_challenge", "redirect_uri", "scope", "resource", "ext_agent_host_id"):
+        assert pq[k] == bq[k]
