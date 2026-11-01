@@ -499,6 +499,9 @@ class TestLoginCommand:
         assert changes["auxiliary_model"] is None
         assert changes["auxiliary_provider"] is None
         assert "co-pilot" in ctx.ui.text
+        # The command it names is the real one: `config set <key> <value>`.
+        assert "metasci-scribe config set auxiliary_model" in ctx.ui.text
+        assert "configure auxiliary_model" not in ctx.ui.text
 
     async def test_the_auxiliary_model_comes_back_when_the_switch_fails(
         self, monkeypatch, switch, saved_config
@@ -516,6 +519,39 @@ class TestLoginCommand:
             "claude-haiku-5-5",
             "anthropic",
         )
+        # ... and in the saved config, which had been cleared before the switch.
+        assert saved_config.call_args_list[-1].args[0] == {
+            "auxiliary_model": "claude-haiku-5-5",
+            "auxiliary_provider": "anthropic",
+        }
+
+    async def test_a_failed_restore_of_the_saved_auxiliary_model_is_reported(
+        self, monkeypatch, switch
+    ):
+        from metasci_scribe.commands.implementation.auth import LoginCommand
+        from metasci_scribe.config.store import ConfigError
+
+        switch.return_value = False
+        cfg = _live_config(
+            auxiliary_model="claude-haiku-5-5", auxiliary_provider="anthropic"
+        )
+        _sign_in_as(monkeypatch, _creds())
+        ctx = _ctx()
+        calls = []
+
+        def save(changes):
+            calls.append(changes)
+            if changes.get("auxiliary_model"):
+                raise ConfigError("locked")
+            return ("rev", {})
+
+        with (
+            patch("metasci_scribe.agent._ensure_config", return_value=cfg),
+            patch("metasci_scribe.config.settings.set_config_values", side_effect=save),
+        ):
+            await LoginCommand().execute(ctx, [])
+        assert "co-pilot" in ctx.ui.styled("red")
+        assert "claude-haiku-5-5" in ctx.ui.styled("red")
 
     async def test_no_auxiliary_model_means_nothing_to_clear(
         self, monkeypatch, switch, saved_config, live_config
@@ -907,6 +943,49 @@ class TestLogoutCommand:
         ctx = _ctx()
         await LogoutCommand().execute(ctx, [])
         assert "this session" in ctx.ui.text.lower()
+
+    async def test_a_store_problem_still_says_what_the_session_does(self, monkeypatch):
+        from metasci_scribe.commands.implementation.auth import LogoutCommand
+
+        def broken():
+            raise cp.CredentialStoreError("Could not read chatgpt.json.")
+
+        monkeypatch.setattr(cp, "sign_out", broken)
+        ctx = _ctx()
+        await LogoutCommand().execute(ctx, [])
+        assert "this session" in ctx.ui.text.lower()
+        assert "Could not read" in ctx.ui.text
+
+    async def test_a_record_that_stays_says_what_the_session_does(self, monkeypatch):
+        from metasci_scribe.commands.implementation.auth import LogoutCommand
+
+        monkeypatch.setattr(
+            cp,
+            "sign_out",
+            lambda: cp.SignOutResult(True, True, None, "Could not remove it."),
+        )
+        ctx = _ctx()
+        await LogoutCommand().execute(ctx, [])
+        text = ctx.ui.text.lower()
+        assert "this session" in text
+        assert "fail" in text  # the token was revoked, so requests will fail
+
+    async def test_a_record_that_stays_unrevoked_keeps_the_session_working(
+        self, monkeypatch
+    ):
+        from metasci_scribe.commands.implementation.auth import LogoutCommand
+
+        monkeypatch.setattr(
+            cp,
+            "sign_out",
+            lambda: cp.SignOutResult(
+                True, False, "OpenAI answered HTTP 503.", "Could not remove it."
+            ),
+        )
+        ctx = _ctx()
+        await LogoutCommand().execute(ctx, [])
+        assert "this session" in ctx.ui.text.lower()
+        assert "still" in ctx.ui.text.lower()
 
     async def test_a_record_that_stays_is_reported_beside_the_revocation(
         self, monkeypatch

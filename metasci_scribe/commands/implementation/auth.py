@@ -204,7 +204,7 @@ class LoginCommand(Command):
             ui.append_system(
                 "Cleared the co-pilot (auxiliary) model; the main model is "
                 "used for background work. Set one again with "
-                "`metasci-scribe configure auxiliary_model`.",
+                "`metasci-scribe config set auxiliary_model <name>`.",
                 style="yellow",
             )
 
@@ -223,6 +223,22 @@ class LoginCommand(Command):
         if not switched:
             if any(aux):
                 cfg.auxiliary_model, cfg.auxiliary_provider = aux
+                # The saved config was cleared before the switch: put it back.
+                try:
+                    await asyncio.to_thread(
+                        set_config_values,
+                        {
+                            "auxiliary_model": aux[0] or None,
+                            "auxiliary_provider": aux[1] or None,
+                        },
+                    )
+                except (SettingsError, ConfigError) as exc:
+                    ui.append_system(
+                        f"Could not restore the co-pilot model in the config "
+                        f"({exc}). Set it again: metasci-scribe config set "
+                        f"auxiliary_model {aux[0]}",
+                        style="red",
+                    )
             ui.append_system(
                 "You are signed in, but this session could not switch to the "
                 "plan. Try /model, or restart metasci-scribe.",
@@ -254,6 +270,11 @@ class LogoutCommand(Command):
         except plan_auth.ChatGPTAuthError as exc:
             message, style = describe_auth_error(exc)
             ui.append_system(message, style=style)
+            ui.append_system(
+                "Nothing was signed out: this session keeps its current route "
+                "and sign-in.",
+                style="dim",
+            )
             return
 
         if not result.had_sign_in:
@@ -284,6 +305,19 @@ class LogoutCommand(Command):
                 f"Delete it yourself: {paths.DATA_DIR / 'auth' / 'chatgpt.json'}",
                 style="dim",
             )
+            if result.revoked:
+                ui.append_system(
+                    "This session still points at the ChatGPT plan, but the "
+                    "token was revoked, so its requests will fail until you "
+                    "run /login again.",
+                    style="yellow",
+                )
+            else:
+                ui.append_system(
+                    "This session still uses your ChatGPT sign-in until the "
+                    "file is gone.",
+                    style="yellow",
+                )
             return
         if result.had_sign_in:
             ui.append_system("Signed out on this machine.", style="green")
