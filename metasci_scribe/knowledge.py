@@ -52,12 +52,18 @@ LOCK_NAME = ".lock"
 TMP_PREFIX = ".tmp-"
 _INDEX_VERSION = 1
 _SAVE_EVERY = 20
+_IS_WINDOWS = os.name == "nt"
+_PATH_LIMIT = 260
+_TOO_LONG = "path too long for Windows; shorten the folder or file names"
+_OUTSIDE = "link to a file outside Knowledge/, not read"
 _WORKER = Path(__file__).with_name("_pdf_worker.py")
 
 MB = 1024 * 1024
+_WORKER_GRACE = 10  # the worker stops itself this long after the parent would
 _STEM_CHARS = 60
 _HASH_CHARS = 10
 _SHOWN = 5
+_OUT_NAME = re.compile(rf".+\.[0-9a-f]{{{_HASH_CHARS}}}(?:-\d+)?\.md")
 _SURROGATES = re.compile("[\ud800-\udfff]")
 _BAD_CHARS = re.compile('[<>:"/\\\\|?*\x00-\x1f\x7f\ud800-\udfff]')
 _RESERVED = frozenset(
@@ -75,13 +81,16 @@ class SyncReport:
     read before that did not change. ``scanned`` and ``failed`` list every
     PDF now known to hold no text or to be unreadable, including ones found
     so on an earlier run, so the person is told each time. All paths are
-    those of the source PDFs.
+    those of the source PDFs. ``busy`` means another sync of the same folder
+    held the lock for the whole wait: nothing was done, which is not the
+    same as nothing to do.
     """
 
     extracted: list[Path]
     unchanged: int
     scanned: list[Path]
     failed: list[tuple[Path, str]]
+    busy: bool = False
 
 
 @dataclass
@@ -90,7 +99,7 @@ class _Source:
     path: Path
     size: int
     mtime_ns: int
-    outside: bool = False
+    problem: str | None = None
 
 
 # -- names -------------------------------------------------------------------
@@ -121,12 +130,13 @@ def _output_name(rel: str, taken: set[str]) -> str:
 
 
 def _safe_out(name: object) -> bool:
-    """Whether an index entry names a file this module may have written."""
+    """Whether an index entry names a file this module may have written:
+    one of the names ``_output_name`` makes (a stem, a hash, ``.md``)."""
     return (
         isinstance(name, str)
-        and name.endswith(".md")
-        and not name.startswith(".")
+        and _OUT_NAME.fullmatch(name) is not None
         and name == Path(name).name
+        and not name.startswith(".")
         and "\\" not in name
         and "\x00" not in name
     )
@@ -136,18 +146,31 @@ def _safe_out(name: object) -> bool:
 
 
 def _load_index(out_dir: Path) -> dict[str, dict]:
+    """The saved index, or an empty one when it is missing or damaged.
+
+    An entry whose output name is not one this module makes, or that a second
+    entry also claims, is dropped: its source is read again. The file is data
+    that anything with write access can change, so nothing in it is trusted.
+    """
     try:
         data = json.loads((out_dir / INDEX_NAME).read_text(encoding="utf-8"))
         files = data["files"]
         if data["version"] != _INDEX_VERSION or not isinstance(files, dict):
             return {}
-        return {
-            rel: entry
-            for rel, entry in files.items()
-            if isinstance(rel, str) and isinstance(entry, dict)
-        }
-    except (OSError, ValueError, KeyError, TypeError):
+    except (OSError, ValueError, KeyError, TypeError, RecursionError):
         return {}
+    index: dict[str, dict] = {}
+    claimed: set[str] = set()
+    for rel, entry in files.items():
+        if not isinstance(rel, str) or not isinstance(entry, dict):
+            continue
+        if entry.get("status") == "ok":
+            name = entry.get("out")
+            if not _safe_out(name) or name.casefold() in claimed:
+                continue
+            claimed.add(name.casefold())
+        index[rel] = entry
+    return index
 
 
 def _save_index(out_dir: Path, index: dict[str, dict]) -> None:
@@ -174,11 +197,22 @@ def _remove_output(out_dir: Path, entry: dict | None) -> None:
 # -- finding the PDFs --------------------------------------------------------
 
 
+_REPARSE_POINT = 0x400  # FILE_ATTRIBUTE_REPARSE_POINT: links, junctions, mounts
+
+
 def _is_link(path: str) -> bool:
-    if os.path.islink(path):
-        return True
-    junction = getattr(os.path, "isjunction", None)
-    return bool(junction and junction(path))
+    """A symbolic link or, on Windows, a junction or other reparse point.
+
+    ``os.path.isjunction`` exists only from Python 3.12, so the file
+    attributes are read instead.
+    """
+    try:
+        info = os.lstat(path)
+    except OSError:
+        return True  # cannot be examined: not to be walked into
+    return stat.S_ISLNK(info.st_mode) or bool(
+        getattr(info, "st_file_attributes", 0) & _REPARSE_POINT
+    )
 
 
 def _inside(path: str, folder: str) -> bool:
@@ -189,8 +223,11 @@ def _inside(path: str, folder: str) -> bool:
 def _discover(knowledge_dir: Path) -> tuple[list[_Source], bool]:
     """The PDFs under *knowledge_dir*, and whether the walk saw everything.
 
-    Links to folders are not followed (a loop would never end). A link to a
-    file outside the folder is listed with ``outside`` set, never read.
+    Links and junctions to folders are not followed (a loop would never end,
+    and the target may be anywhere). A file whose real path lies outside the
+    folder (a link to it, or a path that goes through one) is listed with a
+    ``problem`` and never read. A path the system cannot open is a problem
+    too, not a file that went away.
     """
     complete = True
 
@@ -209,6 +246,9 @@ def _discover(knowledge_dir: Path) -> tuple[list[_Source], bool]:
             try:
                 info = os.stat(full)
             except FileNotFoundError:
+                if _IS_WINDOWS and len(full) >= _PATH_LIMIT:
+                    rel = Path(full).relative_to(knowledge_dir).as_posix()
+                    found.append(_Source(rel, Path(full), 0, 0, _TOO_LONG))
                 continue
             except OSError:
                 complete = False
@@ -216,14 +256,17 @@ def _discover(knowledge_dir: Path) -> tuple[list[_Source], bool]:
             if not stat.S_ISREG(info.st_mode):
                 continue
             rel = Path(full).relative_to(knowledge_dir).as_posix()
-            outside = os.path.islink(full) and not _inside(os.path.realpath(full), base)
+            problem = None
+            if not _inside(os.path.realpath(full), base):
+                problem = _OUTSIDE
             found.append(
-                _Source(rel, Path(full), info.st_size, info.st_mtime_ns, outside)
+                _Source(rel, Path(full), info.st_size, info.st_mtime_ns, problem)
             )
     return found, complete
 
 
-def _is_current(entry: dict | None, source: _Source, out_dir: Path) -> bool:
+def _is_valid(entry: dict | None, source: _Source, out_dir: Path) -> bool:
+    """Whether *entry* describes *source* as it is now (and its text is there)."""
     if not entry or entry.get("status") not in ("ok", "scanned", "failed"):
         return False
     if entry.get("size") != source.size or entry.get("mtime_ns") != source.mtime_ns:
@@ -232,6 +275,11 @@ def _is_current(entry: dict | None, source: _Source, out_dir: Path) -> bool:
         name = entry.get("out")
         return _safe_out(name) and (out_dir / name).is_file()
     return True
+
+
+def _is_current(entry: dict | None, source: _Source, out_dir: Path) -> bool:
+    """Whether *source* needs no reading: a timeout or crash is tried once more."""
+    return _is_valid(entry, source, out_dir) and not entry.get("retry")
 
 
 # -- the child process -------------------------------------------------------
@@ -248,6 +296,7 @@ def _worker_command(pdf: Path, tmp: Path, label: str) -> list[str]:
         str(tmp),
         str(MAX_PAGES),
         label,
+        str(MAX_SECONDS + _WORKER_GRACE),
     ]
 
 
@@ -268,8 +317,11 @@ def _run_worker(
             env=policy.child_python_env(os.environ),
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
-    except (OSError, ValueError) as exc:
-        return {"status": "unreadable", "error": f"the reader did not start ({exc})"}
+    except (OSError, ValueError) as exc:  # UnicodeEncodeError is a ValueError
+        return {
+            "status": "unreadable",
+            "error": f"the reader could not be started for this file name ({exc})",
+        }
     deadline = time.monotonic() + MAX_SECONDS
     while True:
         try:
@@ -305,14 +357,18 @@ def sync_knowledge(
     *,
     progress: Callable[[int, int, Path], None] | None = None,
     cancel: threading.Event | None = None,
+    wait: float | None = None,
 ) -> SyncReport:
     """Bring ``.metasci-scribe/extracted/`` up to date with ``Knowledge/``.
 
     *progress* is called as ``progress(n, total, pdf)`` before each PDF that
     needs reading (``total`` counts them all). *cancel* stops the sync between
     files and ends a read in progress; what was done is kept. A sync of the
-    same folder that is already running is waited for; after
-    ``LOCK_WAIT_SECONDS`` this one gives up with an empty report.
+    same folder that is already running is waited for, *wait* seconds
+    (``LOCK_WAIT_SECONDS`` by default; ``0`` does not wait). If it is still
+    running then, nothing is done and the report has ``busy`` set: a caller
+    that needs the extracts, such as ``run``, treats that as a failure to
+    start.
 
     Raises ``OSError`` when the extract folder cannot be used. A file that
     cannot be read never raises: it lands in ``SyncReport.failed``.
@@ -324,11 +380,17 @@ def sync_knowledge(
     out_dir = extract_dir(root)
     out_dir.mkdir(parents=True, exist_ok=True)
     cancel = cancel or threading.Event()
-    lock = FileLock(str(out_dir / LOCK_NAME), timeout=LOCK_WAIT_SECONDS)
-    try:
-        lock.acquire()
-    except Timeout:
-        return SyncReport([], 0, [], [])
+    lock = FileLock(str(out_dir / LOCK_NAME))
+    deadline = time.monotonic() + (LOCK_WAIT_SECONDS if wait is None else wait)
+    while True:
+        try:
+            lock.acquire(timeout=0.1, poll_interval=0.05)
+            break
+        except Timeout:
+            if cancel.is_set():
+                return SyncReport([], 0, [], [])
+            if time.monotonic() >= deadline:
+                return SyncReport([], 0, [], [], busy=True)
     try:
         return _sync(knowledge_dir, out_dir, progress, cancel)
     finally:
@@ -391,7 +453,7 @@ def _sync(
         entry = index.get(source.rel)
         if source.rel in transient:
             failed.append((source.path, transient[source.rel]))
-        elif not entry or not _is_current(entry, source, out_dir):
+        elif not _is_valid(entry, source, out_dir):
             continue
         elif entry["status"] == "scanned":
             scanned.append(source.path)
@@ -423,11 +485,22 @@ def _read_one(
         if not old or not entry or entry.get("out") != old.get("out"):
             _remove_output(out_dir, old)
 
-    def fail(reason: str) -> None:
-        settle({**base, "status": "failed", "error": reason})
+    def fail(reason: str, *, again: bool = False) -> None:
+        """Remember a failure. With *again* (the reader hung or died, which
+        a busy machine can cause) it is tried once more on a later sync."""
+        entry = {**base, "status": "failed", "error": reason}
+        if again:
+            same = old and (old.get("size"), old.get("mtime_ns")) == (
+                source.size,
+                source.mtime_ns,
+            )
+            tries = (int(old.get("attempts", 1)) if same else 0) + 1
+            entry["attempts"] = tries
+            entry["retry"] = tries < 2
+        settle(entry)
 
-    if source.outside:
-        fail("link to a file outside Knowledge/, not read")
+    if source.problem:
+        fail(source.problem)
         return None
     if source.size > MAX_BYTES:
         fail(f"too large ({source.size // MB} MB, the limit is {MAX_BYTES // MB} MB)")
@@ -442,12 +515,18 @@ def _read_one(
         if status == "cancelled":
             return "cancelled"
         if status == "missing":
-            settle(None)
+            if _IS_WINDOWS and len(str(source.path)) >= _PATH_LIMIT:
+                fail(_TOO_LONG)
+            else:
+                settle(None)
             return None
         if status == "timeout":
-            fail(f"took longer than {MAX_SECONDS} s, stopped")
+            fail(f"took longer than {MAX_SECONDS} s, stopped", again=True)
             return None
-        if status in ("failed", "crashed"):
+        if status == "crashed":
+            fail(error, again=True)
+            return None
+        if status == "failed":
             fail(error)
             return None
         if status == "scanned":
@@ -498,6 +577,11 @@ def report_messages(report: SyncReport, root: Path) -> list[str]:
     Nothing is said when every PDF was read before and nothing is wrong.
     """
     lines: list[str] = []
+    if report.busy:
+        lines.append(
+            "Knowledge: another Metasci Scribe is reading the PDFs of this "
+            "folder; their text is not up to date yet."
+        )
     if report.extracted:
         lines.append(
             f"Knowledge: read the text of {_pdfs(len(report.extracted))} for the agent."

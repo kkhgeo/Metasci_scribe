@@ -3,10 +3,11 @@
 A PDF is untrusted input, and a damaged one can make the reader loop or use
 all the memory. The parent starts this file with ``python -I`` (the folder it
 runs in is not on the import path), gives it a time limit and kills it when
-the limit passes, so nothing here has to guard itself.
+the limit passes. A timer here stops it too, a little later, for the case
+where the parent has quit and cannot kill it.
 
-Usage: ``_pdf_worker.py PDF OUT MAX_PAGES LABEL``. The last line printed is
-one JSON object:
+Usage: ``_pdf_worker.py PDF OUT MAX_PAGES LABEL [SECONDS]``. After SECONDS it
+reports ``timeout`` and exits. The last line printed is one JSON object:
 
 * ``{"status": "ok", "pages": N}``: the text of the pages is in OUT;
 * ``{"status": "scanned", "pages": N}``: the pages hold no text;
@@ -19,8 +20,10 @@ one JSON object:
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
+import threading
 from pathlib import Path
 
 # Control characters but tab, newline and carriage return.
@@ -92,7 +95,18 @@ def extract(pdf: Path, out: Path, max_pages: int, label: str) -> dict:
     return {"status": "ok", "pages": count}
 
 
+def _give_up() -> None:
+    """The parent kills a worker that overruns; this is for the one it cannot
+    reach (the parent quit first)."""
+    print(json.dumps({"status": "timeout"}), flush=True)
+    os._exit(0)
+
+
 def main(argv: list[str]) -> int:
+    if len(argv) > 5:
+        watchdog = threading.Timer(float(argv[5]), _give_up)
+        watchdog.daemon = True
+        watchdog.start()
     try:
         pdf, out, max_pages, label = argv[1:5]
         result = extract(Path(pdf), Path(out), int(max_pages), label)

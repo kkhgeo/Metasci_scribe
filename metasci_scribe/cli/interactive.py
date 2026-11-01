@@ -134,30 +134,33 @@ class KnowledgeSync:
 
     A thread the interpreter does not wait for at exit (the loop's executor
     would be waited for, and a large library takes minutes). ``cancel`` ends
-    the read in progress.
+    the read in progress; ``wait`` returns when the thread has ended.
     """
 
-    def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
-        self._done = loop.create_future()
+    def __init__(self, loop: asyncio.AbstractEventLoop | None) -> None:
         self._loop = loop
+        self._done = loop.create_future() if loop is not None else None
         self.cancel_event = threading.Event()
 
     def _finish(self) -> None:
-        if not self._done.done():
+        if self._done is not None and not self._done.done():
             self._done.set_result(None)
 
     def finished(self) -> None:
-        """Called from the sync thread when it ends."""
+        """Called when the sync ends, from its thread or from the loop."""
+        if self._loop is None:
+            return
         try:
             self._loop.call_soon_threadsafe(self._finish)
         except RuntimeError:  # the loop is closed: the app has quit
             pass
 
     def done(self) -> bool:
-        return self._done.done()
+        return self._done is None or self._done.done()
 
     async def wait(self) -> None:
-        await asyncio.shield(self._done)
+        if self._done is not None:
+            await asyncio.shield(self._done)
 
     def cancel(self) -> None:
         self.cancel_event.set()
@@ -169,12 +172,14 @@ def start_knowledge_sync(root: Path, say: Callable[[str], None]) -> KnowledgeSyn
     The first prompt does not wait for it. *say* gets one plain line when a
     read starts and one for each thing the person should know at the end
     (nothing when all was read before and all is well); it runs in the sync's
-    thread. A failure becomes one line, never an exception. Must be called
-    from the running event loop.
+    thread. Nothing here raises: a failure, even one to start the thread,
+    becomes one line and a handle that is already done.
     """
-    from .. import knowledge
-
-    handle = KnowledgeSync(asyncio.get_running_loop())
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    handle = KnowledgeSync(loop)
 
     def tell(line: str) -> None:
         try:
@@ -192,6 +197,8 @@ def start_knowledge_sync(root: Path, say: Callable[[str], None]) -> KnowledgeSyn
 
     def work() -> None:
         try:
+            from .. import knowledge
+
             report = knowledge.sync_knowledge(
                 root, progress=progress, cancel=handle.cancel_event
             )
@@ -203,8 +210,23 @@ def start_knowledge_sync(root: Path, say: Callable[[str], None]) -> KnowledgeSyn
         finally:
             handle.finished()
 
-    threading.Thread(target=work, name="knowledge-sync", daemon=True).start()
+    try:
+        threading.Thread(target=work, name="knowledge-sync", daemon=True).start()
+    except Exception as exc:
+        _logger.warning("knowledge sync did not start", exc_info=True)
+        tell(f"Knowledge: could not read the PDFs ({exc})")
+        handle.finished()
     return handle
+
+
+async def stop_knowledge_sync(handle: KnowledgeSync, seconds: float = 3.0) -> None:
+    """Cancel *handle* and give its thread a moment to end the reader it runs,
+    so quitting leaves no PDF reader behind. Never raises."""
+    try:
+        handle.cancel()
+        await asyncio.wait_for(handle.wait(), seconds)
+    except Exception:
+        _logger.debug("knowledge sync did not stop in time", exc_info=True)
 
 
 # =============================================================================
@@ -1456,7 +1478,7 @@ def cmd_interactive(
                         else:
                             console.print(f"[red]Error: {escape(str(e))}[/red]")
             finally:
-                knowledge_sync.cancel()
+                await stop_knowledge_sync(knowledge_sync)
                 queue_task.cancel()
                 try:
                     await queue_task
