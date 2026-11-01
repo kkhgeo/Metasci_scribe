@@ -638,7 +638,6 @@ def test_shell_and_skill_installs_need_a_person():
         "skill_manager", {"action": "install", "source": "o/r"}
     )
     assert not policy.call_needs_person("skill_manager", {"action": "list"})
-    assert not policy.call_needs_person("skill_manager", {"action": "browse"})
     assert not policy.call_needs_person(
         "skill_manager", {"action": "info", "name": "x"}
     )

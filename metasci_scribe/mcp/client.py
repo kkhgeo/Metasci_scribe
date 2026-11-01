@@ -110,8 +110,8 @@ _patch_mcp_windows_command_resolver()
 # ``anyio.open_process`` → ``subprocess.Popen(stderr=...)``. ``Popen`` resolves
 # that to an OS handle by calling ``errlog.fileno()``.
 #
-# Under the Textual TUI (and any non-console host), ``sys.stderr`` is
-# redirected to ``textual.app._PrintCapture``, whose ``fileno()`` returns
+# Under a host that replaces ``sys.stderr`` with an in-memory capture (a test
+# runner, a GUI wrapper), ``sys.stderr``'s ``fileno()`` returns
 # ``-1``. ``subprocess.Popen`` dutifully converts fd ``-1`` into an invalid
 # Windows handle and the child inherits a broken stderr pipe — every stdio
 # MCP server then fails to spawn with ``OSError: [Errno 9] Bad file
@@ -133,7 +133,7 @@ def _stdio_errlog_is_usable(errlog: object) -> bool:
     """Return ``True`` if *errlog* can back a subprocess ``stderr`` pipe.
 
     A usable errlog exposes a ``fileno()`` that resolves to a live OS file
-    descriptor. Textual's ``_PrintCapture`` and similar redirected streams
+    descriptor. An in-memory capture and similar redirected streams
     return ``-1`` (or raise), so they are rejected here. A closed stream may
     still report its former (positive) fd, so we additionally ``os.fstat``
     the descriptor to confirm it is still open.
@@ -160,8 +160,7 @@ def _safe_stdio_errlog() -> tuple[Any, bool]:
     Prefers ``sys.__stderr__`` (the original console handle, so the server's
     diagnostic output still lands where the user expects — note
     ``sys.__stderr__`` is the process's original handle and stays usable even
-    while the Textual TUI controls the screen, since Textual only redirects
-    ``sys.stderr``). Falls back to an ``os.devnull`` handle when even
+    while a host redirects ``sys.stderr``). Falls back to an ``os.devnull`` handle when even
     ``__stderr__`` is unavailable (e.g. in a GUI/pythonw host with no console).
 
     The second element is ``True`` when *we* allocated the stream (the
@@ -410,7 +409,7 @@ _MAX_CONCURRENT_CONNECTIONS = 8
 _SERVER_GET_TOOLS_TIMEOUT_SECONDS = 40
 
 # Healthy remote servers usually list tools within a few seconds; 20s leaves
-# room for hosted cold starts without holding up CLI/TUI startup for 40s.
+# room for hosted cold starts without holding up CLI startup for 40s.
 # Unlike stdio servers, they need no first-launch package download.
 _NETWORK_GET_TOOLS_TIMEOUT_SECONDS = 20
 
@@ -1092,7 +1091,7 @@ def _get_tools_timeout(transport: str) -> float | None:
 
     URL transports always have a discovery deadline. Stdio servers have a
     deadline only inside ``langgraph dev`` (``METASCI_SCRIBE_SERVER_PROCESS=1``),
-    whose health check gives up after 60s. CLI/TUI stdio discovery may wait
+    whose health check gives up after 60s. CLI stdio discovery may wait
     as long as needed for first-launch package downloads.
     """
     if transport in _URL_TRANSPORTS:
@@ -1116,7 +1115,7 @@ async def _load_tools(
         timeout: Seconds each server gets to return its tools before it is
             skipped like a failed one. With ``None``, network servers use the
             default discovery budget. Stdio servers wait as long as needed in
-            the CLI/TUI, or use the server health budget in ``langgraph dev``.
+            the CLI, or use the server health budget in ``langgraph dev``.
 
     Raises:
         ImportError: if ``langchain-mcp-adapters`` is not installed.

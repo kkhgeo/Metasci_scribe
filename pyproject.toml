@@ -1,9 +1,9 @@
 [project]
 name = "metasci-scribe"
 version = "0.1.0.dev0"
-description = "Metasci Scribe: a terminal writing agent for scientific manuscripts (fork of EvoScientist v0.3.8)"
+description = "Metasci Scribe: a terminal writing agent for scientific manuscripts"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.14"
 license = "Apache-2.0"
 authors = [
     { name = "Metasci Scribe contributors" },
@@ -11,6 +11,9 @@ authors = [
 keywords = ["scientific-writing", "manuscript", "terminal-agent"]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
     "deepagents[quickjs]~=0.7.32",
@@ -52,6 +55,8 @@ dev = [
     "ruff>=0.5",
     "build>=1.0",
     "pre-commit>=3.5.0",
+    # imported by tests/test_llm.py and tests/test_tool_selector_middleware.py
+    "packaging>=23.0",
 ]
 
 [project.optional-dependencies]
@@ -64,10 +69,9 @@ dev = [
     "ruff>=0.5",
     "build>=1.0",
     "pre-commit>=3.5.0",
+    # imported by tests/test_llm.py and tests/test_tool_selector_middleware.py
+    "packaging>=23.0",
 ]
-
-[project.urls]
-"Upstream (EvoScientist v0.3.8)" = "https://github.com/EvoScientist/EvoScientist"
 
 [project.scripts]
 metasci-scribe = "metasci_scribe.cli:main"
@@ -128,6 +132,9 @@ exclude = [
     "site-packages",
     "venv",
 ]
+
+# One-off experiments and the design notes are records, not maintained code.
+extend-exclude = ["spikes", "docs/superpowers"]
 
 line-length = 88
 indent-width = 4

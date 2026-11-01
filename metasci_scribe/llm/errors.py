@@ -137,7 +137,7 @@ class ProviderStreamError(Exception):
         self.request_id = request_id
 
     def as_envelope(self) -> dict[str, Any]:
-        """Return the SSE envelope dict — the shape the WebUI consumes."""
+        """Return the SSE envelope dict — the shape API clients consume."""
         payload: dict[str, Any] = {
             "error": self.class_qualname.rsplit(".", 1)[-1],
             "class": self.class_qualname,
@@ -326,7 +326,7 @@ def _extract_status_code(exc: BaseException) -> int | None:
 def _extract_provider_code(exc: BaseException) -> str | None:
     """Provider error code (e.g. ``insufficient_quota``,
     ``invalid_api_key``). Distinct from HTTP status; higher signal for
-    a WebUI toast than the integer alone.
+    a user-facing message than the integer alone.
     """
     code = getattr(exc, "code", None)
     if isinstance(code, str) and code:

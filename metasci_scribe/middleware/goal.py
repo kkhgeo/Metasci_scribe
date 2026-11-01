@@ -4,7 +4,7 @@ are the thread's sticky checklist.
 The goal's own record (``_goal``) holds the objective and its status; the
 criteria live in the rubric middleware's ``_sticky_rubric`` slot, so grading,
 deferral and the pass limit are the checklist's. A goal is in force only on
-runs marked for thread grading (the TUI and the interactive CLI).
+runs marked for thread grading (the interactive CLI).
 """
 
 from __future__ import annotations

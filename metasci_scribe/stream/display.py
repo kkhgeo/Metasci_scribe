@@ -702,7 +702,7 @@ _GOAL_NOTE_SHOWN = 240
 
 
 def goal_event_lines(event: dict) -> list[tuple[str, str]]:
-    """``(text, style)`` lines for one goal event; shared by the Rich CLI and the TUI."""
+    """``(text, style)`` lines for one goal event; shared by the Rich CLI."""
     change = str(event.get("change") or "")
     label, style = _GOAL_LINES.get(change, (f"Goal: {change}", "dim"))
     note = " ".join(str(event.get("note") or "").split())
@@ -759,7 +759,7 @@ def _render_goal_lines(goal_events: list, *, closing: bool) -> list:
 
 
 def rubric_deferred_text(tasks: int, processes: int) -> str:
-    """One line saying what grading waits for; shared by the Rich CLI and the TUI."""
+    """One line saying what grading waits for; shared by the Rich CLI."""
     parts: list[str] = []
     if tasks:
         parts.append(f"{tasks} background task{'s' if tasks != 1 else ''}")
@@ -771,7 +771,7 @@ def rubric_deferred_text(tasks: int, processes: int) -> str:
 
 
 def model_retry_text(event: dict) -> str:
-    """One line per retry; shared by the Rich CLI and the TUI."""
+    """One line per retry; shared by the Rich CLI."""
     wait = float(event.get("wait_seconds") or 0.0)
     wait_text = f"{wait:.0f}" if wait >= 1 else f"{wait:.1f}"
     # A sub-agent's or the grader's retry is named; the main agent's is not.
@@ -788,7 +788,7 @@ def _render_model_retry_lines(retries: list) -> list:
 
 
 def rubric_result_lines(evaluation: dict) -> list[tuple[str, str]]:
-    """``(text, style)`` lines for one grading pass; shared by the Rich CLI and the TUI."""
+    """``(text, style)`` lines for one grading pass; shared by the Rich CLI."""
     result = str(evaluation.get("result") or "")
     label, style = _RUBRIC_RESULT_LINES.get(
         result, ("Acceptance criteria check ended", "yellow")
@@ -1432,7 +1432,7 @@ def _resolve_hitl_approval(
             grant_in_force=True,
         )
 
-    # Config-rule fast path (shared with the TUI). Returns full decisions when
+    # Config-rule fast path (shared with the CLI display). Returns full decisions when
     # config clears every request, or None when a human decision is needed;
     # the rejections are kept so a human "approve all" cannot override a policy
     # REJECT in a mixed batch.

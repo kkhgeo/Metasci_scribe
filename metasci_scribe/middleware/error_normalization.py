@@ -9,7 +9,7 @@ enumerates the fields directly and skips the ``default=`` hook that
 builds our envelope. The wire payload comes out as
 ``{"message": …, "status_code": …, "body": …, "headers": null,
 "raw_response": null, "data": {…}}`` with no ``error`` / ``class`` /
-``provider`` envelope and no way for the WebUI to distinguish quota /
+``provider`` envelope and no way for a client to distinguish quota /
 auth / rate-limit / model-not-found.
 
 This middleware sits at the model-call boundary. It catches
@@ -25,7 +25,7 @@ provider model gets wrapped — SDK exceptions, httpx errors,
 langchain-wrapper failures, and even builtins like ``RuntimeError``.
 At the middleware boundary we can tell which provider was in use, but
 not the exception's precise origin; a uniform envelope is more useful
-to the WebUI than gambling on the exception class. If the model isn't
+to a client than gambling on the exception class. If the model isn't
 from a recognized provider, or the request carries no ``.model``, the
 exception re-raises unchanged and upstream's whitelist / catch-all
 behavior takes over.

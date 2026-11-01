@@ -76,7 +76,7 @@ class TestInstallSkills:
             c.kwargs["workspace"] is workspace for c in install_mock.call_args_list
         )
 
-    async def test_channel_auto_install_on_tag(self, workspace):
+    async def test_non_interactive_ui_auto_installs_on_tag(self, workspace):
         """Non-interactive UI + tag arg → auto-installs matching skills."""
         from metasci_scribe.commands.implementation.skills import InstallSkills
 

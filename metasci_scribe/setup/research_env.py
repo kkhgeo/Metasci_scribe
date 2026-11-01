@@ -72,7 +72,7 @@ _SYSTEM_PYTHON_PROBE = (
 # of current packages.
 _MIN_PYTHON = (3, 9)
 # Files that mark an environment Metasci Scribe's installer made (uv tool
-# install; the Docker image's /opt/venv). uv builds both without pip.
+# install). uv builds it without pip.
 _MANAGED_ENV_MARKERS = ("uv-receipt.toml", ".metasci-scribe-managed")
 _VENV_TIMEOUT = 300
 _PIP_TIMEOUT = 1800
@@ -327,7 +327,7 @@ def find_usable_python() -> str | None:
     """The ``python`` the agent's shell would run, as an absolute path, if it
     runs, is Python 3.9 or newer, lets pip install into it (no PEP 668 marker
     outside a venv) and is not the environment Metasci Scribe's installer made
-    (a uv tool environment, the Docker image's ``/opt/venv``); else None.
+    (a uv tool environment); else None.
 
     Only the first ``python`` on PATH counts, as in the shell. When it is our
     own environment's (activated by hand, or a nested ``metasci-scribe`` in the

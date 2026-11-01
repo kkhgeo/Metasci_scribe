@@ -423,7 +423,7 @@ class CompactResult:
 
     Attributes:
         status: "noop" (nothing to compact), "ok" (compacted), or "error".
-        message: Short human-readable message (used as fallback / TUI text).
+        message: Short human-readable message (used as fallback text).
         messages_compacted: Number of messages summarized (0 for noop/error).
         messages_kept: Number of messages unchanged.
         tokens_before: Total tokens before compaction.
@@ -583,7 +583,7 @@ def warn_server_backend_hitl_caveats(
 ) -> None:
     """Warn that the server gateway backend is lossy for a HITL surface.
 
-    The interactive CLI and TUI create a per-session workspace and switch models
+    The interactive CLI create a per-session workspace and switch models
     mid-session, but on the server backend neither reaches the run: execution
     stays in the server's import-time workspace, and per-run config (model,
     active teams, HITL suppression) is dropped when a turn resumes after a tool

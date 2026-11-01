@@ -191,6 +191,9 @@ class ScribeConfig:
     # Off by default: every sub-agent runs in-process and a plain start never
     # spawns a background server. Memory workers, skill synthesis and the
     # scheduler also ask for that server; they are off by default too.
+    # UNSUPPORTED in Metasci Scribe: kept from the upstream project, not tested
+    # end to end, and never set by the CLI or by ``metasci-scribe run``. Leave it
+    # False (see docs/baseline.md, Task 15).
     enable_async_subagents: bool = False
 
     # Port for the auto-started langgraph dev subprocess. 6174 is Kaprekar's
@@ -239,7 +242,7 @@ class ScribeConfig:
     # runs orphans its records — run `metasci-scribe server stop` before switching.
     langgraph_dev_keepalive: bool = False
 
-    # Which backend serves the CLI/TUI's graph runs: the in-process local
+    # Which backend serves the CLI's graph runs: the in-process local
     # gateway (default) or the langgraph dev server via LangGraphServerGateway.
     # Server-gateway-migration rollback flag: flipping back to "local" restores
     # the in-process path without code changes. The CLI keeps building its

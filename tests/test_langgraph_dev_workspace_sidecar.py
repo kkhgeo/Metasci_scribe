@@ -848,7 +848,7 @@ def test_server_config_fingerprint_ignores_cli_only_fields():
 
 
 def test_server_config_fingerprint_ignores_shell_allow_list():
-    """shell_allow_list is read only by CLI/channel approval resolvers —
+    """shell_allow_list is read only by the CLI approval resolvers —
     it never reaches the subprocess, so it must not cause drift."""
     cfg = manager.ScribeConfig()
     base = manager._server_config_fingerprint(cfg)
@@ -861,8 +861,8 @@ def test_server_config_fingerprint_ignores_gateway_backend():
     needed; nothing in the server reads them, so they must not cause drift."""
     cfg = manager.ScribeConfig()
     base = manager._server_config_fingerprint(cfg)
-    cfg.gateway_backend_serve = "langgraph_server"
-    cfg.gateway_backend_tui = "langgraph_server"
+    cfg.gateway_backend_interactive = "langgraph_server"
+    cfg.gateway_backend_standalone = "langgraph_server"
     assert manager._server_config_fingerprint(cfg) == base
 
 

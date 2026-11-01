@@ -1456,7 +1456,7 @@ def ensure_langgraph_dev(
 
     # Two layers of locking:
     #   1. ``FileLock`` — cross-process coordination. Without it, two CLI
-    #      shells (TUI + ``-p``) racing on the cold-start window
+    #      shells (chat + ``-p``) racing on the cold-start window
     #      can SIGKILL each other's still-booting subprocesses via
     #      ``_kill_owned_stale_process`` (Shell A's PID is in the file and
     #      bound to the port, but ``/ok`` isn't responding yet, so Shell B
@@ -1576,8 +1576,8 @@ def _ensure_langgraph_dev_locked(
 
                 AGENT_SHELL_DRIFT = shell_drift_message(sidecar)
                 if AGENT_SHELL_DRIFT is not None:
-                    # INFO: the CLI prints it after startup and the TUI shows
-                    # it in the app; a WARNING here would print it twice.
+                    # INFO: the CLI prints it after startup;
+                    # a WARNING here would print it twice.
                     logger.info(AGENT_SHELL_DRIFT)
                 if requested is not None:
                     logger.info(

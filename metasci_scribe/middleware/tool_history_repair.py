@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 # Shared with stream recovery: close dangling calls with an honest result that
 # tells the model not to re-issue the interrupted batch. Checkpoint repair
 # persists this as a real ToolMessage; this middleware only rewrites the
-# outgoing request when the checkpoint was never repaired (e.g. WebUI).
+# outgoing request when the checkpoint was never repaired (e.g. a client that resumes the thread directly).
 _INTERRUPTED_RESULT = (
     "Tool execution was interrupted before the run completed. Side effects may "
     "already have been partially applied; check the current state instead of "

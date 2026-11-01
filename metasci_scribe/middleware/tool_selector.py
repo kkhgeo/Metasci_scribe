@@ -440,7 +440,7 @@ def create_tool_selector_middleware(
     # Model-field wiring: the ``nostream`` tag reaches langgraph's messages
     # callback (``pregel/_messages.py:141``), which skips registering the
     # selector's chat-model call so no ``messages/*`` frame is ever emitted
-    # for it - WebUI's action panel never sees the (potentially thousands
+    # for it - a streaming client never sees the (potentially thousands
     # of duplicate) ``ToolSelectionResponse`` tool_calls the provider may
     # produce. ``_FLOOD_DETECTOR`` self-reports when the provider quirk
     # fires. Both propagate via ``CallbackManager.configure`` reading

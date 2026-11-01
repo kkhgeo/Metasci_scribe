@@ -1,4 +1,4 @@
-"""Shared constants and utilities for CLI and TUI modules."""
+"""Shared constants and utilities for CLI modules."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ def _agent_name() -> str:
     return AGENT_NAME
 
 
-# Dangerous-mode warning banner — shared by Rich CLI and Textual TUI so
+# Dangerous-mode warning banner — shared by Rich CLI so
 # the wording never drifts. Label is rendered white-on-red, message in red.
 DANGEROUS_BANNER_LABEL = "DANGEROUS MODE"
 DANGEROUS_BANNER_MESSAGE = (
@@ -37,7 +37,7 @@ WELCOME_SLOGANS = [
     "Ideas in. Discoveries out.",
 ]
 
-# ASCII art logo — shared by both Rich CLI and Textual TUI banners.
+# ASCII art logo — shared by both Rich CLI banners.
 LOGO_LINES = (
     r" ███████╗ ██╗   ██╗  ██████╗  ███████╗  ██████╗ ██╗ ███████╗ ███╗   ██╗ ████████╗ ██╗ ███████╗ ████████╗",
     r" ██╔════╝ ██║   ██║ ██╔═══██╗ ██╔════╝ ██╔════╝ ██║ ██╔════╝ ████╗  ██║ ╚══██╔══╝ ██║ ██╔════╝ ╚══██╔══╝",

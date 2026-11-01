@@ -1,6 +1,6 @@
-"""Background MCP/agent load lifecycle shared by CLI and TUI surfaces.
+"""Background MCP/agent load lifecycle shared by CLI surfaces.
 
-Holds no references to Rich, prompt_toolkit, or Textual — UI-specific
+Holds no references to Rich or prompt_toolkit — UI-specific
 rendering and thread-hopping plug in via callbacks.
 """
 
@@ -115,7 +115,7 @@ class BackgroundAgentLoader(Generic[AgentT]):
     def needs_restart(self) -> bool:
         """True when no load is in flight and no agent is ready.
 
-        Callers that want auto-retry behavior (e.g. TUI on the next
+        Callers that want auto-retry behavior (e.g. the prompt on the next
         user send after a failure) check this before :meth:`start`.
         """
         return self.agent is None and (self._task is None or self._task.done())

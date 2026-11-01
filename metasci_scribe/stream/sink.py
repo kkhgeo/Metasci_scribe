@@ -29,8 +29,7 @@ class SessionEventSink:
 
     Args:
         fallback_display: Optional ``(text, style)`` callback the frontend
-            supplies to render a model-fallback notice (Rich: ``console.print``;
-            TUI: append a system message). ``None`` renders to the shared
+            supplies to render a model-fallback notice (Rich: ``console.print``). ``None`` renders to the shared
             Rich console.
     """
 
@@ -49,8 +48,8 @@ class SessionEventSink:
     ) -> None:
         """(Re)bind the fallback-notice display sink.
 
-        Frontends whose display target only exists after construction (the TUI
-        binds its ``_append_system`` on mount, clears it on exit) use this
+        Frontends whose display target only exists after construction (a prompt that
+        binds its display after startup) use this
         instead of the constructor argument.
         """
         with self._lock:

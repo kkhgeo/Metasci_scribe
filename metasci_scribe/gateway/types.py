@@ -305,7 +305,7 @@ class GraphGateway(Protocol):
         process (in-process on the local backend, the langgraph dev server on the
         server backend), so their status lives in that process's registry. On the
         local backend, the gateway falls back to the dev server for ids it does not
-        know (e.g. processes launched by the WebUI on a shared thread). The
+        know (e.g. processes launched by async sub-agents). The
         client-side ``bg_processes`` read path polls this to detect exit without
         the in-process notifier, mirroring :meth:`get_run_status`. Returns one of
         ``running`` / ``success`` / ``error`` / ``interrupted`` / ``unknown``;

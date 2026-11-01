@@ -91,9 +91,8 @@ def compute_completions(
     ``workspace`` is the session's workspace, forwarded to commands whose
     completions list what is installed there.
 
-    This is the shared engine used by both the Rich CLI
-    (``SlashCommandCompleter``) and the TUI (``on_text_area_changed``).
-    Both thin adapters only need to translate the returned candidates
+    This is the shared engine used by the Rich CLI
+    (``SlashCommandCompleter``). A thin adapter only needs to translate the returned candidates
     into their respective render/apply primitives.
     """
     from .manager import manager as cmd_manager
@@ -182,7 +181,7 @@ def compute_completions(
                         )
                     )
 
-        # Enter in the TUI applies the first candidate, so an exact skill name
+        # Enter applies the first candidate, so an exact skill name
         # moves its whole group to the front, keeping the group contiguous.
         if any(c.text == prefix for c in skill_candidates):
             skills = sorted(skill_candidates, key=lambda c: c.text != prefix)

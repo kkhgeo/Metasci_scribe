@@ -310,8 +310,8 @@ def _env_path(key: str) -> Path | None:
 def _shared_dir_from_env(key: str) -> Path | None:
     """Read a folder that other programs locate too from *key*, as an absolute path.
 
-    The data and config folders are also found by the WebUI and the desktop
-    app, so they follow one path rule: an unset, empty or whitespace-only
+    The data and config folders are also found by other programs (the langgraph dev
+    server, for one), so they follow one path rule: an unset, empty or whitespace-only
     value counts as unset; a leading ``~``, alone or followed by a path
     separator, is the home folder, and nothing else is expanded (no ``~user``,
     no environment variables); a relative path is resolved against the
@@ -358,7 +358,7 @@ _XDG_CONFIG_HOME_SET: bool = _shared_dir_from_env("XDG_CONFIG_HOME") is not None
 def dir_env(env: dict[str, str]) -> dict[str, str]:
     """Return *env* with this process's data and config folders, as absolute paths.
 
-    For processes this one starts (the langgraph dev server, the WebUI): they
+    For processes this one starts (the langgraph dev server): they
     run in other folders and load their own ``.env``, so they get the folders
     this process uses rather than resolving the variables again.
     ``XDG_CONFIG_HOME`` is passed only if this process started with it: unset

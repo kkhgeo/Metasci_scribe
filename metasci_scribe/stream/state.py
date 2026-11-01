@@ -11,7 +11,7 @@ from enum import StrEnum
 
 
 class ResearchPhase(StrEnum):
-    """Research phase constants used by the TUI status bar."""
+    """Research phase constants used by the status bar."""
 
     IDLE = "idle"
     THINKING = "thinking"

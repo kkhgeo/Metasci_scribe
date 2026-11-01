@@ -13,7 +13,7 @@ Before re-export we upgrade the compiled graph's class in place to
 the field ``PrivateStateAttr = OmitFromSchema(input=True, output=True)``,
 but LangGraph's ``_prepare_state_snapshot`` doesn't honor that on
 checkpoint reads — every ``getState`` materializes the delta chain back
-into a full ~1.4 MB blob, which the WebUI then downloads. The subclass
+into a full ~1.4 MB blob, which an API client then downloads. The subclass
 closes the gap without touching the middleware's write path, preserving
 cross-turn REPL persistence as ``langchain-ai/deepagents#3064`` shipped it.
 """
@@ -88,7 +88,7 @@ def _strip_private(snap):
     * ``snap.tasks[*].state`` (nested ``StateSnapshot``) — populated when the
       caller passes ``subgraphs=True``. Repeats all of the above surfaces
       for each subgraph task, so recurse into it. Not exercised by the
-      current WebUI (which doesn't pass ``subgraphs=True`` on REST reads),
+      CLI (which doesn't pass ``subgraphs=True`` on REST reads),
       but SDK / curl / gRPC callers can.
     """
     if snap is None:
@@ -168,7 +168,7 @@ class _EvoFilteredGraph(CompiledStateGraph):
     checks the output schema. So a client streaming with
     ``stream_mode="values"`` or ``stream_mode="events"`` (which fall back
     to ``stream_channels_asis`` when ``output_keys`` is ``None``) can pull
-    the anchor blob in per-run event data. Empirically the WebUI's
+    the anchor blob in per-run event data. Empirically the
     ``stream_mode=["updates"]`` path is clean, so this is transient per-run
     rather than the persistent per-getState download this PR targets.
     Filter here first; extend into the stream layer if a client relying on

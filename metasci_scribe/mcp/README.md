@@ -1,6 +1,6 @@
 # Model Context Protocol Integration
 
-> Connects external systems to [Metasci Scribe](https://github.com/EvoScientist/EvoScientist) via [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
+> Connects external systems to Metasci Scribe via [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
 
 > [!TIP]
 > Explore more servers: [MCP Server Directory](https://github.com/modelcontextprotocol/servers)
@@ -319,7 +319,7 @@ Metasci Scribe installs a private Node.js on first use. If that install fails (o
 <details>
 <summary><strong>Windows: stdio server fails with <code>[Errno 9] Bad file descriptor</code></strong></summary>
 
-On Windows, the TUI redirects `sys.stderr` to an in-memory capture whose `fileno()` is not a real OS handle. The MCP SDK forwards that `stderr` to the stdio server subprocess, and `subprocess.Popen` rejects the invalid handle with `OSError: [Errno 9] Bad file descriptor` — so only stdio servers fail to load (HTTP/SSE servers are unaffected).
+On Windows, a host that redirects `sys.stderr` to an in-memory capture (no real console) leaves it with a `fileno()` that is not a real OS handle. The MCP SDK forwards that `stderr` to the stdio server subprocess, and `subprocess.Popen` rejects the invalid handle with `OSError: [Errno 9] Bad file descriptor` — so only stdio servers fail to load (HTTP/SSE servers are unaffected).
 
 Metasci Scribe wraps the SDK's stdio client so that, whenever the configured `stderr` has no usable file descriptor, it falls back to the original console handle (`sys.__stderr__`, or `os.devnull` in GUI hosts). If you still see this error, run from a real console (not `pythonw.exe`) and check the server's own startup output.
 

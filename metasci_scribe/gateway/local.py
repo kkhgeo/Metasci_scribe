@@ -244,8 +244,8 @@ class LocalGraphGateway:
         process_id: str,
     ) -> str:
         # Processes launched by the in-process graph are in this registry;
-        # processes launched by the dev server (e.g. WebUI turns on a shared
-        # thread) are only in its registry.
+        # processes launched by the dev server (async sub-agents,
+        # say) are only in its registry.
         from .. import background
 
         status = background.poll_status(process_id)

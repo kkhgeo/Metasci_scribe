@@ -127,9 +127,9 @@ class SkillInfo:
     # SKILL.md files need no edits.
     type: str = "utility"  # "utility" (default) or "expert"
     role: str = ""  # one-line role summary shown to the orchestrator LLM
-    byline: str = ""  # WebUI gallery byline
-    capability_tags: list[str] = field(default_factory=list)  # WebUI chips
-    avatar_hint: str = ""  # WebUI icon hint
+    byline: str = ""  # gallery byline (unused)
+    capability_tags: list[str] = field(default_factory=list)  # gallery chips (unused)
+    avatar_hint: str = ""  # gallery icon hint (unused)
     # SKILL.md body (post-frontmatter). Populated by ``_parse_skill_md`` so
     # the expert-container factory doesn't have to re-read the file on every
     # main-agent construction. Empty for skills built by hand or when the
@@ -410,7 +410,7 @@ def _parse_skill_md(skill_md_path: Path, *, source: str = "") -> SkillInfo:
     frontmatter, alongside actor fields (``role`` / ``byline`` /
     ``capability_tags`` / ``avatar_hint`` / ``default_dispatch``). That path
     still resolves, with a deprecation warning, and is still the source of
-    the WebUI gallery's decoration fields. New experts declare via EXPERT.md
+    the gallery decoration fields (no longer shown). New experts declare via EXPERT.md
     and set none of those fields; their gallery cards carry name and
     description only.
 

@@ -593,7 +593,7 @@ def _render_notification_group(
         # `writing-agent` → `writing`.
         name = n.agent_name.removesuffix("-agent")
         if n.status == "success":
-            icon, color = "✔", "#e67e22"  # carrot orange (CSS hex; Rich+Textual)
+            icon, color = "✔", "#e67e22"  # carrot orange (CSS hex; Rich)
         elif n.status == "error":
             icon, color = "✗", "red"
         else:  # cancelled, timeout, interrupted

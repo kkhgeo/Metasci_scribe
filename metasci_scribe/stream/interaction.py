@@ -1,4 +1,4 @@
-"""Approval policy shared by the CLI, TUI and LangGraph gateway.
+"""Approval policy shared by the CLI and LangGraph gateway.
 
 Config-rule HITL decisions (``shell_allow_list``, ``auto_approve``,
 ``dangerous_mode``) and the :class:`ApprovalOutcome` result type. Pure policy:
@@ -177,7 +177,7 @@ def _resolve_one_action_request(
 def resolve_config_decisions(action_requests: list[dict]) -> list[dict] | None:
     """Resolve HITL decisions from config rules alone, or ``None`` to prompt.
 
-    Per-request policy chokepoint shared by every attended UI (CLI display, TUI):
+    Per-request policy chokepoint shared by every attended UI (CLI display):
     non-shell tools auto-approve; shell tools go through
     :func:`~metasci_scribe.backends.resolve_action_decision` (``shell_allow_list``
     token-boundary match, dangerous commands rejected with a reason under

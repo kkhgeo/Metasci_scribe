@@ -25,8 +25,7 @@ run on LangChain worker threads, async hooks on whichever loop runs the graph.
 A sink implementation therefore MUST be:
 
 * **thread-safe** — any state it mutates is touched under its own lock, and
-* **non-blocking** — it marshals to its UI itself (Textual:
-  ``call_from_thread`` / ``post_message``; Rich: the console's internal lock)
+* **non-blocking** — it marshals to its UI itself (Rich: the console's internal lock)
   and returns promptly.
 
 A sink that blocks stalls the model call that emitted the event — the emitting

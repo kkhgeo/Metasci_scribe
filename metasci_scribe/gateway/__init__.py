@@ -1,7 +1,7 @@
 """Graph/thread gateway abstractions.
 
 The gateway package is the migration seam between UI surfaces and graph
-execution. CLI, TUI, and future frontends should depend on this
+execution. the CLI and future frontends should depend on this
 package for thread/run operations instead of reaching directly into
 ``sessions.py``, ``stream.events``, or the LangGraph SDK.
 

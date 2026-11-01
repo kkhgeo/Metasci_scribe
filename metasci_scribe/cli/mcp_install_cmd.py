@@ -1,6 +1,6 @@
 """CLI /install-mcp — questionary-based interactive browser.
 
-Uses the same logic as the TUI command (``commands.implementation.mcp_install``)
+Uses the same logic as the slash command (``commands.implementation.mcp_install``)
 but provides a questionary-based UI for the plain CLI interactive mode.
 """
 

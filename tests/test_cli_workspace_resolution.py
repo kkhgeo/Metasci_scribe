@@ -20,7 +20,6 @@ def _config(*, default_workdir: str = "", default_mode: str = "daemon"):
         default_mode=default_mode,
         openai_auth_mode="api_key",
         show_thinking=True,
-        channel_send_thinking=True,
         ui_backend="cli",
         model="test-model",
         provider="anthropic",

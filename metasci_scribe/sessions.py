@@ -1762,7 +1762,7 @@ async def _restore_webui_threads_to_global_store() -> bool:
     they are still treated as disposable residue until worker cloning lands.
     The workspace filter is required because sessions.db is machine-global,
     and an unscoped restore would expose every workspace's history on the
-    unauthenticated API — worst case ``--tunnel``. CLI/TUI threads (8-char
+    unauthenticated API — worst case ``--tunnel``. CLI threads (8-char
     hex IDs, managed by ``list_threads()``) and pre-stamping rows without
     ``workspace_dir`` are excluded.
 

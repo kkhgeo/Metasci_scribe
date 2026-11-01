@@ -1031,8 +1031,8 @@ def cmd_interactive(
                 await _render_history(thread_id)
 
             # Rich CLI collapses ``request_quit`` / ``force_quit`` into the
-            # same "break the prompt loop" effect — there's no equivalent
-            # of the TUI's double-press-to-confirm quit distinction.  A
+            # same "break the prompt loop" effect — there's no
+            # double-press-to-confirm quit distinction.  A
             # shared ``_stop`` helper makes the intentional symmetry
             # explicit instead of silently duplicating a lambda.
             def _stop() -> None:

@@ -58,8 +58,7 @@ def hitl_completed_round_cap_reached(completed_rounds: int) -> bool:
 def channel_response_with_budget_stop(response: str) -> str:
     """Fold the budget-stop notice into a reply returned by a callback.
 
-    Surfaces that print the notice themselves (the TUI uses
-    ``_append_system``) do not need this; a caller that only sees the
+    Surfaces that print the notice themselves do not need this; a caller that only sees the
     returned text does. Partial text from the last real round is kept.
     """
     text = (response or "").strip()

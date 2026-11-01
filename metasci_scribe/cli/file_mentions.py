@@ -1,4 +1,4 @@
-"""@file mention parsing and injection for CLI and TUI input.
+"""@file mention parsing and injection for CLI input.
 
 Usage::
 
@@ -302,7 +302,7 @@ def parse_file_mentions(
         ``Path`` objects (directories excluded) in order of first appearance,
         and a list of human-readable warning strings to be displayed by the
         caller.  Callers must display the warnings themselves using the
-        appropriate UI mechanism (Rich console, Textual widget, etc.).
+        appropriate UI mechanism (the Rich console, say).
     """
     if cwd is None:
         cwd = Path.cwd()
@@ -407,7 +407,7 @@ def resolve_file_mentions(
 
 
 # ---------------------------------------------------------------------------
-# Autocomplete helpers (used by CLI completer and TUI)
+# Autocomplete helpers (used by the CLI completer)
 # ---------------------------------------------------------------------------
 
 

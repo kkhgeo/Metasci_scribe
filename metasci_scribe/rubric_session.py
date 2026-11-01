@@ -148,7 +148,7 @@ def rubric_badge(
     return None
 
 
-# -- shared by the interactive CLI and the TUI ---------------------------------
+# -- shared by the interactive CLI ---------------------------------
 
 
 def runs_in_process(graph_gateway: Any) -> bool:

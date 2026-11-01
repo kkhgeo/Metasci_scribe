@@ -1,4 +1,4 @@
-"""The TUI, WebUI and operations surfaces are gone; nothing may reach for them.
+"""The full-screen, browser and operations surfaces are gone; nothing may reach for them.
 
 Metasci Scribe is a terminal agent with one conversation screen
 (``cli/interactive.py``). It does not update itself, install a proxy for a
@@ -138,14 +138,15 @@ def test_config_has_no_removed_settings():
 
 
 def test_cli_exposes_no_removed_command():
-    from typer.testing import CliRunner
+    """Look the commands up; never invoke them (a command that still existed
+    would then run for real)."""
+    import typer.main
 
     from metasci_scribe.cli import app
 
-    runner = CliRunner()
-    for command in (["deploy"], ["update"], ["service", "install"], ["serve"]):
-        result = runner.invoke(app, command)
-        assert result.exit_code == 2, command
+    registered = set(typer.main.get_command(app).commands)
+    assert registered.isdisjoint({"deploy", "update", "service", "serve"})
+    assert {"run", "onboard", "config"} <= registered
 
 
 def test_slash_commands_have_no_removed_entries():

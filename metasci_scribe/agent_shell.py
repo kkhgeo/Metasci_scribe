@@ -166,7 +166,7 @@ def shell_drift_message(sidecar: dict) -> str | None:
     """A warning when a reused server's agents got another ``python`` or shell.
 
     The server's backends fix both when it starts, so after a reuse its agents
-    (async sub-agents, and the WebUI's main agent) keep them. None when both
+    (async sub-agents) keep them. None when both
     match or the sidecar has no record.
     """
     from .setup.research_env import python_drift_message
