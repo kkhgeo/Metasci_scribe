@@ -48,4 +48,3 @@ def test_cli_agent_backend_gets_the_overrides(overrides, tmp_path, workspace):
             workspace=workspace,
         )
     assert backends[0].default._env["METASCI_SCRIBE_SHELL_PROBE"] == "venv"
-
