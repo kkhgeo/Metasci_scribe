@@ -14,17 +14,14 @@ from metasci_scribe.paths import SessionDirs, Workspace
 from tests.fakes.common import FakeGraphGateway, FakeThreadStore
 
 
-def _config(
-    *, default_workdir: str = "", default_mode: str = "daemon", ui_backend: str = "cli"
-):
+def _config(*, default_workdir: str = "", default_mode: str = "daemon"):
     return SimpleNamespace(
         default_workdir=default_workdir,
         default_mode=default_mode,
-        anthropic_auth_mode="api_key",
         openai_auth_mode="api_key",
         show_thinking=True,
         channel_send_thinking=True,
-        ui_backend=ui_backend,
+        ui_backend="cli",
         model="test-model",
         provider="anthropic",
     )
@@ -84,7 +81,6 @@ def _run(
         ask_user=False,
         dangerous=False,
         auth_mode=None,
-        ui=None,
         host=None,
         output_format=None,
     )
@@ -256,7 +252,6 @@ def _run_prompt(
         ask_user=False,
         dangerous=False,
         auth_mode=None,
-        ui=None,
         host=None,
         output_format=None,
     )
@@ -335,21 +330,3 @@ def test_one_shot_new_thread_keeps_launch_dirs(monkeypatch, tmp_path):
     assert got["run_dirs"] == SessionDirs(Workspace(tmp_path))
     assert got["prespawned"] == [SessionDirs(Workspace(tmp_path))]
     assert got["synced"] == []
-
-
-def test_webui_mode_run_works_in_root(monkeypatch, tmp_path):
-    """Run mode is a CLI/TUI feature: the WebUI starts in the root, no run folder."""
-    import metasci_scribe.deploy.webui as webui_mod
-
-    monkeypatch.chdir(tmp_path)
-    launched: list[str] = []
-    monkeypatch.setattr(
-        webui_mod,
-        "run_webui",
-        lambda _config, *, workspace_dir: launched.append(workspace_dir),
-    )
-
-    _run(monkeypatch, _config(ui_backend="webui"), mode="run")
-
-    assert launched == [str(tmp_path.resolve())]
-    assert not (tmp_path / "runs").exists()

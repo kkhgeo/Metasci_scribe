@@ -38,7 +38,6 @@ from .config import (
 from .memory import MemorySourceType
 from .paths import (
     Workspace,
-    normalize_path,
     process_session_dirs,
     resolve_virtual_path,
 )
@@ -813,17 +812,6 @@ def load_mcp_and_build_kwargs(
 # =============================================================================
 
 
-def _run_media_dir(workspace: Workspace, work_dir: str | Path) -> Path | None:
-    """The workspace's media folder, when the agent works outside the root.
-
-    Channel attachments land in ``<root>/media`` and are referenced by their
-    real path. A ``--mode=run`` sandbox is rooted at its run folder, so it is
-    told about the folder to reach them; in the root it is already inside
-    the sandbox.
-    """
-    return None if normalize_path(work_dir) == workspace.root else workspace.media_dir
-
-
 def _get_default_backend(
     workspace: Workspace,
     *,
@@ -835,9 +823,7 @@ def _get_default_backend(
 
     The sandbox is rooted at ``work_dir`` (the folder the agent works in),
     which defaults to the workspace root; ``/skills/`` merges the
-    workspace, global and built-in skill tiers. When ``work_dir`` is a
-    ``--mode=run`` folder, channel attachments in the workspace's ``media/``
-    stay readable by their real path.
+    workspace, global and built-in skill tiers.
 
     ``guard_dangerous`` — when ``None`` (default) the backend derives the guard
     per call from the run's HITL-suppression state (``is_hitl_suppressed``): an
@@ -870,7 +856,6 @@ def _get_default_backend(
 
     # Dangerous mode opens the workspace (`/`) route to the real filesystem;
     # the /skills/ and /memories/ routes stay confined (virtual_mode=True).
-    media_dir = _run_media_dir(workspace, root_dir)
     ws_backend = CustomSandboxBackend(
         root_dir=root_dir,
         virtual_mode=True,
@@ -880,7 +865,6 @@ def _get_default_backend(
         refuse_delete=refuse_delete,
         env=research_env_overrides(),
         skills_dir=workspace.skills_dir,
-        media_dir=media_dir,
     )
     sk_backend = MergedSkillsBackend(
         primary_dir=str(workspace.skills_dir),
@@ -989,7 +973,6 @@ def _get_default_middleware(
         create_memory_lifecycle_middleware,
         create_memory_middleware,
         create_per_run_summarization_middleware,
-        create_proactive_mode_middleware,
         create_runtime_context_middleware,
         create_scheduler_middleware,
         create_tool_selector_middleware,
@@ -1130,17 +1113,6 @@ def _get_default_middleware(
     if not for_async_subagent:
         mw.insert(0, create_active_team_middleware(workspace))
 
-    # Proactive shadow turns (#263) strip every tool, so the model returns a
-    # text-only push or no-push decision. Inserted last at index 0 so it wraps
-    # every middleware in this list: tool_selector, memory and the rest then
-    # see the empty tool list. deepagents places its own core middleware
-    # (skills, filesystem, sub-agents, summarization, tool-call patching)
-    # outside this list; none of them calls the model. It acts only on runs
-    # with configurable.proactive_mode; main agent only, since no async
-    # sub-agent run carries the flag.
-    if not for_async_subagent:
-        mw.insert(0, create_proactive_mode_middleware())
-
     # Background-process tools (run_in_background / check_process / stop_process /
     # list_processes) — main agent only. Async sub-agents run on langgraph-dev and
     # must not spawn local OS processes.
@@ -1159,7 +1131,6 @@ def _get_default_middleware(
                 skills_dir=workspace.skills_dir,
                 dangerous=cfg.dangerous_mode,
                 guard_dangerous=False,
-                media_dir=_run_media_dir(workspace, work_dir),
             )
         )
 
@@ -1421,7 +1392,6 @@ def create_cli_agent(
     _mem_dir = str(_paths.MEMORIES_DIR)
     _global_skills_dir = str(_paths.GLOBAL_SKILLS_DIR)
 
-    media_dir = _run_media_dir(workspace, work_dir)
     ws_backend = CustomSandboxBackend(
         root_dir=work_dir,
         virtual_mode=True,
@@ -1432,7 +1402,6 @@ def create_cli_agent(
         guard_dangerous=False,
         env=research_env_overrides(),
         skills_dir=workspace.skills_dir,
-        media_dir=media_dir,
     )
     sk_backend = MergedSkillsBackend(
         primary_dir=str(workspace.skills_dir),

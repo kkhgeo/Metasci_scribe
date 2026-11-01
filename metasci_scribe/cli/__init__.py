@@ -2,19 +2,16 @@
 
 Most re-exports are served lazily through ``__getattr__`` so that a bare
 ``import metasci_scribe.cli`` only costs what ``main()`` actually needs.  That
-keeps ``metasci-scribe --help`` fast — the heavy chat-model/TUI/langgraph imports
+keeps ``metasci-scribe --help`` fast — the heavy chat-model/langgraph imports
 only pay their cost when someone actually touches those names.
 """
 
 from __future__ import annotations
 
-from .. import deploy as _deploy_pkg  # noqa: F401 — registers `deploy` @app.command
 from . import commands  # noqa: F401 — registers @app.command decorators
 from ._app import app
 
 __all__ = [
-    "DEFAULT_UI_BACKEND",
-    "SUPPORTED_UI_BACKENDS",
     "WELCOME_SLOGANS",
     "StreamState",
     "SubAgentState",
@@ -22,10 +19,7 @@ __all__ = [
     "_deduplicate_run_name",
     "_parse_todo_items",
     "app",
-    "get_backend",
     "main",
-    "normalize_ui_backend",
-    "resolve_ui_backend",
     "run_streaming",
 ]
 
@@ -38,12 +32,7 @@ _LAZY_EXPORTS: dict[str, tuple[str, str]] = {
     "_parse_todo_items": ("..stream.state", "_parse_todo_items"),
     "WELCOME_SLOGANS": ("._constants", "WELCOME_SLOGANS"),
     "_deduplicate_run_name": (".agent", "_deduplicate_run_name"),
-    "DEFAULT_UI_BACKEND": (".tui_runtime", "DEFAULT_UI_BACKEND"),
-    "SUPPORTED_UI_BACKENDS": (".tui_runtime", "SUPPORTED_UI_BACKENDS"),
-    "get_backend": (".tui_runtime", "get_backend"),
-    "normalize_ui_backend": (".tui_runtime", "normalize_ui_backend"),
-    "resolve_ui_backend": (".tui_runtime", "resolve_ui_backend"),
-    "run_streaming": (".tui_runtime", "run_streaming"),
+    "run_streaming": (".stream_runtime", "run_streaming"),
 }
 
 

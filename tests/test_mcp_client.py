@@ -1427,44 +1427,14 @@ class TestParseMcpEditArgs:
 # ---- uv tool compatibility ----
 
 
-def _use_tool_env(monkeypatch, env):
-    """Run as if from the uv tool environment *env* (its receipt in
-    ``sys.prefix``, as under the ``metasci-scribe`` entry point) on uv's own Python,
-    on Linux, with ``uv`` as the uv to run."""
-    import metasci_scribe.mcp.registry as reg
-
-    monkeypatch.setattr(reg.sys, "prefix", str(env))
-    monkeypatch.setattr(reg.sys, "platform", "linux")
-    monkeypatch.setattr(reg.uv_tool, "find_uv", lambda: "uv")
-    monkeypatch.setattr(reg.uv_tool, "runs_on_managed_python", lambda uv: True)
-
-
 class TestUvToolCompat:
     """Tests for the install helpers in and outside the uv tool environment."""
 
     # -- pip_install_hint --
 
-    def test_pip_install_hint_uv_tool(self, monkeypatch, tmp_path):
+    def test_pip_install_hint_uv(self, monkeypatch):
         import metasci_scribe.mcp.registry as reg
 
-        (tmp_path / "uv-receipt.toml").write_text("[tool]\n")
-        _use_tool_env(monkeypatch, tmp_path)
-        hint = reg.pip_install_hint()
-        assert hint == f'"uv" pip install --python "{sys.executable}"'
-
-    def test_pip_install_hint_uv_tool_windows(self, monkeypatch, tmp_path):
-        """Pasted into PowerShell, a quoted path runs only after ``&``."""
-        import metasci_scribe.mcp.registry as reg
-
-        (tmp_path / "uv-receipt.toml").write_text("[tool]\n")
-        _use_tool_env(monkeypatch, tmp_path)
-        monkeypatch.setattr(reg.sys, "platform", "win32")
-        assert reg.pip_install_hint().startswith('& "uv" pip install --python ')
-
-    def test_pip_install_hint_uv_no_tool(self, monkeypatch):
-        import metasci_scribe.mcp.registry as reg
-
-        monkeypatch.setattr(reg.uv_tool, "tool_env", lambda: None)
         monkeypatch.setattr(
             reg.shutil, "which", lambda x: "/usr/bin/uv" if x == "uv" else None
         )
@@ -1473,529 +1443,13 @@ class TestUvToolCompat:
     def test_pip_install_hint_plain_pip(self, monkeypatch):
         import metasci_scribe.mcp.registry as reg
 
-        monkeypatch.setattr(reg.uv_tool, "tool_env", lambda: None)
         monkeypatch.setattr(reg.shutil, "which", lambda x: None)
         assert reg.pip_install_hint() == "pip install"
 
     # -- install_library / install_cli_tool --
 
-    def test_install_library_uv_tool_env_uses_uv_tool_install(
-        self, monkeypatch, tmp_path
-    ):
-        """In a uv tool env, should use ``uv tool install --with`` for durability."""
-        import metasci_scribe.mcp.registry as reg
-
-        # Set up a fake uv tool env with receipt
-        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
-        venv.mkdir(parents=True)
-        receipt = venv / "uv-receipt.toml"
-        receipt.write_text(
-            "[tool]\nrequirements = [\n"
-            '  { name = "metasci-scribe" },\n'
-            '  { name = "existing-pkg" },\n'
-            "]\n"
-        )
-        _use_tool_env(monkeypatch, venv)
-
-        captured: list[list[str]] = []
-
-        def fake_run(cmd, **kwargs):
-            captured.append(list(cmd))
-            return type("R", (), {"returncode": 0})()
-
-        monkeypatch.setattr(
-            reg.shutil, "which", lambda x: "/usr/bin/uv" if x == "uv" else None
-        )
-        monkeypatch.setattr(reg.subprocess, "run", fake_run)
-        result = reg.install_library("new-mcp-server")
-        assert result is True
-        assert len(captured) == 1
-        cmd = captured[0]
-        assert cmd[:3] == ["uv", "tool", "install"]
-        # Metasci Scribe stays on the installed version, on uv's Python of the
-        # running X.Y.
-        from importlib.metadata import version
-
-        assert cmd[-1] == f"metasci-scribe=={version('metasci-scribe')}"
-        py = f"{sys.version_info.major}.{sys.version_info.minor}"
-        assert cmd[cmd.index("--python") + 1] == py
-        assert "--managed-python" in cmd
-        assert "-c" not in cmd  # no constraints recorded
-        # Must preserve existing --with requirement
-        assert "--with" in cmd
-        with_args = [cmd[i + 1] for i, v in enumerate(cmd) if v == "--with"]
-        assert "existing-pkg" in with_args
-        assert "new-mcp-server" in with_args
-
-    def test_install_library_uv_tool_keeps_receipt(self, monkeypatch, tmp_path):
-        """The reinstall keeps the extras, the Python, the constraints, and a
-        --with entry's marker and source."""
-        import metasci_scribe.mcp.registry as reg
-
-        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
-        venv.mkdir(parents=True)
-        (venv / "uv-receipt.toml").write_text(
-            "[tool]\nrequirements = [\n"
-            '  { name = "metasci-scribe", extras = ["oauth"], specifier = "==0.3.6" },\n'
-            '  { name = "idna", marker = "python_full_version >= \'3.8\'", specifier = ">=3" },\n'
-            '  { name = "pyjokes", git = "https://github.com/pyjokes/pyjokes?rev=v0.6.0" },\n'
-            "]\n"
-            'constraints = [{ name = "six", specifier = "==1.17.0" }]\n'
-            'python = "3.12"\n'
-        )
-        _use_tool_env(monkeypatch, venv)
-        monkeypatch.setattr(reg.uv_tool, "runs_on_managed_python", lambda uv: False)
-        captured: list[list[str]] = []
-        constraint_files: list[Path] = []
-        constraint_texts: list[str] = []
-
-        def fake_run(cmd, **kwargs):
-            captured.append(list(cmd))
-            # By name, from its folder: uv splits a -c path at spaces.
-            name = cmd[cmd.index("-c") + 1]
-            assert Path(name).name == name
-            constraint_files.append(Path(kwargs["cwd"]) / name)
-            constraint_texts.append(constraint_files[-1].read_text())
-            return type("R", (), {"returncode": 0})()
-
-        monkeypatch.setattr(reg.subprocess, "run", fake_run)
-        assert reg.install_library("new-pkg") is True
-        cmd = captured[0]
-        from importlib.metadata import version
-
-        assert cmd[-1] == f"metasci-scribe[oauth]=={version('metasci-scribe')}"
-        assert cmd[cmd.index("--python") + 1] == "3.12"
-        assert "--no-managed-python" in cmd
-        assert constraint_texts == ["six==1.17.0\n"]
-        assert not constraint_files[0].exists()  # temp file removed
-        with_args = [cmd[i + 1] for i, v in enumerate(cmd) if v == "--with"]
-        assert with_args == [
-            "idna>=3 ; python_full_version >= '3.8'",
-            "pyjokes @ git+https://github.com/pyjokes/pyjokes@v0.6.0",
-            "new-pkg",
-        ]
-
-    def test_install_library_uv_tool_command_error_cleans_up(
-        self, monkeypatch, tmp_path
-    ):
-        """A failure while building the reinstall removes the constraints temp
-        file and falls back to pip."""
-        import metasci_scribe.mcp.registry as reg
-
-        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
-        venv.mkdir(parents=True)
-        (venv / "uv-receipt.toml").write_text(
-            '[tool]\nrequirements = [{ name = "metasci-scribe" }]\n'
-            'constraints = [{ name = "six", specifier = "==1.17.0" }]\n'
-        )
-        _use_tool_env(monkeypatch, venv)
-        monkeypatch.setattr(reg.tempfile, "tempdir", str(tmp_path / "tmp"))
-        (tmp_path / "tmp").mkdir()
-
-        def broken(*args, **kwargs):
-            from importlib.metadata import PackageNotFoundError
-
-            raise PackageNotFoundError("metasci-scribe")
-
-        monkeypatch.setattr(reg, "_uv_tool_reinstall_cmd", broken)
-        captured: list[list[str]] = []
-        monkeypatch.setattr(
-            reg.shutil, "which", lambda x: "/usr/bin/uv" if x == "uv" else None
-        )
-        monkeypatch.setattr(
-            reg.subprocess,
-            "run",
-            lambda cmd, **kw: (
-                captured.append(list(cmd)) or type("R", (), {"returncode": 0})()
-            ),
-        )
-        assert reg.install_library("new-pkg") is True
-        assert [c[:3] for c in captured] == [["uv", "pip", "install"]]
-        assert list((tmp_path / "tmp").iterdir()) == []
-
-    def test_install_library_uv_tool_keeps_source_install(self, monkeypatch, tmp_path):
-        """Metasci Scribe installed from a directory stays on that directory."""
-        import metasci_scribe.mcp.registry as reg
-
-        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
-        venv.mkdir(parents=True)
-        src = tmp_path / "checkout"
-        (venv / "uv-receipt.toml").write_text(
-            "[tool]\nrequirements = [\n"
-            f'  {{ name = "metasci-scribe", directory = "{src.as_posix()}" }},\n'
-            "]\n"
-        )
-        _use_tool_env(monkeypatch, venv)
-        captured: list[list[str]] = []
-        monkeypatch.setattr(
-            reg.subprocess,
-            "run",
-            lambda cmd, **kw: (
-                captured.append(list(cmd)) or type("R", (), {"returncode": 0})()
-            ),
-        )
-        assert reg.install_library("new-pkg") is True
-        assert captured[0][-1] == f"metasci-scribe @ {src.as_uri()}"
-
-    def test_install_library_own_extra_joins_own_requirement(
-        self, monkeypatch, tmp_path
-    ):
-        """``metasci-scribe[telegram]`` (a channel in metasci-scribe onboard) adds the
-        extra to Metasci Scribe's requirement instead of a second metasci-scribe
-        entry, which would leave a receipt metasci-scribe update refuses."""
-        from importlib.metadata import version
-
-        import metasci_scribe.mcp.registry as reg
-
-        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
-        venv.mkdir(parents=True)
-        (venv / "uv-receipt.toml").write_text(
-            "[tool]\nrequirements = [\n"
-            '  { name = "metasci-scribe", extras = ["oauth"], specifier = "==0.3.6" },\n'
-            '  { name = "six" },\n'
-            "]\n"
-        )
-        _use_tool_env(monkeypatch, venv)
-        captured: list[list[str]] = []
-        monkeypatch.setattr(
-            reg.subprocess,
-            "run",
-            lambda cmd, **kw: (
-                captured.append(list(cmd)) or type("R", (), {"returncode": 0})()
-            ),
-        )
-        assert reg.install_library("metasci-scribe[telegram]") is True
-        (cmd,) = captured
-        assert cmd[-1] == f"metasci-scribe[oauth,telegram]=={version('metasci-scribe')}"
-        with_args = [cmd[i + 1] for i, v in enumerate(cmd) if v == "--with"]
-        assert with_args == ["six"]
-
-    def test_install_library_uv_tool_unknown_python_falls_back(
-        self, monkeypatch, tmp_path
-    ):
-        """When uv cannot tell which Python the environment runs on, the
-        environment is not rebuilt: uv pip install instead."""
-        import metasci_scribe.mcp.registry as reg
-
-        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
-        venv.mkdir(parents=True)
-        (venv / "uv-receipt.toml").write_text(
-            '[tool]\nrequirements = [{ name = "metasci-scribe", specifier = "==0.3.6" }]\n'
-        )
-        _use_tool_env(monkeypatch, venv)
-        monkeypatch.setattr(reg.uv_tool, "runs_on_managed_python", lambda uv: None)
-        captured: list[list[str]] = []
-        monkeypatch.setattr(
-            reg.subprocess,
-            "run",
-            lambda cmd, **kw: (
-                captured.append(list(cmd)) or type("R", (), {"returncode": 0})()
-            ),
-        )
-        assert reg.install_library("new-pkg") is True
-        assert [c[:3] for c in captured] == [["uv", "pip", "install"]]
-
-    def test_install_library_uv_tool_uses_uv_environment(self, monkeypatch, tmp_path):
-        """The reinstall resolves through the configured mirror and the
-        system certificates, as metasci-scribe update does."""
-        import metasci_scribe.mcp.registry as reg
-        from metasci_scribe.update_check import CN_SIMPLE
-
-        class CnConfig:
-            mirror = "cn"
-
-        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
-        venv.mkdir(parents=True)
-        (venv / "uv-receipt.toml").write_text(
-            '[tool]\nrequirements = [{ name = "metasci-scribe" }]\n'
-        )
-        _use_tool_env(monkeypatch, venv)
-        monkeypatch.setattr("metasci_scribe.config.load_config", lambda: CnConfig())
-        monkeypatch.delenv("UV_SYSTEM_CERTS", raising=False)
-        envs: list[dict] = []
-        monkeypatch.setattr(
-            reg.subprocess,
-            "run",
-            lambda cmd, **kw: (
-                envs.append(kw["env"]) or type("R", (), {"returncode": 0})()
-            ),
-        )
-        assert reg.install_library("new-pkg") is True
-        assert envs[0]["UV_DEFAULT_INDEX"] == CN_SIMPLE
-        assert envs[0]["UV_SYSTEM_CERTS"] == "1"
-
-    def test_install_library_windows_uses_recorded_uv(self, monkeypatch, tmp_path):
-        """A Windows script install has no uv on PATH and no pip in its
-        environment: uv pip install with the uv the scripts recorded."""
-        import metasci_scribe.mcp.registry as reg
-
-        (tmp_path / "uv-receipt.toml").write_text(
-            '[tool]\nrequirements = [{ name = "metasci-scribe" }]\n'
-        )
-        _use_tool_env(monkeypatch, tmp_path)
-        monkeypatch.setattr(reg.sys, "platform", "win32")
-        monkeypatch.setattr(reg.uv_tool, "find_uv", lambda: "C:/evo/tools/uv.exe")
-        monkeypatch.setattr(reg.shutil, "which", lambda x: None)
-        captured: list[list[str]] = []
-        monkeypatch.setattr(
-            reg.subprocess,
-            "run",
-            lambda cmd, **kw: (
-                captured.append(list(cmd)) or type("R", (), {"returncode": 0})()
-            ),
-        )
-        assert reg.install_library("new-pkg") is True
-        assert captured[0][:3] == ["C:/evo/tools/uv.exe", "pip", "install"]
-
-    def test_install_library_own_extra_on_editable_falls_back(
-        self, monkeypatch, tmp_path
-    ):
-        """An editable install cannot take extras through ``--editable``: no
-        reinstall, uv pip install instead."""
-        import metasci_scribe.mcp.registry as reg
-
-        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
-        venv.mkdir(parents=True)
-        src = tmp_path / "checkout"
-        (venv / "uv-receipt.toml").write_text(
-            "[tool]\nrequirements = [\n"
-            f'  {{ name = "metasci-scribe", editable = "{src.as_posix()}" }},\n'
-            "]\n"
-        )
-        _use_tool_env(monkeypatch, venv)
-        monkeypatch.setattr(
-            reg.shutil, "which", lambda x: "/usr/bin/uv" if x == "uv" else None
-        )
-        captured: list[list[str]] = []
-        monkeypatch.setattr(
-            reg.subprocess,
-            "run",
-            lambda cmd, **kw: (
-                captured.append(list(cmd)) or type("R", (), {"returncode": 0})()
-            ),
-        )
-        assert reg.install_library("metasci-scribe[telegram]") is True
-        assert [c[:3] for c in captured] == [["uv", "pip", "install"]]
-
-    def test_install_library_uv_tool_env_skipped_on_windows(
-        self, monkeypatch, tmp_path
-    ):
-        """On Windows the reinstall is not tried: uv pip install instead."""
-        import metasci_scribe.mcp.registry as reg
-
-        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
-        venv.mkdir(parents=True)
-        (venv / "uv-receipt.toml").write_text(
-            '[tool]\nrequirements = [\n  { name = "metasci-scribe" },\n]\n'
-        )
-        _use_tool_env(monkeypatch, venv)
-        monkeypatch.setattr(reg.sys, "platform", "win32")
-        captured: list[list[str]] = []
-        monkeypatch.setattr(
-            reg.shutil, "which", lambda x: "/usr/bin/uv" if x == "uv" else None
-        )
-        monkeypatch.setattr(
-            reg.subprocess,
-            "run",
-            lambda cmd, **kw: (
-                captured.append(list(cmd)) or type("R", (), {"returncode": 0})()
-            ),
-        )
-        assert reg.install_library("new-pkg") is True
-        assert [c[:3] for c in captured] == [["uv", "pip", "install"]]
-
-    def test_install_library_uv_tool_unreadable_receipt_falls_back(
-        self, monkeypatch, tmp_path
-    ):
-        import metasci_scribe.mcp.registry as reg
-
-        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
-        venv.mkdir(parents=True)
-        (venv / "uv-receipt.toml").write_text("not [ toml")
-        _use_tool_env(monkeypatch, venv)
-        captured: list[list[str]] = []
-        monkeypatch.setattr(
-            reg.shutil, "which", lambda x: "/usr/bin/uv" if x == "uv" else None
-        )
-        monkeypatch.setattr(
-            reg.subprocess,
-            "run",
-            lambda cmd, **kw: (
-                captured.append(list(cmd)) or type("R", (), {"returncode": 0})()
-            ),
-        )
-        assert reg.install_library("new-pkg") is True
-        assert [c[:3] for c in captured] == [["uv", "pip", "install"]]
-
-    def test_install_library_uv_tool_env_no_duplicate_with(self, monkeypatch, tmp_path):
-        """If the package is already in the receipt, don't add it twice."""
-        import metasci_scribe.mcp.registry as reg
-
-        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
-        venv.mkdir(parents=True)
-        receipt = venv / "uv-receipt.toml"
-        receipt.write_text(
-            "[tool]\nrequirements = [\n"
-            '  { name = "metasci-scribe" },\n'
-            '  { name = "arxiv-mcp-server" },\n'
-            "]\n"
-        )
-        _use_tool_env(monkeypatch, venv)
-
-        captured: list[list[str]] = []
-
-        def fake_run(cmd, **kwargs):
-            captured.append(list(cmd))
-            return type("R", (), {"returncode": 0})()
-
-        monkeypatch.setattr(
-            reg.shutil, "which", lambda x: "/usr/bin/uv" if x == "uv" else None
-        )
-        monkeypatch.setattr(reg.subprocess, "run", fake_run)
-        reg.install_library("arxiv-mcp-server")
-        cmd = captured[0]
-        with_args = [cmd[i + 1] for i, v in enumerate(cmd) if v == "--with"]
-        assert with_args.count("arxiv-mcp-server") == 1
-
-    def test_install_library_uv_tool_preserves_specifiers(self, monkeypatch, tmp_path):
-        """Existing --with specs with extras/versions must be preserved."""
-        import metasci_scribe.mcp.registry as reg
-
-        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
-        venv.mkdir(parents=True)
-        receipt = venv / "uv-receipt.toml"
-        receipt.write_text(
-            "[tool]\nrequirements = [\n"
-            '  { name = "metasci-scribe" },\n'
-            '  { name = "rich", specifier = ">=13.0" },\n'
-            '  { name = "requests", extras = ["socks"] },\n'
-            "]\n"
-        )
-        _use_tool_env(monkeypatch, venv)
-
-        captured: list[list[str]] = []
-
-        def fake_run(cmd, **kwargs):
-            captured.append(list(cmd))
-            return type("R", (), {"returncode": 0})()
-
-        monkeypatch.setattr(
-            reg.shutil, "which", lambda x: "/usr/bin/uv" if x == "uv" else None
-        )
-        monkeypatch.setattr(reg.subprocess, "run", fake_run)
-        reg.install_library("new-pkg")
-        cmd = captured[0]
-        with_args = [cmd[i + 1] for i, v in enumerate(cmd) if v == "--with"]
-        assert "rich>=13.0" in with_args
-        assert "requests[socks]" in with_args
-        assert "new-pkg" in with_args
-
-    def test_install_library_uv_tool_dedup_with_version_spec(
-        self, monkeypatch, tmp_path
-    ):
-        """Dedup must match bare name even if package arg has version spec."""
-        import metasci_scribe.mcp.registry as reg
-
-        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
-        venv.mkdir(parents=True)
-        receipt = venv / "uv-receipt.toml"
-        receipt.write_text(
-            "[tool]\nrequirements = [\n"
-            '  { name = "metasci-scribe" },\n'
-            '  { name = "rich", specifier = ">=13.0" },\n'
-            "]\n"
-        )
-        _use_tool_env(monkeypatch, venv)
-
-        captured: list[list[str]] = []
-
-        def fake_run(cmd, **kwargs):
-            captured.append(list(cmd))
-            return type("R", (), {"returncode": 0})()
-
-        monkeypatch.setattr(
-            reg.shutil, "which", lambda x: "/usr/bin/uv" if x == "uv" else None
-        )
-        monkeypatch.setattr(reg.subprocess, "run", fake_run)
-        # package arg has version constraint — should still dedup against "rich"
-        reg.install_library("rich>=14.0")
-        cmd = captured[0]
-        with_args = [cmd[i + 1] for i, v in enumerate(cmd) if v == "--with"]
-        # Should keep the existing spec, not add a duplicate
-        assert with_args.count("rich>=13.0") == 1
-        assert "rich>=14.0" not in with_args
-
-    def test_install_library_uv_tool_falls_back_on_failure(self, monkeypatch, tmp_path):
-        """install_library: if ``uv tool install --with`` fails, fall back
-        to ``uv pip install`` — standalone uv tool install is NEVER tried."""
-        import metasci_scribe.mcp.registry as reg
-
-        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
-        venv.mkdir(parents=True)
-        receipt = venv / "uv-receipt.toml"
-        receipt.write_text(
-            '[tool]\nrequirements = [\n  { name = "metasci-scribe" },\n]\n'
-        )
-        _use_tool_env(monkeypatch, venv)
-
-        commands: list[list[str]] = []
-
-        def fake_run(cmd, **kwargs):
-            commands.append(cmd)
-            if cmd[:3] == ["uv", "tool", "install"]:
-                return type("R", (), {"returncode": 1, "stderr": "error"})()
-            return type("R", (), {"returncode": 0})()
-
-        monkeypatch.setattr(
-            reg.shutil, "which", lambda x: "/usr/bin/uv" if x == "uv" else None
-        )
-        monkeypatch.setattr(reg.subprocess, "run", fake_run)
-        result = reg.install_library("some-package")
-        assert result is True
-        # Order: uv tool install --with (fail), uv pip install (ok).
-        assert len(commands) == 2
-        assert commands[0][:3] == ["uv", "tool", "install"]
-        assert "--with" in commands[0]
-        assert commands[1][:3] == ["uv", "pip", "install"]
-
-    def test_install_cli_tool_uv_tool_env_tries_standalone_on_failure(
-        self, monkeypatch, tmp_path
-    ):
-        """install_cli_tool: uv-tool env, --with fails → standalone uv tool
-        install is tried, then pip fallback."""
-        import metasci_scribe.mcp.registry as reg
-
-        venv = tmp_path / "uv" / "tools" / "metasci-scribe"
-        venv.mkdir(parents=True)
-        receipt = venv / "uv-receipt.toml"
-        receipt.write_text(
-            '[tool]\nrequirements = [\n  { name = "metasci-scribe" },\n]\n'
-        )
-        _use_tool_env(monkeypatch, venv)
-
-        commands: list[list[str]] = []
-
-        def fake_run(cmd, **kwargs):
-            commands.append(cmd)
-            if cmd[:3] == ["uv", "tool", "install"]:
-                return type("R", (), {"returncode": 1, "stderr": "error"})()
-            return type("R", (), {"returncode": 0})()
-
-        monkeypatch.setattr(
-            reg.shutil, "which", lambda x: "/usr/bin/uv" if x == "uv" else None
-        )
-        monkeypatch.setattr(reg.subprocess, "run", fake_run)
-        result = reg.install_cli_tool("some-cli", verify_command="some-cli")
-        assert result is True
-        assert len(commands) == 3
-        assert commands[0][:3] == ["uv", "tool", "install"]
-        assert "--with" in commands[0]
-        assert commands[1][:3] == ["uv", "tool", "install"]
-        assert "--with" not in commands[1]
-        assert commands[2][:3] == ["uv", "pip", "install"]
-
-    def test_install_library_goes_straight_to_pip_outside_uv_tool(self, monkeypatch):
-        """install_library outside a uv-tool env must skip ``uv tool install
+    def test_install_library_goes_straight_to_pip(self, monkeypatch):
+        """install_library must skip ``uv tool install
         <pkg>`` entirely — standalone uv tools aren't importable."""
 
         import metasci_scribe.mcp.registry as reg
@@ -2006,7 +1460,6 @@ class TestUvToolCompat:
             captured.append(cmd)
             return type("R", (), {"returncode": 0})()
 
-        monkeypatch.setattr(reg.uv_tool, "tool_env", lambda: None)
         monkeypatch.setattr(
             reg.shutil, "which", lambda x: "/usr/bin/uv" if x == "uv" else None
         )
@@ -2020,7 +1473,7 @@ class TestUvToolCompat:
     def test_install_cli_tool_prefers_standalone_uv_tool_install(
         self, monkeypatch, tmp_path
     ):
-        """install_cli_tool outside a uv-tool env: standalone ``uv tool
+        """install_cli_tool: standalone ``uv tool
         install <pkg>`` is preferred so the binary survives uv sync."""
         import metasci_scribe.mcp.registry as reg
 
@@ -2034,7 +1487,6 @@ class TestUvToolCompat:
         fake_bin.write_text("#!/bin/sh\n")
         fake_bin.chmod(0o755)
 
-        monkeypatch.setattr(reg.uv_tool, "tool_env", lambda: None)
         monkeypatch.setattr(
             reg.shutil, "which", lambda x: "/usr/bin/uv" if x == "uv" else None
         )
@@ -2061,7 +1513,6 @@ class TestUvToolCompat:
             captured.append(cmd)
             return type("R", (), {"returncode": 0})()
 
-        monkeypatch.setattr(reg.uv_tool, "tool_env", lambda: None)
         monkeypatch.setattr(
             reg.shutil, "which", lambda x: "/usr/bin/uv" if x == "uv" else None
         )
@@ -2099,7 +1550,6 @@ class TestUvToolCompat:
                 return "/venv/bin/arxiv-mcp-server"  # stale, should NOT be trusted
             return None
 
-        monkeypatch.setattr(reg.uv_tool, "tool_env", lambda: None)
         monkeypatch.setattr(reg.shutil, "which", fake_which)
         monkeypatch.setattr(reg.subprocess, "run", fake_run)
         monkeypatch.setattr(
@@ -2125,7 +1575,6 @@ class TestUvToolCompat:
             ns = type("R", (), {"returncode": 0})()
             return ns
 
-        monkeypatch.setattr(reg.uv_tool, "tool_env", lambda: None)
         monkeypatch.setattr(reg.shutil, "which", lambda x: None)
         monkeypatch.setattr(reg.subprocess, "run", fake_run)
         reg.install_library("some-package")

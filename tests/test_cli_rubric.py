@@ -382,26 +382,19 @@ def test_rubric_is_refused_on_the_server_gateway(monkeypatch):
     assert "local gateway" in _plain(result.output)
 
 
-def test_runtime_fallback_keeps_the_rubric(monkeypatch):
-    """When the first renderer fails, the retry must still be a graded run."""
-    from metasci_scribe.cli import tui_runtime
-
-    class _FailingBackend:
-        def run_streaming(self, **_kwargs):
-            raise RuntimeError("renderer broke")
+def test_run_streaming_hands_the_rubric_to_the_renderer(monkeypatch):
+    """The rubric rides through the streaming runtime to the graded loop."""
+    from metasci_scribe.cli import stream_runtime
 
     seen: dict[str, object] = {}
 
-    class _FallbackBackend:
-        def run_streaming(self, **kwargs):
-            seen.update(kwargs)
-            return "ok"
+    def _loop(**kwargs):
+        seen.update(kwargs)
+        return "ok"
 
-    monkeypatch.setattr(tui_runtime, "get_backend", lambda *_a, **_k: _FailingBackend())
-    monkeypatch.setattr(tui_runtime, "RichStreamingBackend", _FallbackBackend)
+    monkeypatch.setattr(stream_runtime, "_run_streaming", _loop)
 
-    result = tui_runtime.run_streaming(
-        ui_backend="tui",
+    result = stream_runtime.run_streaming(
         agent=object(),
         message="go",
         thread_id="t",

@@ -5,8 +5,6 @@ that hosts the Metasci Scribe main agent, async sub-agents (e.g.
 ``writing-agent``), and EvoMemory background workers. The CLI calls
 ``ensure_langgraph_dev(config, ...)`` at startup so users can run
 ``metasci-scribe -p "..."`` without manually managing the langgraph dev server.
-
-Mirrors the lifecycle pattern used by ``ccproxy_manager.py``.
 """
 
 from __future__ import annotations
@@ -25,7 +23,6 @@ import time
 from dataclasses import dataclass
 from dataclasses import fields as dataclass_fields
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import httpx
 import psutil
@@ -45,9 +42,6 @@ from metasci_scribe.config.settings import (
     env_origins,
 )
 from metasci_scribe.langgraph_dev import boundary
-
-if TYPE_CHECKING:
-    from metasci_scribe.deploy.backend_job import BackendJob
 
 logger = logging.getLogger(__name__)
 
@@ -250,8 +244,8 @@ def _rotate_log_if_needed(log_path: Path) -> None:
 
 
 # Workspace fingerprint sidecar — JSON recording the workspace + pid of the
-# running langgraph dev. Cross-process callers (e.g. TUI starting up while
-# ``metasci-scribe deploy`` is already running) read this on the reuse path to refuse
+# running langgraph dev. Cross-process callers (e.g. a second ``metasci-scribe``
+# starting up while another session's server is already running) read this on the reuse path to refuse
 # silently operating on a different workspace's files. Missing/corrupt sidecar
 # degrades gracefully to a log warning for backward compatibility with
 # langgraph devs started before this protocol existed.
@@ -709,8 +703,6 @@ _FINGERPRINT_EXCLUDED_FIELDS = frozenset(
         "log_level",
         "default_mode",
         "default_workdir",
-        "webui_port",
-        "webui_host",
         "langgraph_dev_keepalive",
         "shell_allow_list",
         "mirror",
@@ -736,7 +728,7 @@ def _server_config_fingerprint(config: ScribeConfig) -> str:
     Metasci Scribe version is part of it, so a server left running across an
     upgrade counts as drift as well. Secrets
     only feed a truncated one-way digest; nothing recoverable is stored.
-    getattr with defaults: deploy/WebUI (and their tests) routinely hand
+    getattr with defaults: callers (and their tests) routinely hand
     this module duck-typed config objects missing dataclass fields.
     :data:`_FINGERPRINT_FILE_FIELDS` come from ``config.yaml``, not from
     ``config``, so every caller hashes what the server reads.
@@ -942,7 +934,6 @@ def start_langgraph_dev(
     tunnel: bool = False,
     config_fingerprint: str | None = None,
     allowed_origins: str = "",
-    job: BackendJob | None = None,
 ) -> subprocess.Popen:
     """Start langgraph dev as a background subprocess.
 
@@ -969,8 +960,6 @@ def start_langgraph_dev(
             ``*.trycloudflare.com`` URL is written to the log; read it back
             with :func:`read_tunnel_url`. SECURITY: the tunnel has no auth and
             the deployed agent can run shell — only enable for trusted use.
-        job: A Windows job object the server joins before it runs (started
-            suspended, then resumed), so it ends with the caller's process.
 
     Returns:
         The Popen handle for the langgraph dev process.
@@ -1118,8 +1107,8 @@ def start_langgraph_dev(
 
     # Propagate the effective bind port into the subprocess's config resolution
     # via the standard ``METASCI_SCRIBE_LANGGRAPH_DEV_PORT`` override (see
-    # ``metasci_scribe/config/settings.py``). Without this, ``metasci-scribe deploy
-    # --port X`` binds to X but the deployed main agent still reads
+    # ``metasci_scribe/config/settings.py``). Without this, a server bound to a
+    # port other than the configured one still has its main agent read
     # ``cfg.langgraph_dev_port`` from disk and dispatches self-loop async
     # tasks (start_async_task → http://localhost:{cfg.port}) to whatever
     # the config file says — which desyncs from the bind port whenever
@@ -1131,7 +1120,7 @@ def start_langgraph_dev(
     sub_env["METASCI_SCRIBE_LANGGRAPH_DEV_PORT"] = str(port)
     # Same reasoning for the bind interface: the deployed agent resolves its
     # self-dispatch URL from ``cfg.langgraph_dev_host``, so a host resolved by
-    # this caller (``metasci-scribe deploy --host X``) must reach the subprocess too,
+    # this caller (``metasci-scribe --host X``) must reach the subprocess too,
     # or async sub-agent launches would target whatever the config file says.
     sub_env["METASCI_SCRIBE_LANGGRAPH_DEV_HOST"] = host
     # The browser boundary: which pages and host names the server accepts
@@ -1160,10 +1149,6 @@ def start_langgraph_dev(
         }
     else:
         _spawn_kwargs = {"start_new_session": True}
-    if job is not None:
-        _spawn_kwargs["creationflags"] = (
-            _spawn_kwargs.get("creationflags", 0) | job.creationflags
-        )
 
     try:
         logger.info("Starting langgraph dev with CLI: %s", exe)
@@ -1202,8 +1187,6 @@ def start_langgraph_dev(
     _PROCESS = proc
     _PROCESS_WORKSPACE = workspace_dir
     _PROCESS_RUN_DIR = run_dir
-    if job is not None:
-        job.started(proc)
     RUNTIME.pid_file.write_text(str(proc.pid), encoding="utf-8")
     from metasci_scribe.agent_shell import sidecar_bash
     from metasci_scribe.setup.research_env import agent_python
@@ -1402,8 +1385,7 @@ def _mismatch_message(
             "session first."
         )
     return running + (
-        "Stop the other metasci-scribe session (deploy / TUI) "
-        f"or rerun with --workdir {recorded[0]}."
+        f"Stop the other metasci-scribe session or rerun with --workdir {recorded[0]}."
     )
 
 
@@ -1552,7 +1534,7 @@ def _ensure_langgraph_dev_locked(
     if is_langgraph_dev_running(port=port, host=host):
         # If WE own the running process AND it's still alive, workspace was
         # already verified above via _PROCESS_WORKSPACE comparison. Otherwise
-        # — we never owned it (metasci-scribe deploy in another terminal, or a
+        # — we never owned it (another terminal's metasci-scribe, or a
         # langgraph dev the user spawned manually) OR our handle is stale (our
         # subprocess died and a different one rebound the port) — check the
         # workspace sidecar, the only cross-process source of truth for the

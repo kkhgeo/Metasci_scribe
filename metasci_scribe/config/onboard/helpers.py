@@ -1,4 +1,4 @@
-"""Cross-step helpers: API key prompt loop, ccproxy login, npx/node bootstrapping,
+"""Cross-step helpers: API key prompt loop, ChatGPT login, npx/node bootstrapping,
 LaTeX detection/install.
 """
 
@@ -96,66 +96,6 @@ def _prompt_and_validate_api_key(
     return new_key or None
 
 
-def _prompt_ccproxy_port(config: ScribeConfig) -> None:
-    """Prompt the user for a ccproxy port and save it to config."""
-
-    def valid_port(value: str) -> bool:
-        if not value:  # empty = keep default
-            return True
-        try:
-            return 0 < int(value) < 2**16
-        except (ValueError, TypeError):
-            return False
-
-    current_port = getattr(config, "ccproxy_port", 8000)
-    try:
-        raw = questionary.text(
-            f"Enter port number for ccproxy to run on (Current: {current_port}, Enter to keep):",
-            validate=valid_port,
-            style=WIZARD_STYLE,
-            qmark=QMARK,
-        ).ask()
-        if raw is None:
-            raise KeyboardInterrupt()
-        raw = raw.strip()
-        ccproxy_port = int(raw) if raw else current_port
-    except (ValueError, TypeError):
-        ccproxy_port = current_port
-        console.print(f"  [dim]Using default port: {ccproxy_port}[/dim]")
-
-    config.ccproxy_port = ccproxy_port
-    console.print(
-        f"  [green]✓ ccproxy will run on http://127.0.0.1:{ccproxy_port}[/green]"
-    )
-
-
-def _run_ccproxy_login(provider: str, label: str) -> None:
-    """Run ccproxy auth login for the given provider and show status."""
-    from ...ccproxy_manager import _ccproxy_exe, check_ccproxy_auth
-
-    console.print("  [dim]Opening browser for authentication...[/dim]")
-    try:
-        proc = subprocess.run(
-            [_ccproxy_exe() or "ccproxy", "auth", "login", provider],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        for line in proc.stdout.splitlines():
-            if line.strip().startswith("https://"):
-                console.print(f"  [dim]Visit: {line.strip()}[/dim]")
-                break
-        authed, msg = check_ccproxy_auth(provider)
-        if authed:
-            console.print(f"  [green]✓ {label}: {msg}[/green]")
-        else:
-            console.print(f"  [red]Authentication failed: {msg}[/red]")
-    except subprocess.TimeoutExpired:
-        console.print("  [red]Login timed out.[/red]")
-    except Exception as exc:
-        console.print(f"  [red]Login error: {exc}[/red]")
-
-
 def _chatgpt_status_text(state) -> str:
     """One-line sign-in status, with the plan when the token names it."""
     return f"ChatGPT: signed in ({state.plan})" if state.plan else "ChatGPT: signed in"
@@ -163,10 +103,16 @@ def _chatgpt_status_text(state) -> str:
 
 def _open_browser_here() -> bool:
     """Whether a browser on this machine would be in front of the user."""
-    from ...deploy.launcher import no_display
-
+    # Linux/BSD without a display and without BROWSER naming one: webbrowser
+    # would fall back to a console browser.
+    no_display = (
+        sys.platform not in ("darwin", "win32")
+        and not os.environ.get("BROWSER")
+        and not os.environ.get("DISPLAY")
+        and not os.environ.get("WAYLAND_DISPLAY")
+    )
     return not (
-        no_display() or os.environ.get("SSH_CONNECTION") or os.environ.get("SSH_TTY")
+        no_display or os.environ.get("SSH_CONNECTION") or os.environ.get("SSH_TTY")
     )
 
 
@@ -427,21 +373,3 @@ def _auto_install_latexmk() -> None:
             "  [yellow]⚠ Failed to install latexmk"
             " (run: tlmgr install latexmk)[/yellow]"
         )
-
-
-def _install_ccproxy() -> bool:
-    """Run pip install for ccproxy (metasci-scribe[oauth]).
-
-    Uses uv pip install when available (uv-managed envs don't ship pip).
-
-    Returns:
-        True if installation succeeded and ccproxy is available.
-    """
-    from ...ccproxy_manager import is_ccproxy_available
-    from ...mcp.registry import install_library
-
-    ok = install_library("metasci-scribe[oauth]")
-    if not ok:
-        console.print("  [red]✗ Installation failed.[/red]")
-        return False
-    return is_ccproxy_available()

@@ -11,7 +11,7 @@ from metasci_scribe.llm.chatgpt_oauth import SIGN_IN_AGAIN, SIGN_IN_HINT, ChatGP
 
 
 def _config(mode="oauth"):
-    return SimpleNamespace(openai_auth_mode=mode, anthropic_auth_mode="api_key")
+    return SimpleNamespace(openai_auth_mode=mode)
 
 
 def _printed(mock_console) -> str:
@@ -188,40 +188,36 @@ def test_single_shot_start_runs_the_check_without_a_prompt(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("stored", "flag", "modes"),
+    ("stored", "flag", "mode"),
     [
-        ({"provider": "anthropic"}, "oauth", ("oauth", "api_key")),
-        ({"provider": "openai"}, "oauth", ("api_key", "oauth")),
-        ({"provider": "openrouter"}, "oauth", ("api_key", "api_key")),
-        (
-            {"provider": "anthropic", "auxiliary_provider": "openai"},
-            "oauth",
-            ("oauth", "oauth"),
-        ),
+        ({"provider": "anthropic"}, "oauth", "api_key"),
+        ({"provider": "openai"}, "oauth", "oauth"),
+        ({"provider": "openrouter"}, "oauth", "api_key"),
+        ({"provider": "anthropic", "auxiliary_provider": "openai"}, "oauth", "oauth"),
         (
             {"provider": "openai", "model_fallbacks": "claude-x:anthropic"},
             "oauth",
-            ("oauth", "oauth"),
+            "oauth",
         ),
         (
             {"provider": "anthropic", "model_fallbacks": " gpt-6-sol : openai ,"},
             "oauth",
-            ("oauth", "oauth"),
+            "oauth",
         ),
         (
             {"provider": "anthropic", "model_fallbacks": "gpt-6-sol:openrouter"},
             "oauth",
-            ("oauth", "api_key"),
+            "api_key",
         ),
         (
             {"provider": "anthropic", "openai_auth_mode": "oauth"},
             "api_key",
-            ("api_key", "api_key"),
+            "api_key",
         ),
     ],
 )
-def test_auth_mode_flag_applies_oauth_only_to_providers_in_use(
-    monkeypatch, stored, flag, modes
+def test_auth_mode_flag_applies_sign_in_only_when_openai_is_in_use(
+    monkeypatch, stored, flag, mode
 ):
     import dataclasses
 
@@ -236,7 +232,7 @@ def test_auth_mode_flag_applies_oauth_only_to_providers_in_use(
     seen = []
 
     def _check(config, *, interactive):
-        seen.append((config.anthropic_auth_mode, config.openai_auth_mode))
+        seen.append(config.openai_auth_mode)
         raise _Checked
 
     monkeypatch.setattr(
@@ -252,4 +248,4 @@ def test_auth_mode_flag_applies_oauth_only_to_providers_in_use(
     finally:
         console.file = console_file
 
-    assert seen == [modes]
+    assert seen == [mode]

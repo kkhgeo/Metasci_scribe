@@ -24,13 +24,10 @@ from .helpers import (
     _check_latex_components,
     _detect_tinytex_install_method,
     _ensure_npx,
-    _install_ccproxy,
     _install_tinytex,
     _print_latex_status,
     _prompt_and_validate_api_key,
-    _prompt_ccproxy_port,
     _provider_key_info,
-    _run_ccproxy_login,
     _run_chatgpt_login,
 )
 from .style import (
@@ -43,42 +40,6 @@ from .style import (
     console,
 )
 from .validators import validate_tavily_key
-
-
-def _step_ui_backend(config: ScribeConfig) -> str:
-    """Step 0: Select UI backend (desktop WebUI, Textual TUI, or Rich CLI).
-
-    Args:
-        config: Current configuration.
-
-    Returns:
-        Selected backend name ("tui", "cli", or "webui").
-    """
-    choices = [
-        Choice(title="WebUI (desktop interface, modern)", value="webui"),
-        Choice(title="TUI (full-screen interface, recommended)", value="tui"),
-        Choice(title="CLI (classic terminal, lightweight)", value="cli"),
-    ]
-
-    # Map legacy values to current ones
-    _legacy_map = {"textual": "tui", "rich": "cli"}
-    default_backend = _legacy_map.get(config.ui_backend, config.ui_backend)
-    if default_backend not in ("tui", "cli", "webui"):
-        default_backend = "tui"
-
-    backend = questionary.select(
-        "Select UI mode:",
-        choices=choices,
-        default=default_backend,
-        style=WIZARD_STYLE,
-        qmark=QMARK,
-        use_indicator=True,
-    ).ask()
-
-    if backend is None:
-        raise KeyboardInterrupt()
-
-    return backend
 
 
 def _step_langgraph_dev_port(config: ScribeConfig) -> int:
@@ -106,7 +67,7 @@ def _step_langgraph_dev_port(config: ScribeConfig) -> int:
 
     # Bake the live status into the prompt label so the user sees it WITH
     # the question, not as a side-effect line that prints before input.
-    # Single set of parens, no nesting (mirrors ccproxy's prompt style).
+    # Single set of parens, no nesting.
     if current_occupied:
         prompt_label = (
             f"Enter port for Metasci Scribe server "
@@ -171,80 +132,6 @@ def _step_langgraph_dev_port(config: ScribeConfig) -> int:
     return port
 
 
-def _step_webui_port(config: ScribeConfig) -> int:
-    """Step 0.6: Choose the local TCP port for the WebUI front-end.
-
-    Only asked when ``ui_backend == "webui"``. This is the Next.js server port
-    the browser opens (``@evoscientist/webui``); the backend keeps its own
-    ``langgraph_dev_port``. Mirrors the langgraph-dev port prompt's UX.
-
-    Returns the chosen port; caller assigns it to ``config.webui_port``.
-    """
-    from ...langgraph_dev.manager import _is_port_occupied
-
-    current_port = getattr(config, "webui_port", 4716)
-    backend_port = getattr(config, "langgraph_dev_port", 6174)
-    occupied = _is_port_occupied(current_port)
-    conflicts_backend = current_port == backend_port
-
-    # Bake live availability into the label (same single-paren style as the
-    # langgraph-dev / ccproxy prompts) so the status shows WITH the question.
-    # The WebUI port must also differ from the backend (langgraph dev) port —
-    # run_webui refuses equal ports at startup, so reject them here too instead
-    # of saving a config that fails to launch later.
-    if occupied or conflicts_backend:
-        reason = "occupied" if occupied else f"= backend port {backend_port}"
-        prompt_label = (
-            f"Enter port for WebUI server "
-            f"(Current: {current_port}, {reason}, pick another):"
-        )
-    else:
-        prompt_label = (
-            f"Enter port for WebUI server "
-            f"(Current: {current_port}, available, Enter to keep):"
-        )
-
-    def valid_port(value: str) -> bool:
-        if not value:
-            # Keep the default only if it's free AND not the backend port.
-            return not occupied and not conflicts_backend
-        try:
-            port = int(value)
-        except (ValueError, TypeError):
-            return False
-        if not (1024 < port < 65536):
-            return False
-        if port == backend_port:
-            return False
-        return not _is_port_occupied(port)
-
-    raw = questionary.text(
-        prompt_label,
-        validate=valid_port,
-        style=WIZARD_STYLE,
-        qmark=QMARK,
-    ).ask()
-
-    if raw is None:
-        raise KeyboardInterrupt()
-
-    port = int(raw) if raw else current_port
-    # Same reasoning as the langgraph-dev step: render the configured bind, not
-    # a hard-coded localhost. A wildcard bind still shows loopback here — that
-    # is the address this machine's own browser opens.
-    from ...langgraph_dev.manager import _format_hostport
-
-    host = getattr(config, "webui_host", "")
-    console.print(
-        f"  [green]✓ WebUI will open at http://{_format_hostport(host, port)}[/green]"
-    )
-    console.print(
-        "  [yellow]⚠️  Note: the WebUI won't show your CLI/TUI chat history "
-        "yet.[/yellow]"
-    )
-    return port
-
-
 def _step_provider(
     config: ScribeConfig,
     *,
@@ -265,8 +152,8 @@ def _step_provider(
     """
     choices = [
         # Direct providers
-        Choice(title="Anthropic (Claude models — API / OAuth)", value="anthropic"),
-        Choice(title="OpenAI (GPT models — API / OAuth)", value="openai"),
+        Choice(title="Anthropic (Claude models — API key)", value="anthropic"),
+        Choice(title="OpenAI (GPT models — API key / ChatGPT sign-in)", value="openai"),
         Choice(title="Google GenAI (Gemini models)", value="google-genai"),
         Choice(
             title="MiniMax (M3.1 Flash, M3 — 1M context, thinking)",
@@ -455,158 +342,8 @@ def _step_xiaomi_token_plan_region(config: ScribeConfig) -> str:
     return _XIAOMI_TOKEN_PLAN_REGIONS[region]
 
 
-def _step_oauth_auth_mode(
-    config: ScribeConfig,
-    *,
-    provider_label: str,
-    ccproxy_provider: str,
-    config_attr: str,
-    prompt_login_label: str,
-    oauth_choice_label: str | None = None,
-    status_label: str | None = None,
-    question_label: str | None = None,
-) -> str:
-    """Select API-key vs ccproxy OAuth authentication (Anthropic).
-
-    Args:
-        config: Current configuration.
-        provider_label: Provider display name for direct API-key access.
-        ccproxy_provider: ccproxy auth provider name.
-        config_attr: Config attribute storing this provider's auth mode.
-        prompt_login_label: Label used in "Log in to ..." prompts.
-        oauth_choice_label: Optional display label for the OAuth choice.
-        status_label: Optional display label for status messages.
-        question_label: Optional prompt label override.
-
-    Returns:
-        Selected auth mode: "api_key" or "oauth".
-    """
-    from ...ccproxy_manager import check_ccproxy_auth, is_ccproxy_available
-
-    ccproxy_available = is_ccproxy_available()
-
-    from .prompter import BACK_SENTINEL, GoBack, install_navigation_keys
-
-    oauth_label = oauth_choice_label or f"{prompt_login_label} OAuth"
-    auth_status_label = status_label or oauth_label
-    auth_question_label = question_label or f"{provider_label} authentication mode"
-
-    choices = [
-        Choice(title=f"API Key (direct {provider_label} access)", value="api_key"),
-        Choice(
-            title=f"{oauth_label} (via ccproxy — no API key needed)"
-            + (
-                ""
-                if ccproxy_available
-                else " [requires: pip install metasci-scribe[oauth]]"
-            ),
-            value="oauth",
-        ),
-        questionary.Separator(),
-        Choice(title="← Back (re-pick provider)", value=BACK_SENTINEL),
-    ]
-
-    current = getattr(config, config_attr)
-    if current not in ("api_key", "oauth"):
-        current = "api_key"
-
-    question = questionary.select(
-        f"{auth_question_label}  [Esc/← to go back]:",
-        choices=choices,
-        default=current,
-        style=WIZARD_STYLE,
-        qmark=QMARK,
-        use_indicator=True,
-    )
-    install_navigation_keys(question, with_back=True)
-    auth_mode = question.ask()
-
-    if auth_mode is None:
-        raise KeyboardInterrupt()
-    if auth_mode == BACK_SENTINEL:
-        raise GoBack()
-
-    if auth_mode == "oauth" and not ccproxy_available:
-        console.print("  [yellow]✗ ccproxy not installed[/yellow]")
-        console.print()
-        install = questionary.confirm(
-            'Install ccproxy now? (pip install "metasci-scribe[oauth]")',
-            default=True,
-            style=WIZARD_STYLE,
-            qmark=f"  {QMARK}",
-        ).ask()
-        if install is None:
-            raise KeyboardInterrupt()
-        if install:
-            console.print()
-            if _install_ccproxy():
-                console.print("  [green]✓ ccproxy installed successfully.[/green]")
-            else:
-                console.print("  [yellow]Falling back to API key mode.[/yellow]")
-                return "api_key"
-        else:
-            console.print(
-                '  [dim]Skipped. Install manually: pip install "metasci-scribe[oauth]"[/dim]'
-            )
-            return "api_key"
-
-    if auth_mode == "oauth":
-        _prompt_ccproxy_port(config)
-
-        authed, msg = check_ccproxy_auth(ccproxy_provider)
-        if authed:
-            console.print(f"  [green]✓ {auth_status_label}: {msg}[/green]")
-            relogin = questionary.confirm(
-                "Re-authenticate to refresh credentials?",
-                default=False,
-                style=CONFIRM_STYLE,
-                qmark=QMARK,
-            ).ask()
-            if relogin is None:
-                raise KeyboardInterrupt()
-            if relogin:
-                _run_ccproxy_login(ccproxy_provider, auth_status_label)
-        else:
-            console.print(
-                f"  [yellow]{auth_status_label} not authenticated: {msg}[/yellow]"
-            )
-            login = questionary.confirm(
-                f"Log in to {prompt_login_label} now?",
-                default=True,
-                style=CONFIRM_STYLE,
-                qmark=QMARK,
-            ).ask()
-            if login is None:
-                raise KeyboardInterrupt()
-            if login:
-                _run_ccproxy_login(ccproxy_provider, auth_status_label)
-
-    return auth_mode
-
-
-def _step_anthropic_auth_mode(config: ScribeConfig) -> str:
-    """Step 2a: Select Anthropic authentication mode (API key vs OAuth).
-
-    Args:
-        config: Current configuration.
-
-    Returns:
-        Selected auth mode: "api_key" or "oauth".
-    """
-    return _step_oauth_auth_mode(
-        config,
-        provider_label="Anthropic",
-        ccproxy_provider="claude_api",
-        config_attr="anthropic_auth_mode",
-        prompt_login_label="Claude",
-        oauth_choice_label="Claude Code OAuth",
-        status_label="OAuth",
-        question_label="Authentication mode",
-    )
-
-
 def _step_openai_auth_mode(config: ScribeConfig) -> str:
-    """Step 2b: Select OpenAI authentication mode (API key vs ChatGPT sign-in).
+    """Step 2: Select OpenAI authentication mode (API key vs ChatGPT sign-in).
 
     Args:
         config: Current configuration.

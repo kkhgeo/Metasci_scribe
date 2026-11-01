@@ -83,9 +83,6 @@ class SessionRuntime:
     thread_id: str | None = None
     active_teams: list[str] = field(default_factory=list)
     rubric: RubricSession = field(default_factory=RubricSession)
-    # Proactive-push controller (``proactive.serve.ProactiveServe``). Nothing
-    # sets it now that ``serve`` is gone; removed with the proactive feature.
-    proactive: Any = None
 
     def bind(self, agent: Any, thread_id: str) -> None:
         self.agent = agent

@@ -49,7 +49,7 @@ from .protocol import (
 logger = logging.getLogger(__name__)
 
 NODE_VERSION = "24.21.0"
-# (major, minor): the WebUI's Next.js declares ``engines.node >=20.9.0``.
+# (major, minor): the oldest system Node an `npx` MCP server may run on.
 MIN_SYSTEM_NODE = (20, 9)
 
 SOURCES = {
@@ -83,8 +83,8 @@ ProgressFn = Callable[[float, str], None]
 def log_progress(log: logging.Logger) -> ProgressFn:
     """A progress callback for on-demand installs that have no emitter.
 
-    Logs at WARNING, the level the CLI shows by default, so a first WebUI start
-    or MCP load does not look frozen during the download. Thinned by
+    Logs at WARNING, the level the CLI shows by default, so a first MCP load
+    does not look frozen during the download. Thinned by
     :class:`ProgressThrottle`.
     """
     throttle = ProgressThrottle()
@@ -397,7 +397,7 @@ def ensure_node(
 
     global _failed_install
     if _failed_install is not None:
-        # One process can ask several times (server spawn, MCP load, WebUI);
+        # One process can ask several times (server spawn, MCP load);
         # on a blocked network each attempt would wait out the timeouts again.
         raise _failed_install
 
@@ -430,7 +430,7 @@ def activate_runtime() -> Path | None:
     """Put the recorded private Node's directory first on ``PATH``.
 
     Reads ``tools/node.json`` only (no subprocess), so it is cheap enough for
-    CLI start-up. Child processes - the WebUI launcher, ``npx`` MCP servers,
+    CLI start-up. Child processes - ``npx`` MCP servers,
     ``langgraph dev`` and the agent's shell - inherit the change. Returns the
     directory put on PATH, or None when no private Node is recorded.
     """

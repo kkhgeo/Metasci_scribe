@@ -24,7 +24,7 @@ def _pick_skills_interactive(
     import questionary
     from questionary import Choice
 
-    from .widgets.thread_selector import PICKER_STYLE
+    from .picker import PICKER_STYLE
 
     # Installed-item indicator style for disabled checkbox choices.
     _INSTALLED_INDICATOR = ("fg:#4caf50", "✓ ")

@@ -184,22 +184,6 @@ args: ["-m", "écho"]
     assert entry.name == "écho"
     assert entry.tags == ["démo", "marché"]
 
-    venv = tmp_path / "uv" / "tools" / "metasci-scribe"
-    venv.mkdir(parents=True)
-    (venv / "uv-receipt.toml").write_text(
-        """
-[tool]
-requirements = [
-  { name = "metasci-scribe" },
-  { name = "mcp-écho", specifier = ">=1.0" },
-]
-""".lstrip(),
-        encoding="utf-8",
-    )
-    from metasci_scribe import uv_tool
-
-    assert uv_tool.read_receipt(venv).with_args() == ["--with", "mcp-écho>=1.0"]
-
     runtime = manager.LanggraphRuntimePaths.for_directory(tmp_path / "runtime")
     monkeypatch.setattr(manager, "RUNTIME", runtime)
     workspace = tmp_path / "workspace-écho"

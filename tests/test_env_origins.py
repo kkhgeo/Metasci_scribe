@@ -98,14 +98,6 @@ class TestRecording:
             "path": str(tmp_path / ".env"),
         }
 
-    def test_ccproxy(self, monkeypatch):
-        from metasci_scribe.ccproxy_manager import setup_ccproxy_env
-
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        setup_ccproxy_env(9999)
-        assert env_origin("ANTHROPIC_BASE_URL") == {"source": "ccproxy"}
-        assert env_origin("ANTHROPIC_API_KEY") == {"source": "ccproxy"}
-
 
 def test_the_server_reads_and_removes_the_record():
     """Read once at import; removed so the agent's commands never inherit it."""

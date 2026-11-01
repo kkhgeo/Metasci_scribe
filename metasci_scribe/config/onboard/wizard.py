@@ -28,7 +28,6 @@ from ..store import (
 )
 from .steps import (
     _asks_reasoning_effort,
-    _step_anthropic_auth_mode,
     _step_auxiliary_enable,
     _step_base_url,
     _step_langgraph_dev_port,
@@ -44,8 +43,6 @@ from .steps import (
     _step_tavily_key,
     _step_thinking,
     _step_tinytex,
-    _step_ui_backend,
-    _step_webui_port,
     _step_workspace,
     _step_xiaomi_token_plan_region,
 )
@@ -217,13 +214,8 @@ def _configure_provider_auth_mode(
     *,
     strict: bool,
 ) -> None:
-    """Configure Anthropic/OpenAI auth mode for the selected provider."""
-    if provider == "anthropic":
-        if strict:
-            config.anthropic_auth_mode = "api_key"
-        else:
-            config.anthropic_auth_mode = _step_anthropic_auth_mode(config)
-    elif provider == "openai":
+    """Configure OpenAI auth mode (API key or ChatGPT sign-in) when it is selected."""
+    if provider == "openai":
         if strict:
             config.openai_auth_mode = "api_key"
         else:
@@ -239,18 +231,14 @@ def _active_llm_providers(config: ScribeConfig) -> set[str]:
 
 
 def _reconcile_oauth_modes(config: ScribeConfig) -> None:
-    """Clear OAuth flags for providers no selected model uses."""
+    """Clear the ChatGPT sign-in flag when no selected model uses OpenAI."""
     active_providers = _active_llm_providers(config)
-    if "anthropic" not in active_providers:
-        config.anthropic_auth_mode = "api_key"
     if "openai" not in active_providers:
         config.openai_auth_mode = "api_key"
 
 
 def _provider_uses_oauth(config: ScribeConfig, provider: str) -> bool:
-    return (provider == "anthropic" and config.anthropic_auth_mode == "oauth") or (
-        provider == "openai" and config.openai_auth_mode == "oauth"
-    )
+    return provider == "openai" and config.openai_auth_mode == "oauth"
 
 
 def _apply_preset_provider_api_key(
@@ -366,7 +354,6 @@ def _configure_provider_connection(
 
 # Sections offered in Keep/Modify/Reset → which step labels they enable.
 _SECTION_LABELS: list[tuple[str, str]] = [
-    ("ui", "UI backend"),
     ("port", "LangGraph server port"),
     ("provider", "LLM provider + auth + API key"),
     ("model", "Model + reasoning effort"),
@@ -384,7 +371,6 @@ _ALL_SECTIONS: frozenset[str] = frozenset(s for s, _ in _SECTION_LABELS)
 # cascades into ``model`` because the model list depends on the provider —
 # silently keeping a stale model id would leave the first request broken.
 _FLAG_TO_SECTIONS: dict[str, frozenset[str]] = {
-    "ui": frozenset({"ui"}),
     "port": frozenset({"port"}),
     "provider": frozenset({"provider", "model"}),
     # ``--api-key`` re-runs the provider section, which can change provider —
@@ -671,23 +657,6 @@ def _run_onboard(
                 "[dim]  Progress is autosaved after every step. Ctrl+C is safe.[/dim]"
             )
             console.print()
-
-            if "ui" in sections_to_run:
-                _require("ui", "UI backend")
-                preset_ui = _preset("ui")
-                if preset_ui is not None:
-                    config.ui_backend = preset_ui
-                    console.print(
-                        f"  [green]✓ UI: {preset_ui}[/green]   [dim](--ui)[/dim]"
-                    )
-                else:
-                    config.ui_backend = _step_ui_backend(config)
-                # WebUI mode needs a front-end port; ask right after the mode
-                # choice (only when chosen interactively — non-interactive /
-                # preset runs keep the config default).
-                if config.ui_backend == "webui" and not strict and preset_ui is None:
-                    config.webui_port = _step_webui_port(config)
-                _autosave(config)
 
             if "port" in sections_to_run:
                 preset_port = _preset("port")

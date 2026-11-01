@@ -828,23 +828,6 @@ def test_tui_loop_level_total_cap_uses_completed_round_helper(monkeypatch):
     assert hitl_completed_round_cap_reached(3)
 
 
-def test_tui_hitl_loop_checks_completed_round_cap_before_clearing_pending():
-    """``_stream_with_widgets`` applies the helper before it clears pending,
-    so a round that stored a pause without building a resume cannot replay
-    unbounded. Reads the TUI source so this fails if the call is moved
-    after the pending clear (no Pilot harness)."""
-    from pathlib import Path
-
-    import metasci_scribe.cli.tui_interactive as tui
-
-    src = Path(tui.__file__).read_text()
-    cap = src.index("hitl_completed_round_cap_reached(_hitl_round)")
-    pending = src.index("state.pending_interrupt = None", cap)
-    assert pending - cap < 400
-    between = src[cap:pending]
-    assert "while True" not in between
-
-
 def test_channel_response_with_budget_stop_keeps_partial_then_notice():
     from metasci_scribe.stream.hitl_budget import (
         HITL_BUDGET_STOP_NOTICE,
@@ -907,21 +890,6 @@ def test_hitl_pause_unresolved_does_not_replay_without_a_resume():
     assert hitl_pause_unresolved(resuming=False, pending=True)
     assert not hitl_pause_unresolved(resuming=True, pending=True)
     assert not hitl_pause_unresolved(resuming=False, pending=False)
-
-
-def test_tui_unresolved_pause_exits_without_budget_notice():
-    """A stored pause with no resume breaks the loop. The round-limit
-    notice stays inside the budget-exhausted branch (CodeRabbit)."""
-    from pathlib import Path
-
-    import metasci_scribe.cli.tui_interactive as tui
-
-    src = Path(tui.__file__).read_text()
-    unresolved = src.index("hitl_pause_unresolved(")
-    notice = src.index("HITL_BUDGET_STOP_NOTICE", unresolved)
-    gate = src[notice - 250 : notice]
-    assert "_hitl_budget_exhausted" in gate
-    assert "_hitl_unresolved = True" in src
 
 
 class _StickyCheckpointAgent:

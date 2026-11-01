@@ -21,7 +21,7 @@ from ..mcp.registry import (
     install_mcp_servers,
 )
 from ..stream.console import console
-from .widgets.thread_selector import PICKER_STYLE
+from .picker import PICKER_STYLE
 
 _INSTALLED_INDICATOR = ("fg:#4caf50", "\u2713 ")
 

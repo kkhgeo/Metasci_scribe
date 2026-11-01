@@ -50,7 +50,6 @@ def temp_config_dir(tmp_path, monkeypatch):
         "METASCI_SCRIBE_GATEWAY_BACKEND",
         "METASCI_SCRIBE_GATEWAY_BACKEND_SINGLE_SHOT",
         "METASCI_SCRIBE_GATEWAY_BACKEND_INTERACTIVE",
-        "METASCI_SCRIBE_GATEWAY_BACKEND_TUI",
         "METASCI_SCRIBE_GATEWAY_BACKEND_STANDALONE",
         "METASCI_SCRIBE_MEMORY_PROFILE_ENABLED",
         "METASCI_SCRIBE_MEMORY_OBSERVATIONS_ENABLED",
@@ -90,7 +89,6 @@ def clean_env(monkeypatch):
         "METASCI_SCRIBE_GATEWAY_BACKEND",
         "METASCI_SCRIBE_GATEWAY_BACKEND_SINGLE_SHOT",
         "METASCI_SCRIBE_GATEWAY_BACKEND_INTERACTIVE",
-        "METASCI_SCRIBE_GATEWAY_BACKEND_TUI",
         "METASCI_SCRIBE_GATEWAY_BACKEND_STANDALONE",
         "METASCI_SCRIBE_MEMORY_PROFILE_ENABLED",
         "METASCI_SCRIBE_MEMORY_OBSERVATIONS_ENABLED",
@@ -133,7 +131,7 @@ class TestScribeConfig:
         assert config.default_mode == "daemon"
         assert config.default_workdir == ""
         assert config.show_thinking is True
-        assert config.ui_backend == "tui"
+        assert config.ui_backend == "cli"
         assert config.log_level == "warning"
         assert config.reasoning_effort == ""
         assert config.openrouter_anthropic_prompt_cache is True
@@ -155,21 +153,19 @@ class TestScribeConfig:
         assert config.ollama_base_url == ""
 
     def test_bind_hosts_default_to_loopback(self):
-        """Both servers stay off the network until asked.
+        """The server stays off the network until asked.
 
         The backend is an unauthenticated API whose agent can run shell
-        commands; the front-end serves the workspace file/upload and
-        skill-install endpoints. Neither is a safe default to publish, so
+        commands, so it is not a safe default to publish;
         ``--host 0.0.0.0`` / ``config set`` opts in to LAN exposure.
         """
         config = ScribeConfig()
 
         assert config.langgraph_dev_host == "127.0.0.1"
-        assert config.webui_host == "127.0.0.1"
 
     @pytest.mark.parametrize(
         ("field", "default"),
-        [("langgraph_dev_host", "127.0.0.1"), ("webui_host", "127.0.0.1")],
+        [("langgraph_dev_host", "127.0.0.1")],
     )
     @pytest.mark.parametrize("blank", ["", "   ", "\t"])
     def test_blank_bind_host_falls_back_to_default(self, field, blank, default):
@@ -180,28 +176,18 @@ class TestScribeConfig:
 
     @pytest.mark.parametrize(
         ("field", "value"),
-        [("langgraph_dev_host", "0.0.0.0"), ("webui_host", "0.0.0.0")],
+        [("langgraph_dev_host", "0.0.0.0")],
     )
     def test_bind_host_opt_out_is_preserved(self, field, value):
-        """The LAN escape hatch — widening either bind to the wildcard — must
+        """The LAN escape hatch — widening the bind to the wildcard — must
         survive normalization untouched."""
         config = ScribeConfig(**{field: value})
         assert getattr(config, field) == value
 
-    @pytest.mark.parametrize("field", ["langgraph_dev_host", "webui_host"])
+    @pytest.mark.parametrize("field", ["langgraph_dev_host"])
     def test_bind_host_is_stripped(self, field):
         config = ScribeConfig(**{field: "  0.0.0.0  "})
         assert getattr(config, field) == "0.0.0.0"
-
-    def test_auth_mode_default(self):
-        """Test that anthropic_auth_mode defaults to api_key."""
-        config = ScribeConfig()
-        assert config.anthropic_auth_mode == "api_key"
-
-    def test_auth_mode_set(self):
-        """Test that anthropic_auth_mode can be set."""
-        config = ScribeConfig(anthropic_auth_mode="oauth")
-        assert config.anthropic_auth_mode == "oauth"
 
     def test_openai_auth_mode_default(self):
         """Test that openai_auth_mode defaults to api_key."""
@@ -259,11 +245,11 @@ class TestScribeConfig:
         assert config.gateway_backend == "langgraph_server"
 
     def test_gateway_backend_per_surface_defaults_split(self):
-        """Global server flips the fixed-workspace surfaces, not CLI/TUI.
+        """Global server flips the fixed-workspace surfaces, not the CLI.
 
         single-shot/standalone default to ``inherit`` (so a global
-        ``langgraph_server`` moves them); the interactive CLI and TUI default to
-        ``local``, so the global flag can't move them (the server path is lossy
+        ``langgraph_server`` moves them); the interactive CLI defaults to
+        ``local``, so the global flag can't move it (the server path is lossy
         there until #413/#454 close).
         """
         config = ScribeConfig(gateway_backend="langgraph_server")
@@ -273,7 +259,6 @@ class TestScribeConfig:
         ):
             assert resolve_gateway_backend(config, surface) == "langgraph_server"
         assert resolve_gateway_backend(config, GatewaySurface.INTERACTIVE) == "local"
-        assert resolve_gateway_backend(config, GatewaySurface.TUI) == "local"
 
     def test_gateway_backend_per_surface_override_wins(self):
         """A per-surface override resolves independently of the global flag."""
@@ -285,28 +270,26 @@ class TestScribeConfig:
             resolve_gateway_backend(config, GatewaySurface.SINGLE_SHOT)
             == "langgraph_server"
         )
-        # TUI/INTERACTIVE default to local, and the global is local too.
-        assert resolve_gateway_backend(config, GatewaySurface.TUI) == "local"
+        # INTERACTIVE defaults to local, and the global is local too.
         assert resolve_gateway_backend(config, GatewaySurface.INTERACTIVE) == "local"
 
-    def test_gateway_backend_cli_tui_explicit_server_opt_in(self):
-        """CLI/TUI reach the server backend only via an explicit override.
+    def test_gateway_backend_cli_explicit_server_opt_in(self):
+        """The CLI reaches the server backend only via an explicit override.
 
-        Their default is ``local``, so opting in takes a per-surface
+        Its default is ``local``, so opting in takes a per-surface
         ``langgraph_server`` (not the global flag); ``inherit`` restores
         following the global.
         """
         config = ScribeConfig(
             gateway_backend="local",
             gateway_backend_interactive="langgraph_server",
-            gateway_backend_tui="inherit",
         )
         assert (
             resolve_gateway_backend(config, GatewaySurface.INTERACTIVE)
             == "langgraph_server"
         )
-        # tui set back to inherit -> follows the (local) global.
-        assert resolve_gateway_backend(config, GatewaySurface.TUI) == "local"
+        config.gateway_backend_interactive = "inherit"
+        assert resolve_gateway_backend(config, GatewaySurface.INTERACTIVE) == "local"
 
     def test_gateway_backend_per_surface_invalid_value_coerces_to_inherit(self, caplog):
         """A typo'd per-surface override degrades to inherit, not to a raw value."""
@@ -328,15 +311,15 @@ class TestScribeConfig:
     def test_ui_backend_legacy_aliases_and_case_fold(self):
         """Legacy ``ui_backend`` spellings survive Literal normalization.
 
-        Earlier onboarding wrote ``rich``/``textual`` into ``config.yaml``;
-        ``normalize_ui_backend`` still maps those to ``cli``/``tui``. The
-        Literal check must fold case and honour the same aliases, or a stored
-        ``rich`` is dropped and the user silently comes back in the TUI.
+        Earlier onboarding wrote ``rich`` into ``config.yaml``. The Literal
+        check must fold case and honour that alias. The retired ``tui`` and
+        ``webui`` values (and ``textual``) fall back to ``cli`` with a warning.
         """
         assert ScribeConfig(ui_backend="rich").ui_backend == "cli"
-        assert ScribeConfig(ui_backend="textual").ui_backend == "tui"
         assert ScribeConfig(ui_backend="CLI").ui_backend == "cli"
         assert ScribeConfig(ui_backend="Rich").ui_backend == "cli"
+        for retired in ("tui", "webui", "textual"):
+            assert ScribeConfig(ui_backend=retired).ui_backend == "cli"
 
 
 # =============================================================================
@@ -643,7 +626,6 @@ class TestPriorityChain:
             "METASCI_SCRIBE_GATEWAY_BACKEND",
             "METASCI_SCRIBE_GATEWAY_BACKEND_SINGLE_SHOT",
             "METASCI_SCRIBE_GATEWAY_BACKEND_INTERACTIVE",
-            "METASCI_SCRIBE_GATEWAY_BACKEND_TUI",
             "METASCI_SCRIBE_GATEWAY_BACKEND_STANDALONE",
         ]:
             monkeypatch.delenv(key, raising=False)
@@ -680,12 +662,14 @@ class TestPriorityChain:
         config = get_effective_config(cli_overrides={"model": "claude-opus-4-8"})
         assert config.model == "claude-opus-4-8"
 
-    def test_env_ui_backend_override(self, temp_config_dir, monkeypatch):
-        """UI backend can be selected via environment variable."""
+    def test_env_ui_backend_retired_value_is_ignored(
+        self, temp_config_dir, monkeypatch
+    ):
+        """The retired ``tui`` spelling is rejected, leaving the CLI in place."""
         save_config(ScribeConfig(ui_backend="cli"))
         monkeypatch.setenv("METASCI_SCRIBE_UI_BACKEND", "tui")
         config = get_effective_config()
-        assert config.ui_backend == "tui"
+        assert config.ui_backend == "cli"
 
     def test_env_ui_backend_legacy_alias_override(self, temp_config_dir, monkeypatch):
         """A legacy env spelling resolves through the same alias map.
@@ -694,7 +678,7 @@ class TestPriorityChain:
         override raises and is swallowed by ``get_effective_config``, so
         ``METASCI_SCRIBE_UI_BACKEND=rich`` is silently ignored.
         """
-        save_config(ScribeConfig(ui_backend="tui"))
+        save_config(ScribeConfig(ui_backend="cli"))
         monkeypatch.setenv("METASCI_SCRIBE_UI_BACKEND", "rich")
         config = get_effective_config()
         assert config.ui_backend == "cli"
@@ -722,12 +706,12 @@ class TestPriorityChain:
         )
         config = get_effective_config()
         assert config.gateway_backend_single_shot == "langgraph_server"
-        assert config.gateway_backend_tui == "local"  # CLI/TUI default
+        assert config.gateway_backend_interactive == "local"  # CLI default
         assert (
             resolve_gateway_backend(config, GatewaySurface.SINGLE_SHOT)
             == "langgraph_server"
         )
-        assert resolve_gateway_backend(config, GatewaySurface.TUI) == "local"
+        assert resolve_gateway_backend(config, GatewaySurface.INTERACTIVE) == "local"
 
     def test_env_log_level_override(self, temp_config_dir, monkeypatch):
         """Log level can be selected via environment variable."""
@@ -858,14 +842,6 @@ class TestPriorityChain:
 
         config = get_effective_config()
         assert config.anthropic_api_key == "env-key"
-
-    def test_env_auth_mode_override(self, temp_config_dir, monkeypatch):
-        """Test auth mode from env overrides file."""
-        save_config(ScribeConfig(anthropic_auth_mode="api_key"))
-        monkeypatch.setenv("METASCI_SCRIBE_ANTHROPIC_AUTH_MODE", "oauth")
-
-        config = get_effective_config()
-        assert config.anthropic_auth_mode == "oauth"
 
     def test_env_openai_auth_mode_override(self, temp_config_dir, monkeypatch):
         """Test openai_auth_mode from env overrides file."""
@@ -1228,42 +1204,6 @@ class TestDotenvIsolation:
         assert config.openai_api_key == "sk-from-config"
         assert os.environ.get("MINIMAX_BASE_URL", "") == ""
 
-    def test_dotenv_does_not_clobber_oauth_routing(
-        self, temp_config_dir, tmp_path, monkeypatch
-    ):
-        """A workspace ``.env`` credential must not undo ccproxy OAuth routing.
-
-        ``setup_ccproxy_env`` marks the route with a placeholder key; every later
-        ``get_effective_config`` call re-merges ``.env``, so without the guard
-        the key and base URL flip back mid-session.
-        """
-        env_file = tmp_path / ".env"
-        env_file.write_text(
-            "ANTHROPIC_API_KEY=sk-ant-real\n"
-            "ANTHROPIC_BASE_URL=https://api.anthropic.com\n"
-        )
-        monkeypatch.setattr(
-            "metasci_scribe.config.settings.find_dotenv",
-            lambda *args, **kwargs: str(env_file),
-        )
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "ccproxy-oauth")
-        monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:8000/claude")
-
-        get_effective_config()
-
-        assert os.environ["ANTHROPIC_API_KEY"] == "ccproxy-oauth"
-        assert os.environ["ANTHROPIC_BASE_URL"] == "http://127.0.0.1:8000/claude"
-
-    def test_dotenv_guard_matches_lowercase_keys(self, tmp_path, monkeypatch):
-        """Windows env keys are case-insensitive, so a lowercase ``.env`` key
-        would reach the same variable; the guard must not depend on case."""
-        from metasci_scribe.config.settings import _oauth_routed
-
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "ccproxy-oauth")
-
-        assert _oauth_routed("anthropic_api_key")
-        assert _oauth_routed("anthropic_base_url")
-
     def test_dotenv_credentials_still_merge_without_oauth(
         self, temp_config_dir, tmp_path, monkeypatch
     ):
@@ -1284,8 +1224,8 @@ class TestDotenvIsolation:
         self, temp_config_dir, tmp_path, monkeypatch
     ):
         """Parent-process env values for ``METASCI_SCRIBE_*`` keys must not be
-        shadowed by a workspace ``.env``. ``metasci-scribe deploy --port X`` propagates
-        the resolved bind port via ``METASCI_SCRIBE_LANGGRAPH_DEV_PORT`` on the
+        shadowed by a workspace ``.env``. The CLI propagates the resolved bind
+        port via ``METASCI_SCRIBE_LANGGRAPH_DEV_PORT`` on the
         subprocess env; without the prefix-based merge, a workspace ``.env``
         with the same key would clobber it and every self-loop async task
         would target the wrong port.
@@ -1307,15 +1247,14 @@ class TestDotenvIsolation:
         ("field", "env_var", "value"),
         [
             ("langgraph_dev_host", "METASCI_SCRIBE_LANGGRAPH_DEV_HOST", "0.0.0.0"),
-            ("webui_host", "METASCI_SCRIBE_WEBUI_HOST", "0.0.0.0"),
         ],
     )
     def test_bind_hosts_are_env_overridable(
         self, temp_config_dir, monkeypatch, field, env_var, value
     ):
         """``start_langgraph_dev`` propagates the resolved bind host to the
-        subprocess through ``METASCI_SCRIBE_LANGGRAPH_DEV_HOST``, so both host
-        fields must be declared in ``_ENV_MAPPINGS`` or the subprocess would
+        subprocess through ``METASCI_SCRIBE_LANGGRAPH_DEV_HOST``, so the host
+        field must be declared in ``_ENV_MAPPINGS`` or the subprocess would
         fall back to whatever the config file says."""
         monkeypatch.setenv(env_var, value)
 
@@ -1399,102 +1338,3 @@ def test_backend_allowed_origins_ignores_the_environment(temp_config_dir, monkey
     monkeypatch.setenv("METASCI_SCRIBE_BACKEND_ALLOWED_ORIGINS", "https://evil.example")
     monkeypatch.setenv("BACKEND_ALLOWED_ORIGINS", "https://evil.example")
     assert get_effective_config().backend_allowed_origins == ""
-
-
-class TestProactiveSettings:
-    """``__post_init__`` keeps the proactive settings valid (#263)."""
-
-    def test_defaults(self):
-        config = ScribeConfig()
-        assert config.proactive_idle_minutes == 120
-        assert config.proactive_quiet_hours == "22:00-08:00"
-        assert config.proactive_timezone == ""
-        assert not hasattr(config, "proactive_enabled")
-
-    @pytest.mark.parametrize("value", [-1, True, "soon", 1.5])
-    def test_invalid_idle_minutes_falls_back_with_warning(self, value, caplog):
-        import logging as _logging
-
-        with caplog.at_level(_logging.WARNING, logger="metasci_scribe.config.settings"):
-            config = ScribeConfig(proactive_idle_minutes=value)
-        assert config.proactive_idle_minutes == 120
-        assert "Invalid proactive_idle_minutes" in caplog.text
-
-    def test_zero_idle_minutes_is_kept(self):
-        assert ScribeConfig(proactive_idle_minutes=0).proactive_idle_minutes == 0
-
-    @pytest.mark.parametrize(
-        "value", ["2200-0800", "22:00-24:00", "22:00", "22:00-08:00-09:00", 2200, None]
-    )
-    def test_invalid_quiet_hours_falls_back_to_default_window(self, value, caplog):
-        """A typo keeps the default window instead of opening quiet hours, and a
-        non-string value (a YAML number) does not crash startup."""
-        import logging as _logging
-
-        with caplog.at_level(_logging.WARNING, logger="metasci_scribe.config.settings"):
-            config = ScribeConfig(proactive_quiet_hours=value)
-        assert config.proactive_quiet_hours == "22:00-08:00"
-        assert "Invalid proactive_quiet_hours" in caplog.text
-
-    @pytest.mark.parametrize(
-        ("value", "expected"),
-        [
-            ("22:00-08:00", "22:00-08:00"),
-            (" 9:00-7:30 ", "09:00-07:30"),
-            ("", ""),
-            ("   ", ""),
-        ],
-    )
-    def test_valid_quiet_hours_are_normalised(self, value, expected):
-        assert ScribeConfig(proactive_quiet_hours=value).proactive_quiet_hours == (
-            expected
-        )
-
-    @pytest.mark.parametrize("value", ["Not/AZone", "../etc", 5])
-    def test_invalid_timezone_falls_back_to_host_zone(self, value, caplog):
-        import logging as _logging
-
-        with caplog.at_level(_logging.WARNING, logger="metasci_scribe.config.settings"):
-            config = ScribeConfig(proactive_timezone=value)
-        assert config.proactive_timezone == ""
-        assert "Invalid proactive_timezone" in caplog.text
-
-    @pytest.mark.parametrize(
-        ("value", "expected"), [("UTC", "UTC"), (" Europe/Warsaw ", "Europe/Warsaw")]
-    )
-    def test_valid_timezone_is_kept(self, value, expected):
-        assert ScribeConfig(proactive_timezone=value).proactive_timezone == expected
-
-    def test_environment_overrides(self, temp_config_dir, clean_env, monkeypatch):
-        monkeypatch.setenv("METASCI_SCRIBE_PROACTIVE_IDLE_MINUTES", "45")
-        monkeypatch.setenv("METASCI_SCRIBE_PROACTIVE_QUIET_HOURS", "23:30-06:00")
-        monkeypatch.setenv("METASCI_SCRIBE_PROACTIVE_TIMEZONE", "Europe/Warsaw")
-
-        config = get_effective_config()
-
-        assert config.proactive_idle_minutes == 45
-        assert config.proactive_quiet_hours == "23:30-06:00"
-        assert config.proactive_timezone == "Europe/Warsaw"
-
-
-@pytest.mark.parametrize(
-    ("key", "value", "stored"),
-    [
-        ("proactive_quiet_hours", "2200-0800", None),
-        ("proactive_quiet_hours", " 9:00-7:30 ", "09:00-07:30"),
-        ("proactive_quiet_hours", "", ""),
-        ("proactive_idle_minutes", "-5", None),
-        ("proactive_idle_minutes", True, None),
-        ("proactive_idle_minutes", "45", 45),
-        ("proactive_timezone", "Not/AZone", None),
-        ("proactive_timezone", "Europe/Warsaw", "Europe/Warsaw"),
-    ],
-)
-def test_config_set_validates_the_proactive_settings(
-    temp_config_dir, clean_env, key, value, stored
-):
-    from metasci_scribe.config.settings import load_config, set_config_value
-
-    assert set_config_value(key, value) is (stored is not None)
-    if stored is not None:
-        assert getattr(load_config(), key) == stored

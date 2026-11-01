@@ -562,7 +562,7 @@ class LangGraphServerGateway:
     """Frontend event sink — delivery point for middleware custom events.
 
     Consumers read ``gateway.events`` via the ``GraphGateway`` protocol
-    (``tui_interactive.py``, ``commands/implementation/model.py``). On the
+    (``cli/interactive.py``, ``commands/implementation/model.py``). On the
     server backend this sink additionally receives middleware events
     (tool-selection lifecycle, fallback narration) mirrored by the server
     process onto the run's ``custom`` stream channel

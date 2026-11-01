@@ -1352,7 +1352,7 @@ class TestThirdPartyRouting:
 
     @patch("metasci_scribe.llm.models.init_chat_model")
     def test_anthropic_base_url_override(self, mock_init, monkeypatch):
-        """Anthropic provider should support base_url override (e.g. ccproxy)."""
+        """Anthropic provider should support base_url override (e.g. a local proxy)."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://localhost:8000/api/v1")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-dummy")
@@ -3513,7 +3513,7 @@ class TestAutoConfig:
     def test_opus_5_5_max_tokens_outside_thinking_branch(
         self, mock_init, kwargs, base_url, monkeypatch
     ):
-        """Explicit thinking or a local proxy (ccproxy) must still get 128000."""
+        """Explicit thinking or a local proxy must still get 128000."""
         mock_init.return_value = "mock_model"
         if base_url:
             monkeypatch.setenv("ANTHROPIC_BASE_URL", base_url)
@@ -3587,7 +3587,7 @@ class TestAutoConfig:
         """Anthropic 4-6 models via proxy skip thinking (history round-trip 422)."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:8000")
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "ccproxy-oauth")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "local-proxy-key")
 
         get_chat_model("claude-sonnet-4-6")
 
@@ -3600,7 +3600,7 @@ class TestAutoConfig:
         """Anthropic 4-5 models via proxy also skip thinking (history round-trip 422)."""
         mock_init.return_value = "mock_model"
         monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:8000")
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "ccproxy-oauth")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "local-proxy-key")
 
         get_chat_model("claude-haiku-4-5")
 

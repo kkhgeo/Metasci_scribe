@@ -155,9 +155,6 @@ def onboard(
         "--show-thinking/--no-show-thinking",
         help="Pre-set thinking-panel visibility",
     ),
-    ui: str | None = typer.Option(
-        None, "--ui", help="Pre-set UI backend (tui | cli | webui)"
-    ),
     port: int | None = typer.Option(
         None, "--port", help="Pre-set langgraph dev server port"
     ),
@@ -185,7 +182,6 @@ def onboard(
     """
     from ..config.onboard.constants import (
         VALID_PROVIDERS,
-        VALID_UI_BACKENDS,
         VALID_WORKSPACE_MODES,
     )
     from ..config.onboard.prompter import NonInteractivePrompter
@@ -195,10 +191,6 @@ def onboard(
     # ``metasci_scribe/config/onboard/constants.py``; a drift test in
     # ``tests/test_onboard.py`` keeps them aligned with the interactive
     # ``Choice(value=...)`` lists in ``steps.py``.
-    if ui is not None and ui not in VALID_UI_BACKENDS:
-        raise typer.BadParameter(
-            f"--ui must be one of {sorted(VALID_UI_BACKENDS)}", param_hint="--ui"
-        )
     if workspace_mode is not None and workspace_mode not in VALID_WORKSPACE_MODES:
         raise typer.BadParameter(
             f"--workspace-mode must be one of {sorted(VALID_WORKSPACE_MODES)}",
@@ -220,8 +212,6 @@ def onboard(
 
     # Collect flag-supplied answers keyed by the prompt_id wizard steps use.
     answers: dict = {}
-    if ui is not None:
-        answers["ui"] = ui
     if port is not None:
         answers["port"] = str(port)
     if provider is not None:
@@ -263,74 +253,6 @@ def onboard(
 
 
 # =============================================================================
-# Update command
-# =============================================================================
-
-
-@app.command()
-def update(
-    version: str | None = typer.Option(
-        None,
-        "--version",
-        help=(
-            "Install this release instead of the newest one; an older one rolls "
-            "back. An older release keeps only the config keys and values it "
-            "knows: its next config save drops the rest (all settings, if it "
-            "cannot read the file), so config.yaml is copied to "
-            "config.yaml.bak-<current version> first. sessions.db is used as it is."
-        ),
-    ),
-    check: bool = typer.Option(
-        False, "--check", help="Only print the installed and the newest version"
-    ),
-    yes: bool = typer.Option(
-        False, "--yes", help="Stop a running server without asking"
-    ),
-    json_output: bool = typer.Option(
-        False, "--json", help="Print one JSON event per line; never asks"
-    ),
-    skip: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--skip",
-            help="Pass --skip <id> to the new metasci-scribe setup (repeatable)",
-        ),
-    ] = None,
-):
-    """Update Metasci Scribe to the newest release, with its tested dependencies.
-
-    A uv tool install (the install scripts, or uv tool install) is reinstalled
-    with the release's constraints.txt, keeping its extras, Python version and
-    packages added with --with, on uv's own Python (an install made without
-    --python moves to uv's Python of the same version on its first update).
-    The new version's metasci-scribe setup runs afterwards. For pip, conda, an
-    editable install or the Docker image, it prints what to run instead.
-    """
-    from ..setup.protocol import ConsoleEmitter, JsonEmitter
-    from ..updater import UpdateOptions, run_update
-
-    if json_output:
-        from ..stream.json_sink import redirect_console_to_stderr
-
-        redirect_console_to_stderr()
-        emit = JsonEmitter()
-        confirm = None
-    else:
-        emit = ConsoleEmitter(console)
-        confirm = (
-            (lambda question: typer.confirm(question, default=False))
-            if sys.stdin.isatty()
-            else None
-        )
-    opts = UpdateOptions(
-        version=version, check=check, yes=yes, json=json_output, skip=list(skip or ())
-    )
-    code = run_update(opts, emit, confirm=confirm)
-    if code:
-        raise typer.Exit(code)
-
-
-# =============================================================================
 # Setup command
 # =============================================================================
 
@@ -357,13 +279,12 @@ def setup(
     ] = None,
 ):
     """Install what Metasci Scribe needs beyond the Python package (Node.js, Git
-    for Windows on Windows, a Python for the agent's shell when none is on
-    PATH, and the WebUI).
+    for Windows on Windows, and a Python for the agent's shell when none is on
+    PATH).
 
     Runs every stage that applies to this platform, in order. With ``--json``
     stdout carries only the JSON event lines; everything else goes to stderr.
     """
-    import json
     import sys
 
     from ..config import load_config, set_config_value
@@ -428,7 +349,6 @@ def setup(
 
 
 _CONFIGURE_SECTIONS = {
-    "ui": "UI backend",
     "port": "LangGraph server port",
     "provider": "LLM provider + auth + API key",
     "model": "Model + reasoning effort",
@@ -478,12 +398,6 @@ def _configure_section(
     _run_onboard_cli(
         **kwargs,
     )
-
-
-@configure_app.command("ui")
-def configure_ui():
-    """Re-run UI backend (TUI / CLI) selection."""
-    _configure_section("ui")
 
 
 @configure_app.command("port")
@@ -655,8 +569,8 @@ def _ensure_async_subagent_server(
 
     Raises ``typer.Exit(1)`` (after surfacing a red error) when an
     externally-managed langgraph dev is already running for a different
-    workspace — e.g., ``metasci-scribe deploy --workdir /A`` is up and the user
-    is starting ``metasci-scribe`` in /B. Continuing in that
+    workspace — e.g., a ``metasci-scribe --workdir /A`` session left its server
+    up and the user is starting ``metasci-scribe`` in /B. Continuing in that
     state would route async sub-agent calls to a process pinned to /A
     while the main agent runs in /B.
     """
@@ -698,8 +612,8 @@ def _ensure_async_subagent_server(
     if _lg_manager.AGENT_SHELL_DRIFT is not None:
         console.print(f"[yellow]⚠ {escape(_lg_manager.AGENT_SHELL_DRIFT)}[/yellow]")
 
-    # The backend is shared by every UI mode, so the exposure warning lives
-    # here, not just in deploy/WebUI. Gated on the server being up: warning
+    # The exposure warning lives here, where every session starts the
+    # backend. Gated on the server being up: warning
     # about a bind that never happened would be worse than saying nothing.
     bind_host = str(getattr(config, "langgraph_dev_host", _DEFAULT_HOST) or "").strip()
     if (
@@ -1710,41 +1624,8 @@ def sessions_stats(ctx: typer.Context):
 
 def _version_callback(value: bool):
     if value:
-        # ``--version`` is eager, so it runs before ``--json`` is parsed (Click
-        # runs eager callbacks in command-line order); read the raw arguments
-        # so both flag orders print the same JSON.
-        if "--json" in sys.argv[1:]:
-            from ..setup.protocol import PROTOCOL
-            from ..setup.webui import compat_range
-            from ..stream.json_sink import redirect_console_to_stderr
-
-            # stdout carries only the JSON line; a warning (e.g. the range
-            # override) goes to stderr.
-            redirect_console_to_stderr()
-
-            typer.echo(
-                json.dumps(
-                    {
-                        "version": _pkg_version("metasci-scribe"),
-                        "protocol": PROTOCOL,
-                        "webui_compat": compat_range(),
-                    }
-                )
-            )
-        else:
-            typer.echo(f"Metasci Scribe {_pkg_version('metasci-scribe')}")
+        typer.echo(f"Metasci Scribe {_pkg_version('metasci-scribe')}")
         raise typer.Exit()
-
-
-def _is_fresh_interactive_session(prompt: str | None, thread_id: str | None) -> bool:
-    """True for a brand-new interactive session — no one-shot ``-p`` prompt and
-    no ``--resume`` / ``--thread-id`` to continue.
-
-    This is the only case where a WebUI-configured ``metasci-scribe`` opens the browser
-    app: a one-shot or a resume has a concrete conversation to render in the
-    terminal, so it falls back to the Rich CLI instead.
-    """
-    return not prompt and not thread_id
 
 
 # 2 is Click's usage-error code; 1 stays "the run failed".
@@ -1882,23 +1763,15 @@ def _main_callback(
     auth_mode: str | None = typer.Option(
         None,
         "--auth-mode",
-        help="Auth mode: api_key (default) or oauth, which uses the Claude "
-        "subscription (via ccproxy) and ChatGPT sign-in for whichever of "
-        "Anthropic and OpenAI the main, auxiliary or a fallback model uses.",
-    ),
-    ui: str | None = typer.Option(
-        None,
-        "--ui",
-        help="UI backend: tui (default), cli, or webui.",
+        help="Auth mode: api_key (default) or oauth, which is ChatGPT sign-in "
+        "for OpenAI when the main, auxiliary or a fallback model uses it.",
     ),
     host: str | None = typer.Option(
         None,
         "--host",
-        help="Interface to bind servers to (default: 127.0.0.1 for both). "
-        "Sets langgraph_dev_host — the backend shared by every UI mode — and "
-        "webui_host (WebUI mode only). Applies to the default entry; the "
-        "deploy subcommand takes its own --host. Pass 0.0.0.0 to "
-        "reach both from another machine (the backend has no auth).",
+        help="Interface to bind the background agent server to (default: "
+        "127.0.0.1). Sets langgraph_dev_host. Pass 0.0.0.0 to reach it from "
+        "another machine (the server has no auth).",
     ),
     output_format: str | None = typer.Option(
         None,
@@ -1924,20 +1797,8 @@ def _main_callback(
             ),
         ),
     ] = None,
-    version_json: Annotated[
-        bool,
-        typer.Option(
-            "--json",
-            hidden=True,
-            help="With --version: print the version, protocol and WebUI range as JSON.",
-        ),
-    ] = False,
 ):
     """Metasci Scribe Agent - AI-powered research & code execution CLI"""
-    if version_json:
-        # ``--version --json`` exits in the version callback before this runs.
-        typer.echo("--json is only valid with --version.", err=True)
-        raise typer.Exit(2)
     # If a subcommand was invoked, don't run the default behavior
     if ctx.invoked_subcommand is not None:
         return
@@ -1949,7 +1810,7 @@ def _main_callback(
 
     # Resolve the output format first. In stream-json mode stdout must carry
     # only JSONL, so establish the mode and redirect the console to stderr
-    # BEFORE anything below (ccproxy startup, validation) can print a
+    # BEFORE anything below (validation, server start) can print a
     # human-readable line to stdout.
     effective_output_format = (output_format or "text").lower()
     if effective_output_format not in ("text", "stream-json"):
@@ -1988,12 +1849,7 @@ def _main_callback(
         cli_overrides["default_workdir"] = workdir
     if no_thinking:
         cli_overrides["show_thinking"] = False
-    if ui:
-        cli_overrides["ui_backend"] = ui
     if host is not None and host.strip():
-        # One flag drives both servers; the backend applies in EVERY UI mode
-        # (auto-started for tui/cli too), webui_host only in WebUI mode.
-        cli_overrides["webui_host"] = host.strip()
         cli_overrides["langgraph_dev_host"] = host.strip()
     if auto_approve:
         cli_overrides["auto_approve"] = True
@@ -2017,11 +1873,10 @@ def _main_callback(
 
     config = get_effective_config(cli_overrides)
     if auth_mode:
-        # oauth only for subscriptions a configured model can use; api_key always.
-        in_use = _providers_in_use(config)
-        for provider in ("anthropic", "openai"):
-            if auth_mode == "api_key" or provider in in_use:
-                setattr(config, f"{provider}_auth_mode", auth_mode)
+        # oauth (ChatGPT sign-in) only when a configured model uses OpenAI;
+        # api_key always.
+        if auth_mode == "api_key" or "openai" in _providers_in_use(config):
+            config.openai_auth_mode = auth_mode
     apply_config_to_env(config)
 
     if rubric_text is not None:
@@ -2039,21 +1894,6 @@ def _main_callback(
 
     _require_chatgpt_sign_in(config, interactive=_interactive_start(prompt))
 
-    # Auto-start ccproxy when Anthropic uses OAuth mode
-    _ccproxy_proc = None
-    if config.anthropic_auth_mode == "oauth":
-        try:
-            from ..ccproxy_manager import maybe_start_ccproxy, stop_ccproxy
-
-            _ccproxy_proc = maybe_start_ccproxy(config)
-            if _ccproxy_proc:
-                import atexit
-
-                atexit.register(stop_ccproxy, _ccproxy_proc)
-        except RuntimeError as exc:
-            console.print(f"[red]{exc}[/red]")
-            raise typer.Exit(1) from exc
-
     show_thinking = config.show_thinking if not no_thinking else False
 
     # Validate mutually exclusive options
@@ -2067,8 +1907,6 @@ def _main_callback(
 
     if mode and mode not in ("run", "daemon"):
         raise typer.BadParameter("--mode must be 'run' or 'daemon'")
-    if ui and ui.lower() not in ("cli", "tui", "webui"):
-        raise typer.BadParameter("--ui must be 'tui', 'cli', or 'webui'")
 
     # --name only makes sense in run mode
     if name and not (
@@ -2104,47 +1942,19 @@ def _main_callback(
     # Ensure memory and skills subdirs exist in workspace
     ensure_dirs()
 
-    # WebUI mode: instead of the in-terminal CLI/TUI, run a deploy-style
-    # langgraph server (full MCP + async) + the locally installed
-    # @evoscientist/webui front-end in THIS terminal, then block. Reuses start_langgraph_dev
-    # but leaves `metasci-scribe deploy` untouched (it stays a clean server for external
-    # UIs / SDK clients).
-    #
-    # The browser app is only launched for a FRESH interactive session. With
-    # `-p` (one-shot) or `--resume`/`--thread-id` (continue a specific
-    # conversation), there is concrete terminal output to render, so fall back
-    # to the Rich CLI instead of opening the browser UI.
-    from .tui_runtime import normalize_ui_backend
-
-    if normalize_ui_backend(config.ui_backend) == "webui":
-        if _is_fresh_interactive_session(prompt, thread_id):
-            from ..deploy.webui import run_webui
-
-            # Run mode is a CLI and TUI feature: the WebUI works in the workspace root.
-            if effective_mode == "run":
-                console.print(
-                    "[dim]The WebUI works in the workspace root; --mode run "
-                    "applies to the CLI and TUI.[/dim]"
-                )
-            run_webui(config, workspace_dir=str(workspace.root))
-            return
-        config.ui_backend = "cli"
-
     # ``--mode=run`` works in a fresh ``runs/<name>`` folder of the workspace;
     # ``/new`` then moves to another one.
     run_dir = _create_run_dir(workspace, name) if effective_mode == "run" else None
     dirs = SessionDirs(workspace, run_dir)
 
     # Resolve the gateway backend for whichever surface this callback launches:
-    # single-shot when a prompt is given, else the interactive CLI / TUI (the
+    # single-shot when a prompt is given, else the interactive CLI (the
     # same value each inner entry re-resolves for its own factory call). Drives
     # both the server start and the single-shot factory below.
     from ..config import GatewaySurface, resolve_gateway_backend
 
     if prompt:
         _gateway_surface = GatewaySurface.SINGLE_SHOT
-    elif normalize_ui_backend(config.ui_backend) == "tui":
-        _gateway_surface = GatewaySurface.TUI
     else:
         _gateway_surface = GatewaySurface.INTERACTIVE
     gateway_backend = resolve_gateway_backend(config, _gateway_surface)
@@ -2261,7 +2071,6 @@ def _main_callback(
                                 show_thinking=show_thinking,
                                 dirs=session_dirs,
                                 model=config.model,
-                                ui_backend=config.ui_backend,
                                 runtime_gateways=runtime_gateways,
                                 async_runtime=async_runtime,
                                 rubric=rubric_text,
@@ -2271,7 +2080,7 @@ def _main_callback(
                             rubric_result = await asyncio.shield(stream_worker)
                         except asyncio.CancelledError:
                             from ..stream.display import request_stream_cancel
-                            from .tui_runtime import settle_cancelled_worker
+                            from .stream_runtime import settle_cancelled_worker
 
                             await settle_cancelled_worker(
                                 stream_worker,
@@ -2311,7 +2120,6 @@ def _main_callback(
             provider=config.provider,
             run_name=name,
             thread_id=thread_id,
-            ui_backend=config.ui_backend,
             config=config,
             async_runtime=async_runtime,
         )

@@ -131,13 +131,6 @@ class TestSharedConstantsAlignment:
             f"only-in-choices: {actual_provider_ids - set(VALID_PROVIDERS)}"
         )
 
-    def test_ui_constants_match_step_choices(self):
-        from metasci_scribe.config.onboard.constants import VALID_UI_BACKENDS
-
-        # _step_ui_backend hard-codes "tui", "cli", and "webui" — small enough
-        # to check by direct lookup against the canonical set.
-        assert VALID_UI_BACKENDS == frozenset({"tui", "cli", "webui"})
-
     def test_workspace_mode_constants_match_step_choices(self):
         from metasci_scribe.config.onboard.constants import VALID_WORKSPACE_MODES
 
@@ -179,13 +172,11 @@ class TestOAuthModeReconcile:
             auxiliary_provider="openai",
             auxiliary_model="gpt-6-luna",
             openai_auth_mode="oauth",
-            anthropic_auth_mode="oauth",
         )
 
         _reconcile_oauth_modes(config)
 
         assert config.openai_auth_mode == "oauth"
-        assert config.anthropic_auth_mode == "api_key"
 
     def test_reconcile_preserves_auxiliary_provider_without_model(self):
         from metasci_scribe.config.onboard.wizard import _reconcile_oauth_modes
@@ -572,12 +563,6 @@ class TestStepPortsRenderConfiguredHost:
             _step_langgraph_dev_port, config
         )
 
-    def test_webui_step_shows_pinned_interface(self):
-        from metasci_scribe.config.onboard.steps import _step_webui_port
-
-        config = ScribeConfig(webui_port=4716, webui_host="192.168.1.5")
-        assert "http://192.168.1.5:4716" in self._capture(_step_webui_port, config)
-
 
 class TestStepProvider:
     def test_returns_selected_provider(self):
@@ -619,101 +604,6 @@ class TestStepProvider:
                 _step_provider(config)
 
 
-class TestStepOAuthAuthMode:
-    @pytest.mark.parametrize(
-        (
-            "step_name",
-            "config_attr",
-            "provider_label",
-            "oauth_choice_label",
-            "ccproxy_provider",
-            "status_label",
-            "question_label",
-            "login_prompt",
-        ),
-        [
-            (
-                "_step_anthropic_auth_mode",
-                "anthropic_auth_mode",
-                "Anthropic",
-                "Claude Code OAuth",
-                "claude_api",
-                "OAuth",
-                "Authentication mode",
-                "Log in to Claude now?",
-            ),
-        ],
-    )
-    def test_oauth_wrappers_use_provider_specific_ccproxy_flow(
-        self,
-        step_name,
-        config_attr,
-        provider_label,
-        oauth_choice_label,
-        ccproxy_provider,
-        status_label,
-        question_label,
-        login_prompt,
-    ):
-        """The Anthropic wrapper passes its provider-specific IDs to the ccproxy flow."""
-        from metasci_scribe.config.onboard import steps as onboard_steps
-
-        config = ScribeConfig(**{config_attr: "oauth"})
-        select_question = MagicMock()
-        select_question.ask.return_value = "oauth"
-        confirm_question = MagicMock()
-        confirm_question.ask.return_value = True
-
-        with (
-            patch(
-                "metasci_scribe.ccproxy_manager.is_ccproxy_available", return_value=True
-            ),
-            patch(
-                "metasci_scribe.ccproxy_manager.check_ccproxy_auth",
-                return_value=(False, "not authenticated"),
-            ) as mock_check_auth,
-            patch(
-                "metasci_scribe.config.onboard.prompter.install_navigation_keys"
-            ) as mock_nav,
-            patch(
-                "metasci_scribe.config.onboard.steps.questionary.select",
-                return_value=select_question,
-            ) as mock_select,
-            patch(
-                "metasci_scribe.config.onboard.steps.questionary.confirm",
-                return_value=confirm_question,
-            ) as mock_confirm,
-            patch(
-                "metasci_scribe.config.onboard.steps._prompt_ccproxy_port"
-            ) as mock_port,
-            patch(
-                "metasci_scribe.config.onboard.steps._run_ccproxy_login"
-            ) as mock_login,
-        ):
-            result = getattr(onboard_steps, step_name)(config)
-
-        assert result == "oauth"
-        mock_nav.assert_called_once_with(select_question, with_back=True)
-        mock_port.assert_called_once_with(config)
-        mock_check_auth.assert_called_once_with(ccproxy_provider)
-        mock_login.assert_called_once_with(ccproxy_provider, status_label)
-
-        select_call = mock_select.call_args
-        assert select_call.args[0] == f"{question_label}  [Esc/← to go back]:"
-        assert select_call.kwargs["default"] == "oauth"
-        choice_titles = [
-            choice.title
-            for choice in select_call.kwargs["choices"]
-            if getattr(choice, "value", None) in {"api_key", "oauth"}
-        ]
-        assert choice_titles == [
-            f"API Key (direct {provider_label} access)",
-            f"{oauth_choice_label} (via ccproxy — no API key needed)",
-        ]
-        mock_confirm.assert_called_once()
-        assert mock_confirm.call_args.args[0] == login_prompt
-
-
 class TestStepOpenAIAuthMode:
     def _run(self, *, picked, signed_in, confirm=True, plan="plus"):
         from metasci_scribe.config.onboard import steps as onboard_steps
@@ -738,12 +628,6 @@ class TestStepOpenAIAuthMode:
             patch(
                 "metasci_scribe.config.onboard.steps._run_chatgpt_login"
             ) as mock_login,
-            patch(
-                "metasci_scribe.ccproxy_manager.is_ccproxy_available"
-            ) as mock_ccproxy,
-            patch(
-                "metasci_scribe.config.onboard.steps._prompt_ccproxy_port"
-            ) as mock_port,
             patch("metasci_scribe.config.onboard.steps.console") as mock_console,
         ):
             result = onboard_steps._step_openai_auth_mode(
@@ -755,8 +639,6 @@ class TestStepOpenAIAuthMode:
             "select": mock_select,
             "confirm": mock_confirm,
             "login": mock_login,
-            "ccproxy": mock_ccproxy,
-            "port": mock_port,
             "printed": printed,
         }
 
@@ -781,15 +663,13 @@ class TestStepOpenAIAuthMode:
         ]
         out["confirm"].assert_not_called()
 
-    def test_not_signed_in_offers_login_without_ccproxy(self):
+    def test_not_signed_in_offers_login(self):
         out = self._run(picked="oauth", signed_in=False, confirm=True)
 
         assert out["result"] == "oauth"
         assert out["confirm"].call_args.args[0] == "Log in to ChatGPT now?"
         assert out["confirm"].call_args.kwargs["default"] is True
         out["login"].assert_called_once_with()
-        out["ccproxy"].assert_not_called()
-        out["port"].assert_not_called()
         assert "Unofficial; OpenAI's terms apply." in out["printed"]
 
     def test_signed_in_shows_plan_and_offers_reauthentication(self):
@@ -940,7 +820,7 @@ class TestRunChatGPTLogin:
             monkeypatch.delenv(name, raising=False)
         for name, value in env.items():
             monkeypatch.setenv(name, value)
-        monkeypatch.setattr("metasci_scribe.deploy.launcher.sys.platform", platform)
+        monkeypatch.setattr(helpers.sys, "platform", platform)
 
         assert helpers._open_browser_here() is expected
 
@@ -1588,12 +1468,10 @@ class TestRunOnboard:
             mock_load.return_value = ScribeConfig()
 
             # Mock all questionary calls — order matches the wizard's select
-            # sequence: UI → Provider → Anthropic auth_mode → Model →
+            # sequence: Provider → Model →
             # Workspace → Thinking.
             mock_q.select.return_value.ask.side_effect = [
-                "tui",  # UI backend
                 "anthropic",  # Provider
-                "api_key",  # Anthropic auth mode (API key, not OAuth)
                 "claude-sonnet-4-6",  # Model
                 "skip",  # Auxiliary: Skip (single driver)
                 "daemon",  # Workspace mode
@@ -1622,8 +1500,7 @@ class TestRunOnboard:
         final_config = mock_save.call_args_list[-1].args[0]
         assert final_config.provider == "anthropic"
         assert final_config.model == "claude-sonnet-4-6"
-        assert final_config.anthropic_auth_mode == "api_key"
-        assert final_config.ui_backend == "tui"
+        assert final_config.ui_backend == "cli"
         assert final_config.default_mode == "daemon"
 
     def test_auxiliary_model_enabled_collects_provider_and_key(self):
@@ -1644,9 +1521,7 @@ class TestRunOnboard:
             mock_load.return_value = ScribeConfig()
 
             mock_q.select.return_value.ask.side_effect = [
-                "tui",  # UI backend
                 "anthropic",  # Provider
-                "api_key",  # Anthropic auth mode
                 "claude-sonnet-4-6",  # Model
                 "assemble",  # Auxiliary: Assemble
                 "openai",  # Auxiliary provider (a different company)
@@ -1729,9 +1604,6 @@ class TestRunOnboard:
             patch("metasci_scribe.config.onboard.wizard.console"),
             patch("metasci_scribe.config.onboard.steps.console"),
             patch("metasci_scribe.config.onboard.helpers.console"),
-            patch(
-                "metasci_scribe.ccproxy_manager.is_ccproxy_available", return_value=True
-            ),
         ):
             mock_load.return_value = ScribeConfig(
                 provider="openai",
@@ -1807,7 +1679,7 @@ class TestRunOnboard:
         mock_status.assert_called_once_with()
 
     def test_auxiliary_reconfigure_clears_unused_openai_oauth(self):
-        """Switching co-pilot away from OpenAI clears stale OpenAI OAuth mode."""
+        """Switching co-pilot away from OpenAI clears the stale ChatGPT sign-in mode."""
         from metasci_scribe.config.onboard.wizard import run_onboard
 
         mock_q = MagicMock()
@@ -1822,7 +1694,6 @@ class TestRunOnboard:
             mock_load.return_value = ScribeConfig(
                 provider="anthropic",
                 model="claude-sonnet-4-6",
-                anthropic_auth_mode="oauth",
                 auxiliary_provider="openai",
                 auxiliary_model="gpt-6-luna",
                 openai_auth_mode="oauth",
@@ -1846,7 +1717,6 @@ class TestRunOnboard:
         final_config = mock_save.call_args_list[-1].args[0]
         assert final_config.auxiliary_provider == "minimax"
         assert final_config.openai_auth_mode == "api_key"
-        assert final_config.anthropic_auth_mode == "oauth"
 
     def test_auxiliary_custom_provider_collects_base_url(self):
         """Regression for the custom-provider fix: a custom auxiliary provider
@@ -1927,9 +1797,7 @@ class TestRunOnboard:
             mock_load.return_value = ScribeConfig()
 
             mock_q.select.return_value.ask.side_effect = [
-                "tui",  # UI backend
                 "anthropic",  # Provider
-                "api_key",  # Anthropic auth mode
                 "claude-sonnet-4-6",  # Model
                 "skip",  # Auxiliary: Skip (single driver)
                 "daemon",  # Workspace mode
@@ -1997,9 +1865,7 @@ class TestRunOnboard:
             ):
                 mock_q.select.return_value.ask.side_effect = [
                     "reset",  # Keep/Modify/Reset → Reset
-                    "tui",
                     "anthropic",
-                    "api_key",
                     "claude-sonnet-4-6",
                     "skip",  # Auxiliary: Skip (single driver)
                     "daemon",
@@ -2046,9 +1912,7 @@ class TestRunOnboard:
             patch("metasci_scribe.config.onboard.wizard._step_tinytex"),
         ):
             mock_q.select.return_value.ask.side_effect = [
-                "tui",
                 "anthropic",
-                "api_key",
                 "claude-sonnet-4-6",
                 "skip",  # Auxiliary: Skip (single driver)
                 "daemon",

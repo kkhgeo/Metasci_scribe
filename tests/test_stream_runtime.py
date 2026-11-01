@@ -1,16 +1,13 @@
-"""Tests for UI backend runtime selection."""
+"""Tests for the streaming runtime shared by the interactive and single-shot CLI."""
 
 import asyncio
 import threading
 import time
-from dataclasses import dataclass
 
 import pytest
 
-from metasci_scribe.cli.tui_runtime import (
+from metasci_scribe.cli.stream_runtime import (
     StreamCancellationTimeout,
-    normalize_ui_backend,
-    resolve_ui_backend,
     run_streaming,
     run_streaming_async,
 )
@@ -18,92 +15,16 @@ from metasci_scribe.runtime import AsyncRuntimeError
 from tests.fakes.common import FakeGraphGateway
 
 
-def test_normalize_ui_backend_defaults_to_cli():
-    assert normalize_ui_backend(None) == "cli"
-    assert normalize_ui_backend("") == "cli"
-
-
-def test_normalize_ui_backend_accepts_known_values():
-    assert normalize_ui_backend("cli") == "cli"
-    assert normalize_ui_backend("tui") == "tui"
-    assert normalize_ui_backend("TUI") == "tui"
-
-
-def test_normalize_ui_backend_maps_legacy_values():
-    assert normalize_ui_backend("textual") == "tui"
-    assert normalize_ui_backend("Textual") == "tui"
-    assert normalize_ui_backend("rich") == "cli"
-    assert normalize_ui_backend("Rich") == "cli"
-
-
-def test_normalize_ui_backend_unknown_falls_back_to_cli():
-    assert normalize_ui_backend("unknown-ui") == "cli"
-
-
-def test_resolve_ui_backend_falls_back_when_textual_unavailable(monkeypatch):
-    monkeypatch.setattr(
-        "metasci_scribe.cli.tui_runtime._has_textual_support", lambda: False
-    )
-    assert resolve_ui_backend("tui") == "cli"
-
-
-def test_resolve_ui_backend_keeps_tui_when_available(monkeypatch):
-    monkeypatch.setattr(
-        "metasci_scribe.cli.tui_runtime._has_textual_support", lambda: True
-    )
-    assert resolve_ui_backend("tui") == "tui"
-
-
-@dataclass
-class _BrokenBackend:
-    name: str = "tui"
-
-    def run_streaming(self, **kwargs):
-        raise RuntimeError("boom")
-
-
-def test_run_streaming_falls_back_to_cli_on_runtime_error(monkeypatch):
-    monkeypatch.setattr(
-        "metasci_scribe.cli.tui_runtime.get_backend", lambda *a, **k: _BrokenBackend()
-    )
-
-    class _RichStub:
-        def run_streaming(self, **kwargs):
-            return "fallback-ok"
-
-    monkeypatch.setattr(
-        "metasci_scribe.cli.tui_runtime.RichStreamingBackend", lambda: _RichStub()
-    )
-
-    result = run_streaming(
-        ui_backend="tui",
-        agent=object(),
-        message="hello",
-        thread_id="t1",
-        show_thinking=False,
-        interactive=True,
-        gateway=FakeGraphGateway(),
-    )
-    assert result == "fallback-ok"
-
-
-@pytest.mark.parametrize("broken_first", [False, True], ids=["direct", "fallback"])
-def test_run_streaming_passes_the_starting_grant_to_the_loop(monkeypatch, broken_first):
-    """Both ways into the Rich loop hand it ``approve_all_at_start``."""
+def test_run_streaming_passes_the_starting_grant_to_the_loop(monkeypatch):
+    """The Rich loop gets ``approve_all_at_start``."""
     seen = {}
 
     def _loop(**kwargs):
         seen.update(kwargs)
         return "ok"
 
-    monkeypatch.setattr("metasci_scribe.cli.tui_backends._run_streaming", _loop)
-    if broken_first:
-        monkeypatch.setattr(
-            "metasci_scribe.cli.tui_runtime.get_backend",
-            lambda *a, **k: _BrokenBackend(),
-        )
+    monkeypatch.setattr("metasci_scribe.cli.stream_runtime._run_streaming", _loop)
     result = run_streaming(
-        ui_backend="tui" if broken_first else "cli",
         agent=object(),
         message="hello",
         thread_id="t1",
@@ -116,27 +37,14 @@ def test_run_streaming_passes_the_starting_grant_to_the_loop(monkeypatch, broken
     assert seen["approve_all_at_start"] is True
 
 
-def test_run_streaming_does_not_retry_on_owned_runtime_error(monkeypatch):
-    attempts = 0
+def test_run_streaming_lets_an_owned_runtime_error_through(monkeypatch):
+    def _loop(**kwargs):
+        raise AsyncRuntimeError("owned runtime failed")
 
-    class _RuntimeFailureBackend:
-        def run_streaming(self, **kwargs):
-            nonlocal attempts
-            attempts += 1
-            raise AsyncRuntimeError("owned runtime failed")
-
-    monkeypatch.setattr(
-        "metasci_scribe.cli.tui_runtime.get_backend",
-        lambda *a, **k: _RuntimeFailureBackend(),
-    )
-    monkeypatch.setattr(
-        "metasci_scribe.cli.tui_runtime.RichStreamingBackend",
-        lambda: _RuntimeFailureBackend(),
-    )
+    monkeypatch.setattr("metasci_scribe.cli.stream_runtime._run_streaming", _loop)
 
     with pytest.raises(AsyncRuntimeError, match="owned runtime failed"):
         run_streaming(
-            ui_backend="tui",
             agent=object(),
             message="hello",
             thread_id="t1",
@@ -144,8 +52,6 @@ def test_run_streaming_does_not_retry_on_owned_runtime_error(monkeypatch):
             interactive=True,
             gateway=FakeGraphGateway(),
         )
-
-    assert attempts == 1
 
 
 async def test_async_streaming_cancellation_stops_and_joins_worker(monkeypatch):
@@ -167,7 +73,7 @@ async def test_async_streaming_cancellation_stops_and_joins_worker(monkeypatch):
         return "stopped"
 
     monkeypatch.setattr(
-        "metasci_scribe.cli.tui_runtime.run_streaming", fake_run_streaming
+        "metasci_scribe.cli.stream_runtime.run_streaming", fake_run_streaming
     )
 
     task = asyncio.create_task(run_streaming_async(cancel_scope=scope))
@@ -203,7 +109,7 @@ async def test_async_streaming_can_recover_foreground_task_after_cancel(monkeypa
         cleanup_called = True
 
     monkeypatch.setattr(
-        "metasci_scribe.cli.tui_runtime.run_streaming", fake_run_streaming
+        "metasci_scribe.cli.stream_runtime.run_streaming", fake_run_streaming
     )
     monkeypatch.setattr(
         "metasci_scribe.middleware.code_interpreter.aclose_code_interpreters",
@@ -224,7 +130,7 @@ async def test_async_streaming_can_recover_foreground_task_after_cancel(monkeypa
 
 async def test_noncooperative_worker_reports_settlement_timeout(monkeypatch):
     """Cancellation timeout is an ordinary lifecycle error, not BaseException."""
-    from metasci_scribe.cli import tui_runtime
+    from metasci_scribe.cli import stream_runtime
     from metasci_scribe.stream.display import discard_stream_cancel
 
     scope = "test:async-renderer-timeout"
@@ -241,8 +147,8 @@ async def test_noncooperative_worker_reports_settlement_timeout(monkeypatch):
     async def fake_cleanup() -> None:
         return None
 
-    monkeypatch.setattr(tui_runtime, "run_streaming", fake_run_streaming)
-    monkeypatch.setattr(tui_runtime, "STREAM_CANCEL_SETTLE_TIMEOUT", 0.05)
+    monkeypatch.setattr(stream_runtime, "run_streaming", fake_run_streaming)
+    monkeypatch.setattr(stream_runtime, "STREAM_CANCEL_SETTLE_TIMEOUT", 0.05)
     monkeypatch.setattr(
         "metasci_scribe.middleware.code_interpreter.aclose_code_interpreters",
         fake_cleanup,

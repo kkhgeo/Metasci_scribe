@@ -65,7 +65,7 @@ def _cleared_env_name(name: str) -> bool:
 def pytest_runtest_protocol(item, nextitem):
     """Start every test without the developer's provider, Metasci Scribe,
     tracing and proxy settings, and undo whatever it writes to the
-    environment. Production code (``apply_config_to_env``, the ccproxy setup)
+    environment. Production code (``apply_config_to_env``)
     assigns ``os.environ`` directly, which monkeypatch cannot undo.
 
     A hook, not a fixture: it restores after every fixture, monkeypatch
@@ -112,7 +112,6 @@ def _no_network(monkeypatch):
     uvloop connects in C, past both patches; a test that installs it is not
     guarded.
     """
-    from metasci_scribe import update_check
     from metasci_scribe.langgraph_dev.sdk import DEFAULT_LANGGRAPH_DEV_PORT
 
     attempts: list[str] = []
@@ -149,8 +148,6 @@ def _no_network(monkeypatch):
     monkeypatch.setattr(socket.socket, "connect", connect)
     monkeypatch.setattr(socket.socket, "connect_ex", connect_ex)
     monkeypatch.setattr(BaseProactorEventLoop, "sock_connect", sock_connect)
-    # The TUI and CLI check PyPI for a newer release at start.
-    monkeypatch.setattr(update_check, "is_update_available", lambda: (False, None))
     yield
     assert not attempts, f"the test tried to reach the network: {attempts}"
 
@@ -360,8 +357,7 @@ def _isolate_user_dirs(tmp_path_factory, monkeypatch):
     setting ``METASCI_SCRIBE_DATA_DIR`` or ``XDG_CONFIG_HOME`` in a test does not
     move them; point them, and the copies taken at import, at fresh folders.
     """
-    from metasci_scribe import paths, update_check
-    from metasci_scribe.cli import tui_interactive
+    from metasci_scribe import paths
     from metasci_scribe.mcp import client as mcp_client
 
     # mktemp() lists the whole base folder, which gains a folder every test.
@@ -375,12 +371,9 @@ def _isolate_user_dirs(tmp_path_factory, monkeypatch):
     monkeypatch.setattr(paths, "GLOBAL_MEMORIES_DIR", data_dir / "memories")
     monkeypatch.setattr(paths, "MEMORIES_DIR", data_dir / "memories")
     monkeypatch.setattr(paths, "SERVER_HOME", data_dir / "server")
-    monkeypatch.setattr(tui_interactive, "DATA_DIR", data_dir)
     monkeypatch.setattr(paths, "CONFIG_DIR", config_dir)
     monkeypatch.setattr(mcp_client, "USER_CONFIG_DIR", config_dir)
     monkeypatch.setattr(mcp_client, "USER_MCP_CONFIG", config_dir / "mcp.yaml")
-    monkeypatch.setattr(update_check, "CACHE_DIR", config_dir)
-    monkeypatch.setattr(update_check, "CACHE_FILE", config_dir / "latest_version.json")
 
 
 @pytest.fixture(autouse=True)
@@ -397,20 +390,6 @@ def _no_agent_python_probe(monkeypatch):
     from metasci_scribe.setup import research_env
 
     monkeypatch.setattr(research_env, "_agent_python", lambda: (None, None))
-
-
-@pytest.fixture(autouse=True)
-def _no_uv_probes(monkeypatch):
-    """Keep uv lookups away from the real machine: no ``uv ... --help`` run
-    (a test's faked ``subprocess`` would record it), and no uv recorded in
-    the developer's data dir, only ``uv`` on PATH (a test's faked
-    ``shutil.which``). ``tests/test_uv_tool.py`` tests the real functions."""
-    import shutil
-
-    from metasci_scribe import uv_tool
-
-    monkeypatch.setattr(uv_tool, "_knows_system_certs", lambda uv: True)
-    monkeypatch.setattr(uv_tool, "find_uv", lambda: shutil.which("uv"))
 
 
 @pytest.fixture(autouse=True)

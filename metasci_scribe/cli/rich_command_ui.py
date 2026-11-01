@@ -131,7 +131,7 @@ class RichCLICommandUI(CommandUI):
         )
 
         from ..sessions import _format_relative_time
-        from .widgets.thread_selector import PICKER_STYLE, _build_items
+        from .picker import PICKER_STYLE, _build_items
 
         choices: list[Any] = []
         for item in _build_items(threads):

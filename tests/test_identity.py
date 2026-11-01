@@ -41,7 +41,6 @@ def test_env_prefix_replaced():
     ]
     assert not stray, stray
     ours = [v for v in values if v.startswith("METASCI_SCRIBE_")]
-    assert "METASCI_SCRIBE_ANTHROPIC_AUTH_MODE" in ours
     assert "METASCI_SCRIBE_OPENAI_AUTH_MODE" in ours
 
 

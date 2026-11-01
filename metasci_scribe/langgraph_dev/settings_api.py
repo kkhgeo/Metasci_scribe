@@ -65,7 +65,6 @@ READ_ONLY_FIELDS: frozenset[str] = frozenset(
         "auto_mode",
         "shell_allow_list",
         "langgraph_dev_host",
-        "webui_host",
         "backend_allowed_origins",
     }
 )
@@ -187,7 +186,7 @@ def config_sources(mapping: dict[str, Any]) -> dict[str, dict[str, Any]]:
     A mapped environment variable wins over the file. When our own code set
     it (see :func:`~metasci_scribe.config.settings.record_env_origin`), its
     recorded source is reported: ``file`` and ``default`` are copies, not
-    overrides; ``cli``, ``ccproxy`` and ``dotenv`` (with the ``.env`` path)
+    overrides; ``cli`` and ``dotenv`` (with the ``.env`` path)
     override the saved value, so ``shadowed`` is true. A variable our code
     did not set is the user's: ``env``, shadowed. Without a variable, the
     source is ``file`` when the file holds the field, else ``default``.
@@ -261,7 +260,7 @@ def setup_needed(config: ScribeConfig) -> bool:
     """Whether the selected provider cannot run with this configuration.
 
     Follows the runtime: a key from the environment or a ``.env`` counts,
-    Ollama needs no key, OAuth mode needs none, and only the custom
+    Ollama needs no key, ChatGPT sign-in needs none, and only the custom
     endpoints need a base URL (the others have a default address).
     """
     spec = PROVIDERS.get(config.provider)
@@ -271,9 +270,7 @@ def setup_needed(config: ScribeConfig) -> bool:
         return True
     if not spec.needs_key:
         return False
-    if (config.provider == "anthropic" and config.anthropic_auth_mode == "oauth") or (
-        config.provider == "openai" and config.openai_auth_mode == "oauth"
-    ):
+    if config.provider == "openai" and config.openai_auth_mode == "oauth":
         return False
     return not getattr(config, spec.key_field or "", "")
 

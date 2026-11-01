@@ -363,7 +363,7 @@ def _apply_auto_config(
     # Anthropic: extended thinking
     if provider == "anthropic" and "thinking" not in kwargs:
         _supports_thinking = original_provider in _THINKING_CAPABLE_PROVIDERS
-        # Detect local proxy (e.g. ccproxy): thinking blocks in conversation
+        # Detect a local proxy: thinking blocks in conversation
         # history cause 422 errors because the proxy doesn't accept 'thinking'
         # as a valid content block type on round-trip.
         if not is_third_party:
@@ -483,7 +483,7 @@ def get_chat_model(
             f"full vendor/model ID as {provider} lists it."
         )
 
-    # Anthropic base_url override (e.g. ccproxy at localhost:8000/api/v1)
+    # Anthropic base_url override (e.g. a local Anthropic-compatible proxy)
     _is_third_party = (
         provider in _OPENAI_ROUTED_PROVIDERS or provider in _ANTHROPIC_ROUTED_PROVIDERS
     )

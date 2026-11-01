@@ -78,11 +78,6 @@ class Workspace:
         return self.root / "runs"
 
     @property
-    def media_dir(self) -> Path:
-        """Where channels store inbound attachments (``<root>/media``)."""
-        return self.root / "media"
-
-    @property
     def key(self) -> str:
         """Stable string form for storage and comparison (POSIX separators)."""
         return self.root.as_posix()

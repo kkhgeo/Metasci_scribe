@@ -40,7 +40,6 @@ from metasci_scribe.memory.agents import (
 )
 from metasci_scribe.memory.types import MemorySourceType
 from metasci_scribe.paths import process_session_dirs
-from metasci_scribe.proactive.graph import build_proactive_graph
 from metasci_scribe.subagents._factory import build_async_subagent_graph
 from metasci_scribe.subagents.expert_container_async import (
     build_expert_container_async_graph,
@@ -93,9 +92,4 @@ evomemory_observation_linker = folder_checked(
 )
 evomemory_autoskills = folder_checked(
     build_autoskills_graph(workspace=_workspace), graph_id="evomemory-autoskills"
-)
-# Proactive pushes (#263): one tick of the workspace's proactive cron. It works
-# in no folder, so it is checked against the workspace only.
-proactive = folder_checked(
-    build_proactive_graph(workspace=_workspace), graph_id="proactive"
 )

@@ -46,7 +46,6 @@ class TestWorkspace:
         assert ws.root == root
         assert ws.skills_dir == root / "skills"
         assert ws.runs_dir == root / "runs"
-        assert ws.media_dir == root / "media"
 
     def test_accepts_string_path(self, tmp_path):
         assert Workspace(str(tmp_path)).root == tmp_path.resolve()
@@ -98,11 +97,9 @@ class TestWorkspace:
         """The per-workspace folders always derive from the root."""
         monkeypatch.setenv("METASCI_SCRIBE_SKILLS_DIR", str(tmp_path / "s"))
         monkeypatch.setenv("METASCI_SCRIBE_RUNS_DIR", str(tmp_path / "r"))
-        monkeypatch.setenv("METASCI_SCRIBE_MEDIA_DIR", str(tmp_path / "m"))
         ws = Workspace(tmp_path / "proj")
         assert ws.skills_dir == ws.root / "skills"
         assert ws.runs_dir == ws.root / "runs"
-        assert ws.media_dir == ws.root / "media"
 
 
 class TestNormalizePath:

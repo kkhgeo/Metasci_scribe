@@ -274,9 +274,6 @@ class TestValidateSetting:
             ("sandbox_execute_timeout", 0, "greater than 0"),
             ("sandbox_execute_timeout", True, "expected a number"),
             ("memory_skill_synthesis_time", "25:00", "HH:MM"),
-            ("proactive_idle_minutes", -1, "0 or more"),
-            ("proactive_quiet_hours", "late", "HH:MM-HH:MM"),
-            ("proactive_timezone", "Mars/Olympus", "unknown time zone"),
         ],
     )
     def test_existing_checks_still_apply(self, key, value, reason):

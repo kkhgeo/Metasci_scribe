@@ -43,8 +43,6 @@ FIELD_CHANNELS: dict[str, str] = {
     "default_mode": "client-side startup mode selection",
     "default_workdir": "client-side run-dir selection; workspace reaches the"
     " server via GraphTarget / METASCI_SCRIBE_WORKSPACE_DIR",
-    "webui_port": "WebUI client process",
-    "webui_host": "WebUI client process",
     "langgraph_dev_keepalive": "server lifecycle flag consumed at spawn time,"
     " not by graph construction",
     "shell_allow_list": "per-call client-side approval policy, read fresh at"

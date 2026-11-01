@@ -1,7 +1,5 @@
 """Tests for Rich streaming display helpers."""
 
-from typing import Any, cast
-
 from rich.console import Console
 from rich.markdown import Markdown
 
@@ -569,48 +567,3 @@ class TestFixMarkdownHeadingSpacing:
         src = "```c\n###define X 1\n```"
         # Currently DOES alter the line inside the fence.
         assert _fix_markdown_heading_spacing(src) == "```c\n### define X 1\n```"
-
-
-class TestAssistantMessageBufferContract:
-    """Regression guard: ``AssistantMessage`` flush/mount must apply the
-    heading fix to a display copy and leave ``self._content`` untouched.
-    """
-
-    def _make_widget(self, initial: str = ""):
-        from unittest.mock import MagicMock
-
-        from metasci_scribe.cli.widgets.assistant_message import AssistantMessage
-
-        msg = AssistantMessage(initial_content=initial)
-        fake_md = MagicMock()
-        cast(Any, msg).query_one = MagicMock(return_value=fake_md)
-        return msg, fake_md
-
-    def test_flush_markdown_does_not_mutate_buffer(self):
-        msg, fake_md = self._make_widget()
-        msg._content = "###Foo\n##Bar"
-
-        msg._flush_markdown()
-
-        # Raw streaming buffer is preserved verbatim.
-        assert msg._content == "###Foo\n##Bar"
-        # The Textual Markdown widget receives the fixed display copy.
-        fake_md.update.assert_called_once_with("### Foo\n## Bar")
-        # Flush latch is cleared.
-        assert msg._flush_pending is False
-
-    def test_on_mount_does_not_mutate_initial_content(self):
-        msg, fake_md = self._make_widget(initial="###Hello")
-
-        msg.on_mount()
-
-        assert msg._content == "###Hello"
-        fake_md.update.assert_called_once_with("### Hello")
-
-    def test_on_mount_no_op_when_initial_empty(self):
-        msg, fake_md = self._make_widget(initial="")
-
-        msg.on_mount()
-
-        assert msg._content == ""
-        fake_md.update.assert_not_called()

@@ -106,7 +106,7 @@ def setup_hint() -> str | None:
 
     Names what is missing: a usable ``python`` (any OS), Git Bash (Windows),
     or both, which one ``metasci-scribe setup`` fixes. For callers that show it
-    themselves (the TUI, ``metasci-scribe deploy``); not logged here.
+    themselves (the interactive CLI); not logged here.
     """
     from .setup.research_env import agent_python
 

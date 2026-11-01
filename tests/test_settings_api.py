@@ -207,12 +207,17 @@ class TestSetupNeeded:
         config_file.write_text("provider: ollama\n", encoding="utf-8")
         assert server.get("/api/settings").json()["setup_needed"] is False
 
-    @pytest.mark.parametrize("provider", ["anthropic", "openai"])
-    def test_oauth(self, server, config_file, provider):
+    def test_chatgpt_sign_in(self, server, config_file):
         config_file.write_text(
-            f"provider: {provider}\n{provider}_auth_mode: oauth\n", encoding="utf-8"
+            "provider: openai\nopenai_auth_mode: oauth\n", encoding="utf-8"
         )
         assert server.get("/api/settings").json()["setup_needed"] is False
+
+    def test_anthropic_has_no_sign_in_route(self, server, config_file):
+        config_file.write_text(
+            "provider: anthropic\nanthropic_auth_mode: oauth\n", encoding="utf-8"
+        )
+        assert server.get("/api/settings").json()["setup_needed"] is True
 
     def test_custom_endpoint_needs_a_base_url(self, server, config_file):
         config_file.write_text(

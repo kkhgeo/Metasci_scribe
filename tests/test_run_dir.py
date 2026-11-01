@@ -21,7 +21,7 @@ import pytest
 
 from metasci_scribe.gateway.server import _build_thread_metadata
 from metasci_scribe.langgraph_dev import manager
-from metasci_scribe.paths import SessionDirs, Workspace, file_tool_path
+from metasci_scribe.paths import SessionDirs, Workspace
 from tests.fakes.common import FakeGraphGateway, FakeThreadStore
 
 TS_RUN = "20260930_120000"
@@ -53,7 +53,7 @@ def test_server_thread_metadata_carries_run_dir_only_when_set(run_dirs):
 
 
 def test_picker_groups_run_threads_under_their_run_folder(workspace):
-    from metasci_scribe.cli.widgets.thread_selector import _build_items
+    from metasci_scribe.cli.picker import _build_items
 
     run = workspace.runs_dir / TS_RUN
     threads = [
@@ -77,7 +77,7 @@ def test_picker_shortens_windows_style_home(monkeypatch):
     """Stored folders are POSIX on every platform; the home prefix must match."""
     import os
 
-    from metasci_scribe.cli.widgets.thread_selector import _normalize_path
+    from metasci_scribe.cli.picker import _normalize_path
 
     monkeypatch.setattr(
         os.path, "expanduser", lambda p: "C:\\Users\\x" if p == "~" else p
@@ -640,200 +640,3 @@ def test_server_stamps_root_graph_rows_without_run_dir(run_dirs, monkeypatch, gr
 
     assert stamped["workspace_dir"] == run_dirs.workspace.key
     assert "run_dir" not in stamped
-
-
-# ---------------------------------------------------------------------------
-# Channel media from a run folder
-# ---------------------------------------------------------------------------
-
-
-def _print_file_cmd(path: Path) -> str:
-    """Cross-platform command that prints the file at *path*."""
-    return f"type {path}" if sys.platform == "win32" else f"cat {path}"
-
-
-@pytest.fixture
-def media_file(workspace) -> Path:
-    workspace.media_dir.mkdir(parents=True)
-    path = workspace.media_dir / "paper.pdf"
-    path.write_text("attachment")
-    return path
-
-
-@pytest.fixture
-def _plain_config(monkeypatch):
-    import metasci_scribe.agent as evo
-
-    monkeypatch.setattr(
-        evo,
-        "_ensure_config",
-        lambda *_a: SimpleNamespace(sandbox_execute_timeout=30, dangerous_mode=False),
-    )
-
-
-@pytest.mark.usefixtures("_plain_config")
-def test_daemon_sandbox_mounts_nothing_extra(workspace, media_file):
-    from metasci_scribe.agent import _get_default_backend
-
-    backend = _get_default_backend(workspace)
-    assert backend.default._media_dir is None
-    assert backend.read(str(media_file)).error is None
-
-
-@pytest.mark.usefixtures("_plain_config")
-def test_run_mode_sandbox_reaches_channel_media(run_dirs, media_file):
-    from metasci_scribe.agent import _get_default_backend
-
-    run_dirs.run_dir.mkdir(parents=True)
-    backend = _get_default_backend(run_dirs.workspace, work_dir=run_dirs.work_dir)
-
-    assert backend.read(str(media_file)).error is None
-    assert backend.execute(_print_file_cmd(media_file)).output.strip() == "attachment"
-
-
-@pytest.mark.usefixtures("_plain_config")
-def test_run_mode_reaches_media_through_a_symlinked_folder(run_dirs):
-    """Channels reference attachments through ``<root>/media`` even when that
-    folder is a symlink."""
-    from metasci_scribe.agent import _get_default_backend
-
-    uploads = run_dirs.workspace.root / "uploads"
-    uploads.mkdir(parents=True)
-    (uploads / "paper.pdf").write_text("attachment")
-    run_dirs.workspace.media_dir.symlink_to(uploads, target_is_directory=True)
-    run_dirs.run_dir.mkdir(parents=True)
-    backend = _get_default_backend(run_dirs.workspace, work_dir=run_dirs.work_dir)
-    referenced = run_dirs.workspace.media_dir / "paper.pdf"
-
-    assert backend.read(str(referenced)).error is None
-    assert backend.execute(_print_file_cmd(referenced)).output.strip() == "attachment"
-    assert backend.write(str(run_dirs.workspace.media_dir / "new.pdf"), "x").error
-    # The resolved spelling (what ``ls -l`` or ``realpath`` would show) works
-    # for the file tools and for commands alike.
-    resolved = uploads / "paper.pdf"
-    assert backend.read(str(resolved)).error is None
-    assert backend.execute(_print_file_cmd(resolved)).output.strip() == "attachment"
-
-
-@pytest.mark.usefixtures("_plain_config")
-def test_run_mode_file_tools_cannot_change_channel_media(run_dirs, media_file):
-    """Attachments are shared by the workspace; a run writes in its own folder,
-    including its own ``/media``."""
-    from metasci_scribe.agent import _get_default_backend
-
-    run_dirs.run_dir.mkdir(parents=True)
-    backend = _get_default_backend(run_dirs.workspace, work_dir=run_dirs.work_dir)
-
-    assert backend.write(str(run_dirs.workspace.media_dir / "new.pdf"), "x").error
-    assert backend.edit(str(media_file), "attachment", "changed").error
-    assert backend.delete(str(media_file)).error
-    assert media_file.read_text() == "attachment"
-    assert not (run_dirs.workspace.media_dir / "new.pdf").exists()
-
-    assert backend.write("/media/plot.png", "x").error is None
-    assert (run_dirs.run_dir / "media" / "plot.png").exists()
-
-
-@pytest.mark.usefixtures("_plain_config")
-def test_run_mode_media_mount_does_not_open_the_rest_of_the_workspace(
-    run_dirs, media_file
-):
-    from metasci_scribe.agent import _get_default_backend
-
-    run_dirs.run_dir.mkdir(parents=True)
-    (run_dirs.workspace.root / "secret.txt").write_text("no")
-    backend = _get_default_backend(run_dirs.workspace, work_dir=run_dirs.work_dir)
-
-    # Refused as a read error the agent can act on, not as a traceback.
-    result = backend.read(f"{run_dirs.workspace.media_dir}/../secret.txt")
-    assert result.error is not None
-    assert result.file_data is None
-
-
-def _tool_path(path: Path) -> str:
-    """*path* as the ``ls``/``glob``/``grep`` tools hand it to the backend."""
-    from deepagents.backends.utils import validate_path
-
-    return validate_path(file_tool_path(path))
-
-
-@pytest.mark.usefixtures("_plain_config")
-@pytest.mark.parametrize("mode", ["daemon", "run"])
-async def test_channel_attachment_reference_reaches_file_tools(
-    run_dirs, media_file, mode
-):
-    from base64 import b64decode
-
-    from deepagents.backends.utils import validate_path
-
-    from metasci_scribe.agent import _get_default_backend
-    from metasci_scribe.stream.events import build_agent_stream_input
-
-    work_dir = run_dirs.work_dir if mode == "run" else run_dirs.workspace.root
-    work_dir.mkdir(parents=True, exist_ok=True)
-    backend = _get_default_backend(run_dirs.workspace, work_dir=work_dir)
-    request = await build_agent_stream_input("Read the paper", media=[str(media_file)])
-    reference = request["messages"][0]["content"][-1]["text"]
-    tool_path = reference.split("path: ", 1)[1].split(";", 1)[0]
-
-    result = backend.read(validate_path(tool_path))
-    assert result.error is None
-    assert b64decode(result.file_data["content"]) == b"attachment"
-
-
-@pytest.mark.usefixtures("_plain_config")
-def test_run_mode_file_tools_list_channel_media(run_dirs, media_file):
-    """An agent finds attachments by listing or searching ``<root>/media``."""
-    from metasci_scribe.agent import _get_default_backend
-
-    run_dirs.run_dir.mkdir(parents=True)
-    backend = _get_default_backend(run_dirs.workspace, work_dir=run_dirs.work_dir)
-    media = _tool_path(run_dirs.workspace.media_dir)
-
-    listed = [entry["path"] for entry in backend.ls(media).entries]
-    globbed = [match["path"] for match in backend.glob("*.pdf", media).matches]
-    grepped = [match["path"] for match in backend.grep("attachment", media).matches]
-    assert listed == globbed == grepped == [file_tool_path(media_file)]
-    assert backend.read(listed[0]).error is None
-
-
-@pytest.mark.usefixtures("_plain_config")
-@pytest.mark.parametrize("folder", ["media", "uploads"])
-def test_run_mode_lists_media_through_symlinked_folder(run_dirs, folder):
-    """Either spelling of a symlinked media folder lists the attachments
-    under the path channels reference them by."""
-    from metasci_scribe.agent import _get_default_backend
-
-    uploads = run_dirs.workspace.root / "uploads"
-    uploads.mkdir(parents=True)
-    (uploads / "paper.pdf").write_text("attachment")
-    run_dirs.workspace.media_dir.symlink_to(uploads, target_is_directory=True)
-    run_dirs.run_dir.mkdir(parents=True)
-    backend = _get_default_backend(run_dirs.workspace, work_dir=run_dirs.work_dir)
-    listed = _tool_path(run_dirs.workspace.root / folder)
-
-    referenced = file_tool_path(run_dirs.workspace.media_dir / "paper.pdf")
-    assert [entry["path"] for entry in backend.ls(listed).entries] == [referenced]
-    assert [m["path"] for m in backend.glob("*.pdf", listed).matches] == [referenced]
-
-
-@pytest.mark.usefixtures("_plain_config")
-def test_run_mode_media_listing_stays_inside_media_folder(run_dirs, media_file):
-    from metasci_scribe.agent import _get_default_backend
-
-    root = run_dirs.workspace.root
-    (root / "secret.txt").write_text("attachment")
-    (root / "media" / "leak.txt").symlink_to(root / "secret.txt")
-    (root / "media" / "root").symlink_to(root, target_is_directory=True)
-    run_dirs.run_dir.mkdir(parents=True)
-    backend = _get_default_backend(run_dirs.workspace, work_dir=run_dirs.work_dir)
-    media = _tool_path(run_dirs.workspace.media_dir)
-
-    expected = [file_tool_path(media_file)]
-    assert [entry["path"] for entry in backend.ls(media).entries] == expected
-    assert [match["path"] for match in backend.glob("*", media).matches] == expected
-    matches = backend.grep("attachment", media).matches
-    assert [match["path"] for match in matches] == expected
-    linked = backend.ls(_tool_path(run_dirs.workspace.media_dir / "root"))
-    assert linked.error is not None
-    assert linked.entries is None

@@ -1487,7 +1487,7 @@ def _prompt_hitl_approval(
 
     import questionary  # type: ignore[import-untyped]
 
-    from ..cli.widgets.thread_selector import PICKER_STYLE as _PICKER_STYLE
+    from ..cli.picker import PICKER_STYLE as _PICKER_STYLE
 
     console.print()
     panel_text = Text()
@@ -1561,7 +1561,7 @@ def _resolve_ask_user_prompt(
     """
     import questionary  # type: ignore[import-untyped]
 
-    from ..cli.widgets.thread_selector import PICKER_STYLE as _PICKER_STYLE
+    from ..cli.picker import PICKER_STYLE as _PICKER_STYLE
 
     questions = ask_user_data.get("questions", [])
     if not questions:

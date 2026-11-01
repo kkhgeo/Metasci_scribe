@@ -592,35 +592,6 @@ class TestRichCLIPrompt:
 
 
 # ---------------------------------------------------------------------------
-# TUI widget (basic construction)
-# ---------------------------------------------------------------------------
-
-
-class TestAskUserWidget:
-    """Test AskUserWidget basic construction."""
-
-    def test_widget_instantiation(self):
-        from metasci_scribe.cli.widgets.ask_user_widget import AskUserWidget
-
-        questions = [{"question": "Q?", "type": "text"}]
-        w = AskUserWidget(questions)
-        assert w._questions == questions
-        assert w._answers == []
-
-    def test_answered_message_class_exists(self):
-        from metasci_scribe.cli.widgets.ask_user_widget import AskUserWidget
-
-        msg = AskUserWidget.Answered(["answer1"])
-        assert msg.answers == ["answer1"]
-
-    def test_cancelled_message_class_exists(self):
-        from metasci_scribe.cli.widgets.ask_user_widget import AskUserWidget
-
-        msg = AskUserWidget.Cancelled()
-        assert isinstance(msg, AskUserWidget.Cancelled)
-
-
-# ---------------------------------------------------------------------------
 # Middleware __init__ exports
 # ---------------------------------------------------------------------------
 

@@ -35,21 +35,6 @@ async def test_posix_attachment_reference_unchanged():
     assert "shell path:" not in reference
 
 
-@pytest.mark.parametrize(
-    "key", ["/C:/project/media/paper.pdf", "/c:/project/media/paper.pdf"]
-)
-def test_windows_file_tool_alias_reaches_media_folder(monkeypatch, key):
-    # Exercise Windows path semantics without replacing the process-wide os.name.
-    monkeypatch.setattr(paths, "os", SimpleNamespace(name="nt"))
-    monkeypatch.setattr(backends, "Path", PureWindowsPath)
-    backend = object.__new__(backends.CustomSandboxBackend)
-    backend._media_dir = PureWindowsPath("C:/project/media")
-    backend._media_real = backend._media_dir
-
-    assert backend._media_relative(validate_path(key)) == PureWindowsPath("paper.pdf")
-    assert backend._media_relative("/C:/project/media-other/paper.pdf") is None
-
-
 @pytest.mark.parametrize("dangerous", [False, True])
 @pytest.mark.parametrize("drive", ["C", "c"])
 def test_windows_file_tool_alias_resolves_working_directory(
@@ -62,7 +47,6 @@ def test_windows_file_tool_alias_resolves_working_directory(
     )
     backend = object.__new__(backends.CustomSandboxBackend)
     backend._dangerous = dangerous
-    backend._media_dir = None
     backend.cwd = PureWindowsPath("C:/project")
 
     expected = f"{drive}:/project/paper.pdf" if dangerous else "/paper.pdf"
@@ -195,7 +179,6 @@ async def test_query_preserves_posix_and_virtual_paths(
     )
     backend = object.__new__(backends.CustomSandboxBackend)
     backend._dangerous = dangerous
-    backend._media_dir = None
 
     assert await _query(backend, tool, False, "/project") is result
     assert asdict(result) == expected

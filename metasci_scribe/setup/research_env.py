@@ -729,7 +729,7 @@ def python_drift_message(sidecar: dict) -> str | None:
     """A warning when a reused server's agents run another ``python`` than ours.
 
     The server's backends fix the agent shell's ``python`` when it starts, so
-    after a reuse its agents (async sub-agents, and the WebUI's main agent)
+    after a reuse its agents (async sub-agents)
     keep it. None when both match, or when the sidecar has no record (a
     server started by an older version).
     """

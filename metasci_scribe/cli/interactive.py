@@ -9,7 +9,6 @@ import threading
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
-from functools import partial
 from typing import TYPE_CHECKING, Any
 
 import typer  # type: ignore[import-untyped]
@@ -79,10 +78,8 @@ from .status_bar import (
     make_empty_status_snapshot,
     make_usage_status_snapshot,
 )
-from .tui_interactive import run_textual_interactive
-from .tui_runtime import (
+from .stream_runtime import (
     StreamCancellationTimeout,
-    resolve_ui_backend,
     run_streaming,
     run_streaming_async,
 )
@@ -128,7 +125,6 @@ def print_banner(
     mode: str | None = None,
     model: str | None = None,
     provider: str | None = None,
-    ui_backend: str | None = None,
 ):
     """Print welcome banner with ASCII art logo, info line, and hint."""
     for line, color in zip(LOGO_LINES, LOGO_GRADIENT, strict=False):
@@ -142,8 +138,6 @@ def print_banner(
         parts.append(("Provider: ", provider))
     if mode:
         parts.append(("Mode: ", mode))
-    if ui_backend:
-        parts.append(("UI: ", ui_backend))
     for i, (label, value) in enumerate(parts):
         if i > 0:
             info.append("  ", style="dim")
@@ -420,7 +414,6 @@ def cmd_interactive(
     provider: str | None = None,
     run_name: str | None = None,
     thread_id: str | None = None,
-    ui_backend: str = "cli",
     config=None,
     async_runtime: "AsyncRuntime | None" = None,
     *,
@@ -438,32 +431,9 @@ def cmd_interactive(
         provider: LLM provider name to display in banner
         run_name: Optional run name for /new session deduplication
         thread_id: Optional thread ID to resume a previous session
-        ui_backend: UI backend ('cli' or 'tui')
         dirs: The session's workspace, and its run folder under
             ``--mode=run`` (``/new`` then moves to a fresh run folder)
     """
-    resolved_ui_backend = resolve_ui_backend(ui_backend, warn_fallback=True)
-    if resolved_ui_backend == "tui":
-        load_agent = partial(
-            _load_agent,
-            config=config,
-            runtime=async_runtime,
-        )
-        run_textual_interactive(
-            show_thinking=show_thinking,
-            dirs=dirs,
-            mode=mode,
-            model=model,
-            provider=provider,
-            run_name=run_name,
-            thread_id=thread_id,
-            load_agent=load_agent,
-            create_run_dir=_create_run_dir,
-            config=config,
-            async_runtime=async_runtime,
-        )
-        return
-
     from ..config import GatewaySurface, resolve_gateway_backend
     from .commands import warn_server_backend_hitl_caveats
 
@@ -573,7 +543,6 @@ def cmd_interactive(
         "dirs": dirs,
         "running": True,
         "resumed": False,
-        "ui_backend": resolved_ui_backend,
         "status_started_at": datetime.now(),
         "status_base_snapshot": make_empty_status_snapshot(model),
         "status_snapshot": make_empty_status_snapshot(model),
@@ -984,7 +953,6 @@ def cmd_interactive(
                     mode,
                     model,
                     provider,
-                    state["ui_backend"],
                 )
                 console.print(
                     f"[green]Resumed session [yellow]{state['thread_id']}[/yellow][/green]\n"
@@ -998,7 +966,6 @@ def cmd_interactive(
                     mode,
                     model,
                     provider,
-                    state["ui_backend"],
                 )
             _print_pending_skill_proposals_notice()
 
@@ -1027,7 +994,6 @@ def cmd_interactive(
                 await _refresh_status_snapshot(text, reset_streaming_text=True)
                 ready_agent = await _await_agent_ready()
                 await run_streaming_async(
-                    ui_backend=state["ui_backend"],
                     agent=ready_agent,
                     message=text,
                     # Falls back to live state["thread_id"] if no override is
@@ -1177,30 +1143,6 @@ def cmd_interactive(
                 )
             )
 
-            # Update check — non-blocking, runs in background thread
-            import concurrent.futures
-
-            _update_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-
-            def _show_update_hint() -> None:
-                try:
-                    from ..update_check import _installed_version, is_update_available
-
-                    available, latest = is_update_available()
-                    if available:
-                        current = _installed_version()
-                        console.print(
-                            Text(
-                                f"  Update available: v{latest} (current: v{current}).\n"
-                                "  Run: metasci-scribe update",
-                                style="yellow",
-                            )
-                        )
-                except Exception:
-                    pass
-
-            _update_executor.submit(_show_update_hint)
-
             async def _run_prompt_turn(
                 message_to_send: str, *, goal_request: dict[str, Any] | None = None
             ) -> None:
@@ -1221,7 +1163,6 @@ def cmd_interactive(
                         turn_lock,
                         lambda _agent=ready_agent, _message=message_to_send, _thread_id=turn_thread_id, _meta=meta, _extra=turn_extra, _goal=goal_request: (
                             _run_rich_cli_streaming_turn(
-                                ui_backend=state["ui_backend"],
                                 agent=_agent,
                                 message=_message,
                                 thread_id=_thread_id,
@@ -1477,7 +1418,6 @@ def cmd_run(
     thread_id: str,
     show_thinking: bool = True,
     model: str | None = None,
-    ui_backend: str = "cli",
     *,
     dirs: SessionDirs,
     runtime_gateways: RuntimeGateways,
@@ -1493,7 +1433,6 @@ def cmd_run(
         show_thinking: Whether to display thinking panels
         dirs: The session's workspace and run folder
         model: Model name for checkpoint metadata
-        ui_backend: UI backend ('cli' or 'tui')
         rubric: Acceptance criteria this run is graded against.
 
     Returns:
@@ -1516,7 +1455,6 @@ def cmd_run(
     meta = build_metadata(dirs, model)
     try:
         run_streaming(
-            ui_backend=resolve_ui_backend(ui_backend, warn_fallback=True),
             agent=agent,
             message=prompt,
             thread_id=thread_id,

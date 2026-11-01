@@ -1,6 +1,5 @@
 """Custom backends for Metasci Scribe agent."""
 
-import errno
 import os
 import posixpath
 import re
@@ -11,7 +10,6 @@ import sys
 import threading
 import time
 import uuid
-from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -405,8 +403,8 @@ def is_hitl_suppressed(config=None) -> bool:
     Reads :data:`HITL_SUPPRESSED_KEY` off an explicit *config* (the run's
     ``RunnableConfig`` dict) or, when omitted, the ambient
     ``langgraph.config.get_config()``. The key is written only by the two
-    Python gateways; a run that reached langgraph dev directly (WebUI,
-    ``metasci-scribe deploy`` SDK clients, LangSmith Studio) never carries it, so when
+    Python gateways; a run that reached langgraph dev directly (SDK
+    clients, LangSmith Studio) never carries it, so when
     it is absent we fall back to the serving process's ``auto_approve`` — this
     restores the base behaviour for those clients (a file/env ``auto_approve``
     deployment runs unattended instead of parking on an interrupt nothing
@@ -1298,7 +1296,6 @@ def _platform_quote(s: str) -> str:
 def _resolve_virtual_mount_path(
     token: str,
     skills_dir: str | Path | None = None,
-    media_dirs: tuple[Path, ...] = (),
 ) -> str | None:
     """Resolve a virtual mount token to a shell-safe token, or ``None`` when
     *token* is not a registered virtual mount.
@@ -1314,11 +1311,6 @@ def _resolve_virtual_mount_path(
     For ``/memories/...``: single tier (``paths.MEMORIES_DIR``), always
     absolute and :func:`_platform_quote`-wrapped. Memories live outside the
     workspace, so a relative form would point at an unrelated location.
-
-    ``media_dirs`` are set when the sandbox works in a ``--mode=run`` folder,
-    outside the workspace's ``media/``: the folder as configured (how channel
-    attachments are referenced) and its resolved target, both kept as they
-    are.
 
     On Windows a ``/C:/...`` file-tool alias becomes the drive path the shell
     takes.
@@ -1341,12 +1333,6 @@ def _resolve_virtual_mount_path(
     if rel is not None:
         return _platform_quote(str(Path(paths.MEMORIES_DIR) / rel))
 
-    if any(
-        _subpath_under_mount(token, media.as_posix()) is not None
-        for media in media_dirs
-    ):
-        return _platform_quote(token)
-
     return None
 
 
@@ -1362,7 +1348,6 @@ def _rewrite_quoted_path(
     path: str,
     workspace_name: str | None,
     skills_dir: str | Path | None = None,
-    media_dirs: tuple[Path, ...] = (),
 ) -> str | None:
     """Return the shell-quoted replacement for *path* (the decoded
     content of a quoted ``"..."`` or ``'...'`` argument),
@@ -1373,7 +1358,7 @@ def _rewrite_quoted_path(
     if not path.startswith("/"):
         return None
 
-    resolved = _resolve_virtual_mount_path(path, skills_dir, media_dirs)
+    resolved = _resolve_virtual_mount_path(path, skills_dir)
     if resolved is not None:
         return _guard_bare_absolute(resolved)  # already shlex.quoted
 
@@ -1399,7 +1384,6 @@ def convert_virtual_paths_in_command(
     command: str,
     workspace_name: str | None = None,
     skills_dir: str | Path | None = None,
-    media_dirs: tuple[Path, ...] = (),
 ) -> str:
     """Convert virtual paths (starting with ``/``) in commands to relative paths.
 
@@ -1423,7 +1407,6 @@ def convert_virtual_paths_in_command(
                 re.sub(r"\\(.)", r"\1", m.group(2)),
                 workspace_name,
                 skills_dir,
-                media_dirs,
             )
             or m.group(0)
         ),
@@ -1437,7 +1420,7 @@ def convert_virtual_paths_in_command(
         if "://" in command[max(0, match.start() - 10) : match.end() + 10]:
             return path
 
-        resolved = _resolve_virtual_mount_path(path, skills_dir, media_dirs)
+        resolved = _resolve_virtual_mount_path(path, skills_dir)
         if resolved is not None:
             return resolved
 
@@ -1779,7 +1762,6 @@ def prepare_sandbox_command(
     dangerous: bool = False,
     guard_dangerous: bool = False,
     skills_dir: str | Path | None = None,
-    media_dir: str | Path | None = None,
 ) -> tuple[str, str | None]:
     """Normalize workspace paths in ``command`` and validate it for the sandbox.
 
@@ -1816,18 +1798,11 @@ def prepare_sandbox_command(
         ws = cwd_str + "/"
         if ws in command:
             command = command.replace(ws, "./")
-    # The media folder as configured and as resolved: the file tools accept
-    # both spellings, so commands do too.
-    media_dirs: tuple[Path, ...] = ()
-    if media_dir is not None:
-        configured = Path(media_dir)
-        media_dirs = tuple(dict.fromkeys((configured, configured.resolve())))
     if virtual_mode:
         command = convert_virtual_paths_in_command(
             command=command,
             workspace_name=Path(cwd_str).name,
             skills_dir=skills_dir,
-            media_dirs=media_dirs,
         )
     # Skills/memory dirs must be allowlisted: the workspace-literal replace above runs
     # before the resolver, so any absolute path it later injects reaches validate unstripped.
@@ -1838,7 +1813,6 @@ def prepare_sandbox_command(
             paths.GLOBAL_SKILLS_DIR,
             paths.MEMORIES_DIR,
             _BUILTIN_SKILLS_DIR,
-            *media_dirs,
         )
         if prefix is not None
     )
@@ -1861,34 +1835,6 @@ def prepare_sandbox_command(
             )
 
     return _restore_spans(command, ssh_replacements), None
-
-
-class _MediaFolderView(ReadOnlyFilesystemBackend):
-    """Lists a run's media folder under the paths attachments are referenced by.
-
-    deepagents drops entries outside ``root_dir`` from ``ls``, ``glob`` and
-    ``grep`` results in virtual mode, so the run sandbox lists the media
-    folder through this view. It is rooted at the resolved folder, so entries
-    that resolve outside it (a symlink pointing out) are still dropped; paths
-    come in and go out in the host form the sandbox reads.
-    """
-
-    def __init__(self, media_dir: Path, resolve: Callable[[str], Path | None]):
-        super().__init__(root_dir=str(media_dir), virtual_mode=True)
-        self._media_dir = media_dir
-        self._resolve = resolve
-
-    def _resolve_path(self, key: str) -> Path:
-        path = self._resolve(key)
-        if path is None:
-            raise ValueError(f"Path is outside the media folder: {key}")
-        return path
-
-    def _to_virtual_path(self, path: Path) -> str:
-        # ValueError for an entry that resolves outside the folder; the
-        # listing skips it.
-        path.resolve().relative_to(self.cwd)
-        return paths.file_tool_path(self._media_dir / path.relative_to(self.cwd))
 
 
 class CustomSandboxBackend(LocalShellBackend):
@@ -1916,7 +1862,6 @@ class CustomSandboxBackend(LocalShellBackend):
         guard_dangerous: bool = False,
         refuse_delete: bool = False,
         skills_dir: str | Path | None = None,
-        media_dir: str | Path | None = None,
     ):
         """
         Initialize custom sandbox backend.
@@ -1945,23 +1890,9 @@ class CustomSandboxBackend(LocalShellBackend):
             skills_dir: The workspace skills tier. ``/skills/...`` paths in
                 commands resolve through it first, and it is allowlisted for
                 command validation.
-            media_dir: The workspace's media folder, when ``root_dir`` is a
-                ``--mode=run`` folder outside it. Channel attachments are
-                referenced by their real path there, and file tools and
-                commands reach them by that path. File tools can only read
-                and list it; ``/media/...`` stays a path inside the run folder.
         """
         self._dangerous = dangerous
         self._skills_dir = skills_dir
-        # Attachments are referenced through the configured path; the resolved
-        # one (``media/`` may be a symlink) bounds what the sandbox can reach.
-        self._media_dir = Path(media_dir).absolute() if media_dir is not None else None
-        self._media_real = self._media_dir.resolve() if self._media_dir else None
-        self._media_view = (
-            _MediaFolderView(self._media_dir, self._media_path)
-            if self._media_dir
-            else None
-        )
         self._guard_dangerous = guard_dangerous
         self._refuse_delete = refuse_delete
         if dangerous:
@@ -2001,10 +1932,6 @@ class CustomSandboxBackend(LocalShellBackend):
         key = paths.host_file_tool_path(key)
         if self._dangerous:
             return super()._resolve_path(key)
-
-        media_path = self._media_path(key)
-        if media_path is not None:
-            return media_path
 
         cwd_str = self.cwd.as_posix().rstrip("/")
         ws_name = Path(cwd_str).name  # e.g. "workspace", "my-project"
@@ -2047,38 +1974,6 @@ class CustomSandboxBackend(LocalShellBackend):
 
         return super()._resolve_path(key)
 
-    # Windows attachment references use a /C:/... file-tool alias so they
-    # pass deepagents' validation before reaching this backend.
-    def _media_relative(self, key: str) -> Path | None:
-        """*key* relative to the media folder, if it names a path inside it.
-
-        Compared as paths, not strings, so Windows keys with backslashes or
-        another drive-letter case match too.
-        """
-        if self._media_dir is None:
-            return None
-        path = Path(paths.host_file_tool_path(key))
-        if not path.is_absolute():
-            return None
-        for base in (self._media_dir, self._media_real):
-            try:
-                return path.relative_to(base)
-            except ValueError:
-                continue
-        return None
-
-    def _media_path(self, key: str) -> Path | None:
-        """Real path for *key* if it names a file in the media folder."""
-        rel = self._media_relative(key)
-        if rel is None:
-            return None
-        path = (self._media_real / rel).resolve()
-        if not path.is_relative_to(self._media_real):
-            # An OSError, so the file tools report it as a read error rather
-            # than a traceback.
-            raise PermissionError(errno.EACCES, "Path is outside the media folder", key)
-        return path
-
     _DELETE_APPROVAL_ERROR = (
         "Delete blocked: needs approval. Report it to the orchestrator, which "
         "can re-issue it after approval."
@@ -2093,18 +1988,7 @@ class CustomSandboxBackend(LocalShellBackend):
         """
         if self._refuse_delete and not self._dangerous:
             return DeleteResult(error=self._DELETE_APPROVAL_ERROR)
-        if self._in_media(file_path):
-            return DeleteResult(error=self._MEDIA_READ_ONLY_ERROR)
         return super().delete(file_path)
-
-    _MEDIA_READ_ONLY_ERROR = (
-        "The media folder holds channel attachments; the file tools do not "
-        "change it. Copy the file into the run folder (for example with a "
-        "shell command) and work on the copy."
-    )
-
-    def _in_media(self, file_path: str) -> bool:
-        return not self._dangerous and self._media_relative(file_path) is not None
 
     def _tool_paths(self, items: list | None) -> list | None:
         """Spell dangerous-mode result paths the way the file tools accept them."""
@@ -2113,15 +1997,11 @@ class CustomSandboxBackend(LocalShellBackend):
         return [{**item, "path": paths.file_tool_path(item["path"])} for item in items]
 
     def ls(self, path: str) -> LsResult:
-        if self._in_media(path):
-            return self._media_view.ls(path)
         result = super().ls(path)
         result.entries = self._tool_paths(result.entries)
         return result
 
     def glob(self, pattern: str, path: str | None = None) -> GlobResult:
-        if path is not None and self._in_media(path):
-            return self._media_view.glob(pattern, path)
         result = super().glob(pattern, path)
         result.matches = self._tool_paths(result.matches)
         return result
@@ -2135,39 +2015,11 @@ class CustomSandboxBackend(LocalShellBackend):
         max_count: int | None = None,
         context_lines: int = 0,
     ) -> GrepResult:
-        if path is not None and self._in_media(path):
-            return self._media_view.grep(
-                pattern, path, glob, max_count=max_count, context_lines=context_lines
-            )
         result = super().grep(
             pattern, path, glob, max_count=max_count, context_lines=context_lines
         )
         result.matches = self._tool_paths(result.matches)
         return result
-
-    def write(self, file_path: str, content: str) -> WriteResult:
-        if self._in_media(file_path):
-            return WriteResult(error=self._MEDIA_READ_ONLY_ERROR)
-        return super().write(file_path, content)
-
-    def edit(
-        self,
-        file_path: str,
-        old_string: str,
-        new_string: str,
-        replace_all: bool = False,
-    ) -> EditResult:
-        if self._in_media(file_path):
-            return EditResult(error=self._MEDIA_READ_ONLY_ERROR)
-        return super().edit(file_path, old_string, new_string, replace_all)
-
-    def upload_files(self, files: list[tuple[str, bytes]]) -> list[FileUploadResponse]:
-        if any(self._in_media(path) for path, _ in files):
-            return [
-                FileUploadResponse(path=path, error=self._MEDIA_READ_ONLY_ERROR)
-                for path, _ in files
-            ]
-        return super().upload_files(files)
 
     def execute(self, command: str, *, timeout: int | None = None) -> ExecuteResponse:
         """
@@ -2199,7 +2051,6 @@ class CustomSandboxBackend(LocalShellBackend):
             dangerous=self._dangerous,
             guard_dangerous=self._effective_guard_dangerous(),
             skills_dir=self._skills_dir,
-            media_dir=self._media_dir,
         )
         if error:
             return ExecuteResponse(output=error, exit_code=1, truncated=False)

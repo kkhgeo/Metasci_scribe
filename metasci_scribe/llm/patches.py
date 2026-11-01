@@ -4,7 +4,7 @@ All patches follow the same pattern: wrap an existing method/function to
 fix upstream bugs, applied at import time or on first use.
 
 Patches:
-    - _patch_anthropic_proxy_compat: ccproxy dict→Pydantic model mismatch
+    - _patch_anthropic_proxy_compat: proxy dict→Pydantic model mismatch
     - _patch_openai_compat_content: list content→string for strict APIs
     - _patch_openai_capture_reasoning_content: capture provider
       reasoning_content into AIMessage.additional_kwargs (module-level,
@@ -44,7 +44,7 @@ from langchain_core.messages import AIMessage, BaseMessage
 # ---------------------------------------------------------------------------
 # Patch: langchain-anthropic (>=1.3.4) calls .model_dump() on
 # context_management / container objects returned by the Anthropic SDK.
-# Proxies like ccproxy may return plain dicts which lack that method.
+# Anthropic-compatible proxies may return plain dicts which lack that method.
 # We wrap the class method to pre-convert dicts before the original runs.
 # ---------------------------------------------------------------------------
 def _patch_anthropic_proxy_compat() -> None:
