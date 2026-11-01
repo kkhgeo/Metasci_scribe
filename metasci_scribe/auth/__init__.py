@@ -11,12 +11,15 @@ from .chatgpt_plan import (
     PlanUsageDisabled,
     RefreshRejected,
     RefreshUnavailable,
+    SignOutResult,
     build_authorize_url,
+    claim_plan_welcome,
     clear,
     get_access_token,
     load,
     login,
     save,
+    sign_out,
 )
 
 __all__ = [
@@ -30,10 +33,13 @@ __all__ = [
     "PlanUsageDisabled",
     "RefreshRejected",
     "RefreshUnavailable",
+    "SignOutResult",
     "build_authorize_url",
+    "claim_plan_welcome",
     "clear",
     "get_access_token",
     "load",
     "login",
     "save",
+    "sign_out",
 ]

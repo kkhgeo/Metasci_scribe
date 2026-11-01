@@ -39,6 +39,7 @@ from ..gateway import (
     RuntimeGateways,
     create_runtime_gateways_for_config,
 )
+from ..llm.credentials import ModelNotConfigured
 from ..paths import SessionDirs
 from ..sessions import get_checkpointer, short_thread_id
 from ..stream.console import console
@@ -93,6 +94,20 @@ if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
 
     from ..runtime import AsyncRuntime
+
+
+def _is_model_not_configured(exc: BaseException) -> bool:
+    """Whether ``exc`` is the typed "no sign-in or key yet" error.
+
+    By type, not by its text: a provider error that happens to mention an
+    API key is something else.
+    """
+    return isinstance(exc, ModelNotConfigured)
+
+
+def _report_model_not_configured(exc: BaseException) -> None:
+    """Show the one first-run message; ``/login`` fixes it without a restart."""
+    console.print(f"[red]✗ {escape(str(exc))}[/red]")
 
 
 @dataclass(frozen=True, slots=True)
@@ -516,10 +531,17 @@ def cmd_interactive(
         _background_tasks.add(task)
         task.add_done_callback(_background_tasks.discard)
 
+    def _on_agent_load_failed(exc: BaseException) -> None:
+        # A first run has no sign-in or key: say so now, not at the first
+        # message. Any other failure surfaces when a turn needs the agent.
+        if _is_model_not_configured(exc):
+            _report_model_not_configured(exc)
+
     agent_loader = BackgroundAgentLoader(
         _load_agent,
         on_progress=_on_mcp_progress,
         on_success=_on_agent_loaded,
+        on_failure=_on_agent_load_failed,
     )
 
     # One frontend event sink for the whole session — injected into the agent's
@@ -1342,17 +1364,9 @@ def cmd_interactive(
                         state["running"] = False
                         break
                     except Exception as e:
-                        error_msg = str(e)
-                        if (
-                            "authentication" in error_msg.lower()
-                            or "api_key" in error_msg.lower()
-                        ):
-                            console.print("[red]Error: API key not configured.[/red]")
-                            console.print(
-                                "[dim]Run [bold]metasci-scribe onboard[/bold] to set up your API key.[/dim]"
-                            )
-                            state["running"] = False
-                            break
+                        if _is_model_not_configured(e):
+                            # Stay in the session: /login sets it up here.
+                            _report_model_not_configured(e)
                         else:
                             console.print(f"[red]Error: {escape(str(e))}[/red]")
             finally:
@@ -1458,19 +1472,14 @@ def cmd_run(
         _wait_for_memory_workers()
         return verdict["result"]
     except Exception as e:
-        error_msg = str(e)
-        if "authentication" in error_msg.lower() or "api_key" in error_msg.lower():
-            console.print("[red]Error: API key not configured.[/red]")
-            console.print(
-                "[dim]Run [bold]metasci-scribe onboard[/bold] to set up your API key.[/dim]"
-            )
-            raise typer.Exit(1) from e
+        if _is_model_not_configured(e):
+            _report_model_not_configured(e)
         else:
             console.print(f"[red]Error: {e}[/red]")
-            # This is the process boundary for single-shot text mode.  Letting
-            # provider exceptions escape makes Typer/Rich render the complete
-            # async exception chain after we already printed a concise error;
-            # large OpenAI/httpx chains can keep the CLI busy well after the
-            # resume hint is shown.  Convert the failure to Click's controlled
-            # exit signal while preserving the cause for programmatic callers.
-            raise typer.Exit(1) from e
+        # This is the process boundary for single-shot text mode.  Letting
+        # provider exceptions escape makes Typer/Rich render the complete
+        # async exception chain after we already printed a concise error;
+        # large OpenAI/httpx chains can keep the CLI busy well after the
+        # resume hint is shown.  Convert the failure to Click's controlled
+        # exit signal while preserving the cause for programmatic callers.
+        raise typer.Exit(1) from e

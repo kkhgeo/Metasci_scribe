@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from . import (
+    auth,
     general,
     goal,
     mcp,
@@ -11,6 +12,7 @@ from . import (
 )
 
 __all__ = [
+    "auth",
     "general",
     "goal",
     "mcp",

@@ -123,3 +123,65 @@ Not done here: `config/settings.py` still carries the env-origin record (`ENV_OR
 `middleware/events.py` and `stream/sink.py` still carry the fallback-notice event; `llm/patches.py` keeps
 the unused message-flattening patches and client proxies; `tools/skills_manager.py` still classifies expert
 skills. Prose in `docs/` and the README is for T15.
+
+## Task 9: `/login`, `/logout`, model choice and first-run guidance
+
+OpenAI's UI/UX page for ChatGPT plan usage is `https://developers.openai.com/siwc/ui-ux-guidelines`; the
+path the brief gave (under `token-sharing-open-source/`) returns 404. It prescribes the label
+"Continue with ChatGPT" for a control that starts the sign-in, a one-time notice after the first sign-in
+with plan usage on ("You're using your ChatGPT plan."), "Using ChatGPT plan" with a "Manage usage" link
+(`chatgpt.com/settings/usage`) wherever requests use the plan, and "Manage usage" as the first action on a
+usage-limit error. It has no rules for terminals, and none on logos, sign-out wording or consent.
+
+Terminal decision, in `auth/notices.py`:
+
+- **Label and branding.** Plain text only. No logo, mark, colour or ASCII art stands for ChatGPT or OpenAI;
+  the approved button formats are for web pages. The label is exactly `Continue with ChatGPT`, the first
+  choice of the onboarding provider step (API keys follow as the other way in) and the words at the top of
+  `/login` ("Opening your browser to continue with ChatGPT"). The command names are `/login` and `/logout`.
+- **After sign-in.** Account (email, when OpenAI sent one), "ChatGPT plan usage is on." and the
+  "Manage usage" URL. The notice above is shown once per machine (`auth/plan_welcome` marker, kept by every
+  sign-out) and not on later sign-ins. A sign-in without plan usage says so, switches nothing, and names
+  the API key.
+- **Not done:** a "Using ChatGPT plan" tag in the status line or the model picker. The CLI status line and
+  the picker table have no per-route field, so it is left for a later task.
+
+Other decisions:
+
+- **`/logout` revokes, best effort, and forgets the account.** `auth.sign_out()` posts the refresh token to
+  the `revocation_endpoint` of the discovery document (form body `token`, `token_type_hint=refresh_token`,
+  `client_id`), up to three tries on a network error, 5xx, 408 or 429, and refuses an endpoint off the
+  issuer's host. Whatever happens it then deletes `chatgpt.json` whole: tokens, `subject` and the issued
+  `client_id`. The result carries a fixed problem text, which `/logout` shows with "disconnect Metasci
+  Scribe in ChatGPT Settings". `host_id` stays. This deliberately departs from OpenAI's advice to reuse the
+  client after sign-out: with the registration kept, a different ChatGPT account fails with
+  `account_mismatch`, so `/logout` is how to switch accounts and the next sign-in registers a new client.
+  `clear()` is unchanged and still keeps the registration. The revocation runs with the sign-in lock held
+  (no new try starts after 60 s, so a waiting process, which gives up after 120 s, is not starved).
+- **`/login` can be cancelled.** `login(cancel=Event)` ends the wait, closes the loopback listener and raises
+  `LoginCancelled`. The command runs the sign-in in a thread and, on the main thread, routes the first
+  Ctrl+C to that event instead of unwinding the session; a second Ctrl+C is an ordinary interrupt.
+- **`/login` on success** saves `openai_auth_mode=chatgpt_plan` and `provider=openai` (and the default model
+  when the session was on another provider), then rebuilds the session through `/model`'s transactional
+  switch (`_apply_model(..., auth_mode=...)`). The route is set in the environment for the trial build and
+  put back if the build or the agent load fails. Not applied to a running langgraph server (the command says
+  to restart).
+- **`/model` on the plan** lists the account's models (`list_models()`, run in a thread) and accepts a slug
+  only if the account lists it; Claude names still go by their own key. A `PlanStop` is shown with its own
+  message (code and request ID included), yellow for `RETRY`, red otherwise.
+- **`ModelNotConfigured`** (`llm/credentials.py`) replaces both text-matching "API key not configured"
+  branches. `agent._build_chat_model` raises it through `ensure_model_configured` when OpenAI has no key and
+  no saved sign-in (or the plan route has no sign-in), or Anthropic has neither key nor base URL. It is
+  checked there and not in `get_chat_model`, which the plan connector's tests and the lazy sign-in rely on.
+  Single-shot `-p` prints the message and exits 1 instead of a traceback; the prompt prints it at start-up
+  and on a message, and stays open so `/login` can fix it (`/login` adopts the rebuilt agent). A provider
+  error that merely mentions an API key is now a plain "Error: ..." line.
+- **Onboarding** offers `Continue with ChatGPT` first (preselected for a fresh or plan config), signs in
+  inside the wizard, skips the API key step, and lists the account's models. A declined, timed-out or
+  plan-off sign-in returns to the choice. Choosing an OpenAI key (or `--provider openai`) sets
+  `openai_auth_mode=api_key`. The co-pilot picker has no ChatGPT entry and reuses the plan sign-in for
+  OpenAI. If the folder the CLI would start in holds the data folder (the home folder, say), the
+  `require_workspace_root` message is printed when the wizard opens and again after the configuration is
+  saved, with "cd into a paper folder".
+- The `/login` warning, two lines, before the browser opens: the agent can read the paper folder; commands
+  always need approval in chat and autonomous runs get no shell.

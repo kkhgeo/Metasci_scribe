@@ -39,6 +39,7 @@ from metasci_scribe.auth.chatgpt_plan import (
 
 R = "http://127.0.0.1:1455/auth/callback"
 JWKS_URL = "https://auth.openai.com/.well-known/jwks.json"
+REVOKE_URL = "https://auth.openai.com/api/accounts/oauth/revoke"
 ISSUED = "oaiapp_issued"
 ALL_SCOPES = (
     "openid profile email offline_access resource.invoke chatgpt.tokens.use.direct"
@@ -87,6 +88,9 @@ class FakeOpenAI:
         self.id_key = _SIGNING_KEY
         self.id_algorithm = "ES256"
         self.token_reply = None  # form -> httpx.Response, or raises
+        self.revoke_forms: list[dict[str, str]] = []
+        self.revoke_reply = None  # form -> httpx.Response, or raises
+        self.revocation_endpoint: str | None = REVOKE_URL
         self.lock = threading.Lock()
 
     def id_token(self) -> str:
@@ -111,7 +115,18 @@ class FakeOpenAI:
     def __call__(self, request: httpx.Request) -> httpx.Response:
         url = str(request.url)
         if url == cp.DISCOVERY_URL:
-            return httpx.Response(200, json={"issuer": cp.ISSUER, "jwks_uri": JWKS_URL})
+            document = {"issuer": cp.ISSUER, "jwks_uri": JWKS_URL}
+            if self.revocation_endpoint is not None:
+                document["revocation_endpoint"] = self.revocation_endpoint
+            return httpx.Response(200, json=document)
+        if url == self.revocation_endpoint:
+            assert request.method == "POST"
+            form = {k: v[0] for k, v in parse_qs(request.content.decode()).items()}
+            with self.lock:
+                self.revoke_forms.append(form)
+            if self.revoke_reply is not None:
+                return self.revoke_reply(form)
+            return httpx.Response(200)
         if url == JWKS_URL:
             jwk = json.loads(
                 jwt.algorithms.ECAlgorithm.to_jwk(_SIGNING_KEY.public_key())
@@ -468,6 +483,34 @@ def test_listener_is_closed_after_timeout():
     probe = socket.socket()
     probe.bind(("127.0.0.1", ports[0]))  # would fail if it were still held
     probe.close()
+
+
+def test_cancel_event_ends_the_wait_and_closes_the_listener():
+    ports = []
+    cancel = threading.Event()
+
+    def open_browser(url):
+        ports.append(urlparse(_query(url)["redirect_uri"][0]).port)
+        threading.Timer(0.3, cancel.set).start()
+        return True
+
+    started = time.monotonic()
+    with pytest.raises(LoginCancelled) as caught:
+        login(open_browser=open_browser, timeout=30, cancel=cancel)
+    assert time.monotonic() - started < 5
+    _assert_clean(caught.value)
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", ports[0]))  # would fail if it were still held
+    probe.close()
+
+
+def test_cancel_already_set_saves_nothing(openai):
+    cancel = threading.Event()
+    cancel.set()
+    with pytest.raises(LoginCancelled):
+        login(open_browser=lambda url: True, timeout=30, cancel=cancel)
+    assert load() is None
+    assert openai.token_forms == []
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows port sharing")
@@ -967,6 +1010,202 @@ def test_clear_removes_stale_temp_files():
 def test_clear_without_a_file_is_a_no_op():
     clear()
     assert not (paths.DATA_DIR / "auth").exists()
+
+
+# ---------------------------------------------------------------- sign out
+
+
+@pytest.fixture(autouse=True)
+def _no_backoff(monkeypatch):
+    monkeypatch.setattr(cp, "_REVOKE_BACKOFF_S", (0.0, 0.0))
+
+
+def test_sign_out_revokes_the_refresh_token_and_forgets_everything(openai):
+    login(open_browser=_browser(openai), timeout=10)
+    host_id = cp._host_id()
+    result = cp.sign_out()
+    assert result.had_sign_in
+    assert result.revoked
+    assert result.problem is None
+    assert openai.revoke_forms == [
+        {"token": REFRESH, "token_type_hint": "refresh_token", "client_id": ISSUED}
+    ]
+    assert load() is None
+    assert not _token_path().exists()
+    assert cp._host_id() == host_id
+    with pytest.raises(NotSignedIn):
+        get_access_token()
+
+
+def test_account_mismatch_without_sign_out_and_success_after_it(openai):
+    login(open_browser=_browser(openai), timeout=10)
+    openai.id_claims = {"sub": "user-2"}
+    with pytest.raises(LoginFailed) as caught:
+        login(open_browser=_browser(openai), timeout=10)
+    assert caught.value.code == "account_mismatch"
+    cp.sign_out()
+    creds = login(open_browser=_browser(openai), timeout=10)
+    assert creds.subject == "user-2"
+    query = _query(openai.authorize_urls[-1])
+    assert query["client_id"] == [cp.REGISTRATION_CLIENT_ID]
+    assert "id_token_hint" not in query
+    assert query["agent_name_hint"] == [cp.AGENT_NAME_HINT]
+
+
+def test_sign_out_keeps_the_host_id_for_the_next_account(openai):
+    login(open_browser=_browser(openai), timeout=10)
+    cp.sign_out()
+    login(open_browser=_browser(openai), timeout=10)
+    first = _query(openai.authorize_urls[0])["ext_agent_host_id"]
+    second = _query(openai.authorize_urls[1])["ext_agent_host_id"]
+    assert first == second
+
+
+@pytest.mark.parametrize("status", [500, 502, 503])
+def test_sign_out_retries_a_server_error_then_still_clears(openai, status):
+    login(open_browser=_browser(openai), timeout=10)
+    openai.revoke_reply = lambda form: httpx.Response(status)
+    result = cp.sign_out()
+    assert not result.revoked
+    assert result.had_sign_in
+    assert str(status) in result.problem
+    assert len(openai.revoke_forms) == 3
+    assert load() is None
+    assert not _token_path().exists()
+
+
+def test_sign_out_stops_trying_when_the_time_budget_is_spent(openai, monkeypatch):
+    login(open_browser=_browser(openai), timeout=10)
+    monkeypatch.setattr(cp, "_REVOKE_BUDGET_S", 0.0)
+    openai.revoke_reply = lambda form: httpx.Response(503)
+    result = cp.sign_out()
+    assert not result.revoked
+    assert "503" in result.problem
+    assert len(openai.revoke_forms) == 1
+    assert not _token_path().exists()
+
+
+def test_sign_out_survives_a_server_error_that_clears_up(openai):
+    login(open_browser=_browser(openai), timeout=10)
+    replies = iter([httpx.Response(503), httpx.Response(200)])
+    openai.revoke_reply = lambda form: next(replies)
+    result = cp.sign_out()
+    assert result.revoked
+    assert result.problem is None
+    assert len(openai.revoke_forms) == 2
+
+
+def test_sign_out_network_failure_is_reported_and_clears(openai):
+    login(open_browser=_browser(openai), timeout=10)
+
+    def unreachable(form):
+        raise httpx.ConnectError("boom " + REFRESH)
+
+    openai.revoke_reply = unreachable
+    result = cp.sign_out()
+    assert not result.revoked
+    assert result.problem
+    assert REFRESH not in f"{result} {result!r}"
+    assert load() is None
+    assert not _token_path().exists()
+
+
+def test_sign_out_does_not_retry_a_client_error(openai):
+    login(open_browser=_browser(openai), timeout=10)
+    openai.revoke_reply = lambda form: httpx.Response(400, json={"error": "x"})
+    result = cp.sign_out()
+    assert not result.revoked
+    assert "400" in result.problem
+    assert len(openai.revoke_forms) == 1
+    assert not _token_path().exists()
+
+
+def test_sign_out_without_a_revocation_endpoint(openai):
+    login(open_browser=_browser(openai), timeout=10)
+    openai.revocation_endpoint = None
+    result = cp.sign_out()
+    assert not result.revoked
+    assert result.problem
+    assert openai.revoke_forms == []
+    assert not _token_path().exists()
+
+
+def test_sign_out_never_sends_the_token_to_another_host(openai):
+    login(open_browser=_browser(openai), timeout=10)
+    openai.revocation_endpoint = "https://evil.example/revoke"
+    result = cp.sign_out()
+    assert not result.revoked
+    assert result.problem
+    assert openai.revoke_forms == []
+    assert not _token_path().exists()
+
+
+def test_sign_out_without_a_refresh_token_has_nothing_to_revoke(openai):
+    save(_creds(refresh_token=""))
+    result = cp.sign_out()
+    assert result.had_sign_in
+    assert not result.revoked
+    assert result.problem
+    assert openai.revoke_forms == []
+    assert not _token_path().exists()
+
+
+def test_sign_out_when_signed_out_makes_no_request(openai):
+    result = cp.sign_out()
+    assert not result.had_sign_in
+    assert not result.revoked
+    assert openai.revoke_forms == []
+    assert not (paths.DATA_DIR / "auth").exists()
+
+
+def test_sign_out_after_clear_drops_the_leftover_registration(openai):
+    login(open_browser=_browser(openai), timeout=10)
+    clear()
+    assert _record()["client_id"] == ISSUED
+    result = cp.sign_out()
+    assert not result.had_sign_in
+    assert openai.revoke_forms == []
+    assert not _token_path().exists()
+
+
+def test_sign_out_result_holds_no_secrets(openai):
+    login(open_browser=_browser(openai), timeout=10)
+    openai.revoke_reply = lambda form: httpx.Response(
+        500, text=f"echo {REFRESH} {ACCESS}"
+    )
+    result = cp.sign_out()
+    for marker in SECRET_MARKERS:
+        assert marker not in f"{result} {result!r}"
+
+
+def test_clear_still_keeps_the_registration(openai):
+    login(open_browser=_browser(openai), timeout=10)
+    clear()
+    assert _record()["client_id"] == ISSUED
+    assert openai.revoke_forms == []
+
+
+# ---------------------------------------------------------------- plan welcome
+
+
+def test_plan_welcome_is_claimed_once():
+    assert cp.claim_plan_welcome() is True
+    assert cp.claim_plan_welcome() is False
+
+
+def test_plan_welcome_survives_sign_out(openai):
+    login(open_browser=_browser(openai), timeout=10)
+    assert cp.claim_plan_welcome() is True
+    cp.sign_out()
+    assert cp.claim_plan_welcome() is False
+
+
+def test_plan_welcome_failing_store_reads_as_already_shown(monkeypatch):
+    def broken(*args, **kwargs):
+        raise cp.CredentialStoreError("nope")
+
+    monkeypatch.setattr(cp, "_write_private", broken)
+    assert cp.claim_plan_welcome() is False
 
 
 # ---------------------------------------------------------------- refresh

@@ -144,9 +144,15 @@ def _build_chat_model(cfg):
     to verify a switch before committing, and threaded into
     ``create_cli_agent(chat_model=...)`` so the new agent binds the requested
     model without touching the cached ``_chat_model``.
+
+    Raises:
+        ModelNotConfigured: Neither a ChatGPT sign-in nor an API key exists for
+            the provider, the first-run case; the message says what to do.
     """
     from .llm import get_chat_model
+    from .llm.credentials import ensure_model_configured
 
+    ensure_model_configured(cfg.provider)
     return get_chat_model(model=cfg.model, provider=cfg.provider)
 
 

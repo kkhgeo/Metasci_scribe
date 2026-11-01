@@ -178,6 +178,7 @@ def _run_prompt(
     thread_id: str | None,
     stored: dict | None,
     backend: str = "local",
+    load_agent=None,
 ) -> dict:
     """Drive the main callback through a ``-p`` run and capture its folders."""
     import metasci_scribe.cli.interactive as interactive_mod
@@ -227,7 +228,7 @@ def _run_prompt(
         lambda _config, *, dirs, backend=None: captured["prespawned"].append(dirs),
     )
     monkeypatch.setattr(commands, "_sync_background_agent_server_workspace", _fake_sync)
-    monkeypatch.setattr(commands, "_load_agent", _fake_load_agent)
+    monkeypatch.setattr(commands, "_load_agent", load_agent or _fake_load_agent)
     monkeypatch.setattr(
         gateway_mod,
         "create_runtime_gateways_for_config",

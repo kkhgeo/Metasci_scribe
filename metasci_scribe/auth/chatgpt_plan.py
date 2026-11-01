@@ -86,6 +86,13 @@ _SHARING_RETRY_S = 2.0
 # Windows does not deliver Ctrl+C to a long Event.wait().
 _WAIT_SLICE_S = 0.2
 _TEMP_SUFFIX = ".tmp"
+# Waits before the second and third try of a revocation that got no answer.
+_REVOKE_BACKOFF_S = (0.5, 1.0)
+_REVOKE_RETRY_STATUSES = frozenset({408, 429})
+# No new try starts once a revocation has run this long: the sign-in lock is
+# held meanwhile, and a waiter gives up after ``_LOCK_TIMEOUT_S``.
+_REVOKE_BUDGET_S = 60.0
+_WELCOME_MARKER = "plan_welcome"
 
 _T = TypeVar("_T")
 
@@ -103,7 +110,7 @@ class NotSignedIn(ChatGPTAuthError):
 
 
 class LoginCancelled(ChatGPTAuthError):
-    """The user declined in the browser."""
+    """The user declined in the browser, or cancelled the wait."""
 
 
 class LoginTimeout(ChatGPTAuthError):
@@ -529,24 +536,148 @@ def _forget_tokens() -> None:
             }
         )
     else:
-        try:
-            _retry_sharing(lambda: _token_path().unlink(missing_ok=True))
-        except OSError as exc:
-            raise CredentialStoreError(
-                f"Could not remove the saved sign-in ({type(exc).__name__})."
-            ) from None
+        _remove_record()
     _remove_stale_temps(_auth_dir())
+
+
+def _remove_record() -> None:
+    """Delete the saved record: tokens, account and client ID. Lock held."""
+    try:
+        _retry_sharing(lambda: _token_path().unlink(missing_ok=True))
+    except OSError as exc:
+        raise CredentialStoreError(
+            f"Could not remove the saved sign-in ({type(exc).__name__})."
+        ) from None
 
 
 def clear() -> None:
     """Sign out on this machine: erase the access, refresh and ID tokens.
 
-    Does not revoke the tokens at OpenAI.
+    Does not revoke the tokens at OpenAI, and keeps the account's client ID
+    for the next sign-in; :func:`sign_out` does both differently.
     """
     if not _auth_dir().is_dir():
         return
     with _locked():
         _forget_tokens()
+
+
+@dataclass(frozen=True)
+class SignOutResult:
+    """What :func:`sign_out` did. ``problem`` is fixed text, free of secrets."""
+
+    had_sign_in: bool
+    revoked: bool
+    problem: str | None = None
+
+
+def _revocation_endpoint() -> tuple[str | None, str | None]:
+    """``(endpoint, None)`` from the discovery document, or ``(None, problem)``.
+
+    The endpoint must be on the issuer's own host: the refresh token goes there.
+    """
+    try:
+        with _http_client() as client:
+            reply = client.get(DISCOVERY_URL)
+            document = _json_object(reply) if reply.status_code == 200 else None
+    except (httpx.HTTPError, OSError):
+        return None, "Could not reach OpenAI."
+    endpoint = document.get("revocation_endpoint") if document else None
+    if (
+        not document
+        or document.get("issuer") != ISSUER
+        or not isinstance(endpoint, str)
+    ):
+        return None, "OpenAI lists no revocation endpoint."
+    parts = urlsplit(endpoint)
+    if parts.scheme != "https" or parts.hostname != urlsplit(ISSUER).hostname:
+        return None, "OpenAI lists a revocation endpoint on another host."
+    return endpoint, None
+
+
+def _revoke(creds: Credentials) -> str | None:
+    """Revoke the refresh token; ``None`` when OpenAI confirmed, else the problem.
+
+    A network error, a 5xx and a throttle are tried again; any other refusal is
+    final. Never raises, and never puts the response or an exception in the text.
+    """
+    if not creds.refresh_token:
+        return "There was no refresh token to revoke."
+    deadline = time.monotonic() + _REVOKE_BUDGET_S
+    endpoint, problem = _revocation_endpoint()
+    if endpoint is None:
+        return problem
+    form = {
+        "token": creds.refresh_token,
+        "token_type_hint": "refresh_token",
+        "client_id": creds.client_id,
+    }
+    problem = "Could not reach OpenAI."
+    for attempt in range(len(_REVOKE_BACKOFF_S) + 1):
+        if attempt:
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(_REVOKE_BACKOFF_S[attempt - 1])
+        try:
+            with _http_client() as client:
+                response = client.post(
+                    endpoint, data=form, headers={"Accept": "application/json"}
+                )
+        except (httpx.HTTPError, OSError):
+            problem = "Could not reach OpenAI."
+            continue
+        status = response.status_code
+        if status == 200:
+            return None
+        problem = f"OpenAI answered HTTP {status}."
+        if status < 500 and status not in _REVOKE_RETRY_STATUSES:
+            break
+    return problem
+
+
+def sign_out() -> SignOutResult:
+    """Sign out: revoke at OpenAI as far as it can be, then forget everything.
+
+    https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions
+
+    A failed revocation is reported in the result and does not stop the local
+    sign-out. The saved record goes whole, the account and its client ID
+    included, so a different ChatGPT account can sign in next; :func:`clear`
+    keeps them. ``host_id`` stays: it names this machine, not an account.
+
+    Raises :class:`CredentialStoreError` when the store cannot be read or
+    changed.
+    """
+    if not _auth_dir().is_dir():
+        return SignOutResult(had_sign_in=False, revoked=False)
+    with _locked():
+        creds = _credentials_from(_read_record())
+        problem = _revoke(creds) if creds is not None else None
+        _remove_record()
+        _remove_stale_temps(_auth_dir())
+    return SignOutResult(
+        had_sign_in=creds is not None,
+        revoked=creds is not None and problem is None,
+        problem=problem,
+    )
+
+
+def claim_plan_welcome() -> bool:
+    """``True`` the first time it is called on this machine, ``False`` after.
+
+    The one-time notice OpenAI asks for when plan usage first turns on. Kept
+    beside the sign-in, and left alone by every sign-out. A store that cannot
+    be written reads as already shown: the notice is not worth an error.
+    """
+    path = _auth_dir() / _WELCOME_MARKER
+    try:
+        with _locked():
+            if path.exists():
+                return False
+            _write_private(path, b"shown\n")
+            return True
+    except (ChatGPTAuthError, OSError):
+        return False
 
 
 def _host_id() -> str:
@@ -726,9 +857,13 @@ def _start_callback_server(state: str) -> _CallbackServer:
         ) from None
 
 
-def _await_callback(server: _CallbackServer, timeout: float) -> dict[str, str]:
+def _await_callback(
+    server: _CallbackServer, timeout: float, cancel: threading.Event | None = None
+) -> dict[str, str]:
     deadline = time.monotonic() + timeout
     while not server.done.wait(_WAIT_SLICE_S):
+        if cancel is not None and cancel.is_set():
+            raise LoginCancelled("The sign-in was cancelled.")
         if time.monotonic() >= deadline:
             raise LoginTimeout("No answer from the browser in time.")
     return server.params or {}
@@ -918,8 +1053,12 @@ def login(
     *,
     open_browser: Callable[[str], bool] = webbrowser.open,
     timeout: float = 300.0,
+    cancel: threading.Event | None = None,
 ) -> Credentials:
     """Sign in through the system browser and save the result.
+
+    Setting ``cancel`` from another thread ends the wait, closes the local
+    listener and raises :class:`LoginCancelled`.
 
     Raises :class:`LoginCancelled`, :class:`LoginTimeout` or
     :class:`LoginFailed`; on any of them saved tokens stay as they were.
@@ -955,7 +1094,7 @@ def login(
                 "Could not open a browser. Open this address to sign in:\n"
                 + build_authorize_url(**url_args)
             )
-        params = _await_callback(server, timeout)
+        params = _await_callback(server, timeout, cancel)
     finally:
         server.shutdown()
         server.server_close()

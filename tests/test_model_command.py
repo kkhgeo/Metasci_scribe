@@ -339,15 +339,21 @@ class TestModelCommandFailure:
 
 
 @pytest.fixture
-def evo_module_state():
+def evo_module_state(monkeypatch):
     """Snapshot and restore ``metasci_scribe.agent`` module globals.
 
     The chat-model cache tests mutate ``_chat_model`` / ``_chat_model_key``
     / ``_config`` / ``_scribe_agent`` directly.  This fixture
     guarantees all four are restored — even if a test body grows an early
     return — so later tests in the suite see a clean module state.
+
+    Both providers have a key, so ``_build_chat_model`` gets as far as the
+    (faked) ``get_chat_model`` instead of refusing a first run.
     """
     import metasci_scribe.agent as mod
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-real")
 
     snapshot = (
         mod._chat_model,

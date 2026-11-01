@@ -2003,3 +2003,334 @@ class TestMirrorIsNotAnOnboardingSetting:
                 ScribeConfig(mirror="cn", model="other")
             )
         assert (config.mirror, config.model) == ("cn", ScribeConfig().model)
+
+
+# =============================================================================
+# First run: Continue with ChatGPT first, API key as the other way in
+# =============================================================================
+
+
+def _plan_creds(**changes):
+    import time
+
+    from metasci_scribe.auth.chatgpt_plan import DIRECT_SCOPE, Credentials
+
+    values = {
+        "client_id": "oaiapp_issued",
+        "access_token": "access-secret",
+        "refresh_token": "refresh-secret",
+        "id_token": "id-secret",
+        "expires_at": time.time() + 3600,
+        "scopes": frozenset({"openid", DIRECT_SCOPE}),
+        "email": "user@example.com",
+        "subject": "user-1",
+    }
+    return Credentials(**{**values, **changes})
+
+
+class TestStepProviderOffersChatGPTFirst:
+    def _choices(self, config, **kwargs):
+        from metasci_scribe.config.onboard.steps import _step_provider
+
+        with patch("metasci_scribe.config.onboard.steps.questionary") as mock_q:
+            mock_q.select.return_value.ask.return_value = "openai"
+            _step_provider(config, **kwargs)
+        call = mock_q.select.call_args
+        return call.kwargs["choices"], call.kwargs["default"]
+
+    def test_chatgpt_is_the_first_choice_and_the_api_keys_follow(self):
+        choices, _ = self._choices(ScribeConfig(), allow_chatgpt=True)
+        assert [c.value for c in choices] == ["chatgpt_plan", "openai", "anthropic"]
+        assert "Continue with ChatGPT" in choices[0].title
+        assert "API key" in choices[1].title
+
+    def test_a_fresh_config_preselects_chatgpt(self):
+        _, default = self._choices(ScribeConfig(), allow_chatgpt=True)
+        assert default == "chatgpt_plan"
+
+    def test_a_saved_plan_choice_stays_preselected(self):
+        config = ScribeConfig(provider="openai", openai_auth_mode="chatgpt_plan")
+        _, default = self._choices(config, allow_chatgpt=True)
+        assert default == "chatgpt_plan"
+
+    def test_an_existing_api_key_setup_keeps_its_provider(self):
+        config = ScribeConfig(provider="anthropic", anthropic_api_key="sk-ant-x")
+        _, default = self._choices(config, allow_chatgpt=True)
+        assert default == "anthropic"
+
+    def test_the_co_pilot_picker_has_no_chatgpt_entry(self):
+        choices, _ = self._choices(ScribeConfig(), label="co-pilot")
+        assert [c.value for c in choices] == ["openai", "anthropic"]
+
+
+class TestStepChatGPTSignIn:
+    def _run(self, login, *, welcome=False):
+        from metasci_scribe.config.onboard import steps
+
+        with (
+            patch("metasci_scribe.auth.chatgpt_plan.login", login),
+            patch(
+                "metasci_scribe.auth.chatgpt_plan.claim_plan_welcome",
+                return_value=welcome,
+            ),
+            patch.object(steps, "console") as console,
+        ):
+            result = steps._step_chatgpt_signin()
+        printed = "\n".join(str(c.args[0]) for c in console.print.call_args_list)
+        return result, printed
+
+    def test_success_returns_the_credentials_and_warns_first(self):
+        creds = _plan_creds()
+        result, printed = self._run(lambda **kw: creds)
+        assert result is creds
+        assert "paper folder" in printed
+        assert "no shell" in printed
+        assert "user@example.com" in printed
+        assert "plan usage is on" in printed
+
+    def test_the_welcome_is_shown_once(self):
+        _, printed = self._run(lambda **kw: _plan_creds(), welcome=True)
+        assert "You're using your ChatGPT plan." in printed
+
+    def test_plan_usage_off_returns_none_and_points_to_the_api_key(self):
+        from metasci_scribe.auth.chatgpt_plan import DIRECT_SCOPE
+
+        creds = _plan_creds(scopes=frozenset({"openid"}))
+        assert DIRECT_SCOPE not in creds.scopes
+        result, printed = self._run(lambda **kw: creds)
+        assert result is None
+        assert "API key" in printed
+
+    def test_a_failed_sign_in_returns_none_with_a_message(self):
+        from metasci_scribe.auth.chatgpt_plan import LoginTimeout
+
+        def late(**kwargs):
+            raise LoginTimeout("late")
+
+        result, printed = self._run(late)
+        assert result is None
+        assert "No answer from the browser" in printed
+
+    def test_a_declined_sign_in_returns_none(self):
+        from metasci_scribe.auth.chatgpt_plan import LoginCancelled
+
+        def declined(**kwargs):
+            raise LoginCancelled("declined")
+
+        result, printed = self._run(declined)
+        assert result is None
+        assert "cancelled" in printed.lower()
+
+    def test_ctrl_c_ends_the_wizard_like_any_other_step(self):
+        def interrupted(**kwargs):
+            raise KeyboardInterrupt
+
+        with pytest.raises(KeyboardInterrupt):
+            self._run(interrupted)
+
+
+class TestWizardChatGPTPath:
+    def _run(self, selects, *, config=None, login=None, catalog=None, sections=None):
+        from metasci_scribe.config.onboard.wizard import run_onboard
+
+        mock_q = MagicMock()
+        saved = []
+        with (
+            _patch_all_questionary(mock_q),
+            patch("metasci_scribe.config.onboard.wizard.load_config") as mock_load,
+            patch(
+                "metasci_scribe.config.onboard.wizard.save_config",
+                side_effect=lambda cfg: saved.append(cfg),
+            ),
+            patch("metasci_scribe.config.onboard.wizard.console"),
+            patch("metasci_scribe.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.helpers.console"),
+            patch("metasci_scribe.config.onboard.wizard._step_tinytex"),
+            patch(
+                "metasci_scribe.auth.chatgpt_plan.login",
+                MagicMock(side_effect=login or (lambda **kw: _plan_creds())),
+            ) as mock_login,
+            patch(
+                "metasci_scribe.auth.chatgpt_plan.claim_plan_welcome",
+                return_value=False,
+            ),
+            patch(
+                "metasci_scribe.llm.chatgpt_plan.list_models",
+                side_effect=catalog
+                or (
+                    lambda: [("gpt-plan-a", "GPT Plan A"), ("gpt-plan-b", "GPT Plan B")]
+                ),
+            ) as mock_models,
+        ):
+            mock_load.return_value = config or ScribeConfig()
+            mock_q.select.return_value.ask.side_effect = selects
+            mock_q.password.return_value.ask.side_effect = ["", ""]
+            mock_q.confirm.return_value.ask.side_effect = [True]
+            mock_q.text.return_value.ask.side_effect = [""]
+            mock_q.checkbox.return_value.ask.return_value = []
+            result = run_onboard(skip_validation=True, only_sections=sections)
+        return result, saved[-1], mock_q, mock_login, mock_models
+
+    def test_continue_with_chatgpt_signs_in_and_skips_the_api_key(self):
+        result, final, mock_q, mock_login, _ = self._run(
+            ["chatgpt_plan", "gpt-plan-b", "high", "skip", "daemon", True]
+        )
+        assert result is True
+        mock_login.assert_called_once()
+        assert final.provider == "openai"
+        assert final.openai_auth_mode == "chatgpt_plan"
+        assert final.model == "gpt-plan-b"
+        mock_q.password.assert_not_called()
+
+    def test_the_model_list_is_the_accounts_not_the_built_in_table(self):
+        _, _, mock_q, _, mock_models = self._run(
+            ["chatgpt_plan", "gpt-plan-a", "high", "skip", "daemon", True]
+        )
+        mock_models.assert_called_once()
+        model_prompt = mock_q.select.call_args_list[1]
+        values = [c.value for c in model_prompt.kwargs["choices"]]
+        assert values[:2] == ["gpt-plan-a", "gpt-plan-b"]
+        assert "gpt-6.1-sol" not in values
+
+    def test_an_unreadable_catalog_falls_back_to_the_built_in_models(self):
+        from metasci_scribe.llm.errors import PlanAction, PlanStop
+
+        def refuse():
+            raise PlanStop(PlanAction.RETRY, "Could not reach OpenAI.")
+
+        _, final, mock_q, _, _ = self._run(
+            ["chatgpt_plan", "gpt-6.1-sol", "high", "skip", "daemon", True],
+            catalog=refuse,
+        )
+        values = [c.value for c in mock_q.select.call_args_list[1].kwargs["choices"]]
+        assert "gpt-6.1-sol" in values
+        assert final.model == "gpt-6.1-sol"
+        assert final.openai_auth_mode == "chatgpt_plan"
+
+    def test_a_declined_sign_in_returns_to_the_choice(self):
+        from metasci_scribe.auth.chatgpt_plan import LoginCancelled
+
+        def declined(**kwargs):
+            raise LoginCancelled("declined")
+
+        _, final, _mock_q, mock_login, _ = self._run(
+            ["chatgpt_plan", "anthropic", "claude-sonnet-5-5", "skip", "daemon", True],
+            login=declined,
+        )
+        assert mock_login.call_count == 1
+        assert final.provider == "anthropic"
+        assert final.openai_auth_mode == "api_key"
+
+    def test_the_api_key_way_in_leaves_the_plan_behind(self):
+        config = ScribeConfig(provider="openai", openai_auth_mode="chatgpt_plan")
+        _, final, mock_q, mock_login, _ = self._run(
+            ["openai", "gpt-6-sol", "high"],
+            config=config,
+            sections={"provider", "model"},
+        )
+        mock_login.assert_not_called()
+        assert final.provider == "openai"
+        assert final.openai_auth_mode == "api_key"
+        assert mock_q.password.call_count >= 1
+
+    def test_a_preset_openai_key_means_the_key_route(self):
+        from metasci_scribe.config.onboard.prompter import NonInteractivePrompter
+        from metasci_scribe.config.onboard.wizard import run_onboard
+
+        mock_q = MagicMock()
+        saved = []
+        prompter = NonInteractivePrompter(
+            answers={
+                "provider": "openai",
+                "api_key": "sk-preset",
+                "model": "gpt-6-sol",
+            },
+            skip_set=frozenset(),
+            strict=False,
+        )
+        with (
+            _patch_all_questionary(mock_q),
+            patch("metasci_scribe.config.onboard.wizard.load_config") as mock_load,
+            patch(
+                "metasci_scribe.config.onboard.wizard.save_config",
+                side_effect=lambda cfg: saved.append(cfg),
+            ),
+            patch("metasci_scribe.config.onboard.wizard.console"),
+            patch("metasci_scribe.config.onboard.steps.console"),
+        ):
+            mock_load.return_value = ScribeConfig(
+                provider="openai", openai_auth_mode="chatgpt_plan"
+            )
+            mock_q.confirm.return_value.ask.side_effect = [True]
+            run_onboard(skip_validation=True, prompter=prompter)
+        assert saved[-1].openai_auth_mode == "api_key"
+        assert saved[-1].openai_api_key == "sk-preset"
+
+
+class TestStartFolderNotice:
+    """The first start refuses a folder that holds the data folder; onboarding
+    says so instead of finishing as if all were well."""
+
+    def _printed(self, cwd, *, save=True):
+        from metasci_scribe.config.onboard.wizard import run_onboard
+
+        mock_q = MagicMock()
+        with (
+            _patch_all_questionary(mock_q),
+            patch("metasci_scribe.config.onboard.wizard.load_config") as mock_load,
+            patch("metasci_scribe.config.onboard.wizard.save_config"),
+            patch("metasci_scribe.config.onboard.wizard.console") as wizard_console,
+            patch("metasci_scribe.config.onboard.steps.console"),
+            patch("metasci_scribe.config.onboard.helpers.console"),
+            patch("metasci_scribe.config.onboard.wizard._step_tinytex"),
+        ):
+            mock_load.return_value = ScribeConfig()
+            mock_q.select.return_value.ask.side_effect = [
+                "anthropic",
+                "claude-sonnet-5-5",
+                "skip",
+                "daemon",
+                True,
+            ]
+            mock_q.password.return_value.ask.side_effect = ["", ""]
+            mock_q.confirm.return_value.ask.side_effect = [save]
+            mock_q.text.return_value.ask.side_effect = [""]
+            mock_q.checkbox.return_value.ask.return_value = []
+            run_onboard(skip_validation=True)
+        return [str(c.args[0]) for c in wizard_console.print.call_args_list if c.args]
+
+    def test_a_folder_holding_the_data_folder_is_flagged_at_the_start_and_end(
+        self, monkeypatch
+    ):
+        from metasci_scribe import paths
+
+        monkeypatch.chdir(paths.DATA_DIR.parent)
+        paths.DATA_DIR.parent.mkdir(parents=True, exist_ok=True)
+        monkeypatch.delenv("METASCI_SCRIBE_WORKSPACE_DIR", raising=False)
+        lines = self._printed(paths.DATA_DIR.parent)
+        flagged = [line for line in lines if "cannot be a workspace" in line]
+        assert len(flagged) == 2
+        assert "Open a paper folder instead" in flagged[0]
+        assert any("cd" in line and "paper folder" in line for line in lines)
+
+    def test_a_paper_folder_is_not_flagged(self, tmp_path, monkeypatch):
+        paper = tmp_path / "paper"
+        paper.mkdir()
+        monkeypatch.chdir(paper)
+        monkeypatch.delenv("METASCI_SCRIBE_WORKSPACE_DIR", raising=False)
+        lines = self._printed(paper)
+        assert not [line for line in lines if "cannot be a workspace" in line]
+
+    def test_a_declined_save_is_not_flagged_at_the_end(self, monkeypatch):
+        from metasci_scribe import paths
+
+        paths.DATA_DIR.parent.mkdir(parents=True, exist_ok=True)
+        monkeypatch.chdir(paths.DATA_DIR.parent)
+        monkeypatch.delenv("METASCI_SCRIBE_WORKSPACE_DIR", raising=False)
+        with (
+            patch("metasci_scribe.config.onboard.wizard.get_config_path") as path,
+            patch("metasci_scribe.config.onboard.wizard.remove_config_file"),
+        ):
+            path.return_value.exists.return_value = False
+            lines = self._printed(paths.DATA_DIR.parent, save=False)
+        assert len([line for line in lines if "cannot be a workspace" in line]) == 1

@@ -10,7 +10,12 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.text import Text
 
-from ...paths import Workspace, start_workspace_path
+from ...paths import (
+    Workspace,
+    WorkspaceRootError,
+    require_workspace_root,
+    start_workspace_path,
+)
 from ...runtime import AsyncRuntime
 from ..provider_keys import PROVIDERS
 from ..settings import (
@@ -28,7 +33,9 @@ from ..store import (
 )
 from .steps import (
     _asks_reasoning_effort,
+    _plan_model_entries,
     _step_auxiliary_enable,
+    _step_chatgpt_signin,
     _step_langgraph_dev_port,
     _step_mcp_servers,
     _step_model,
@@ -141,6 +148,24 @@ def _skills_workspace(config: ScribeConfig) -> Workspace:
     )
 
 
+def _warn_start_folder(config: ScribeConfig, *, closing: bool = False) -> None:
+    """Say so when the folder metasci-scribe would start in is one it refuses.
+
+    The first start rejects a folder that holds the app's data folder, the home
+    folder for one; setup must not end as if all were ready. ``closing`` adds
+    what to do, for the end of the wizard.
+    """
+    try:
+        require_workspace_root(_skills_workspace(config).root)
+    except WorkspaceRootError as exc:
+        console.print(f"[yellow]⚠ {escape(str(exc))}[/yellow]")
+        if closing:
+            console.print(
+                "[dim]  Before you start: cd into a paper folder, then run "
+                "metasci-scribe.[/dim]"
+            )
+
+
 def _apply_preset_provider_api_key(
     config: ScribeConfig,
     provider: str,
@@ -203,6 +228,9 @@ def _configure_provider_api_key(
 
 def _provider_connection_configured(config: ScribeConfig, provider: str) -> bool:
     """Return True when provider-level setup can be safely reused."""
+    if provider == "openai" and config.openai_auth_mode == "chatgpt_plan":
+        # The ChatGPT sign-in serves every OpenAI model, the co-pilot's too.
+        return True
     key_attr = _PROVIDER_KEY_ATTR.get(provider, "openai_api_key")
     return bool(getattr(config, key_attr))
 
@@ -452,6 +480,7 @@ def _run_onboard(
             # file that DID exist doesn't get downgraded to "no file" —
             # which would cause revert to delete the user's config.
             config = load_config()
+            _warn_start_folder(config)
             snapshot = copy.deepcopy(config)
             config_path = get_config_path()
             original_file_existed = config_path.exists()
@@ -498,6 +527,7 @@ def _run_onboard(
                 if not strict and _config_has_meaningful_settings(config):
                     result = _open_existing_config_prompt(config)
                     if result is None:
+                        _warn_start_folder(config, closing=True)
                         return True  # Keep
                     sections_to_run, config = result
                     # NOTE: ``snapshot`` is intentionally NOT refreshed after Reset.
@@ -568,8 +598,18 @@ def _run_onboard(
                             "[dim](--provider)[/dim]"
                         )
                     else:
-                        provider = _step_provider(config)
+                        provider = _step_provider(config, allow_chatgpt=True)
+                        if provider == "chatgpt_plan":
+                            if _step_chatgpt_signin() is None:
+                                continue  # nothing changed: offer the choice again
+                            provider = "openai"
+                            config.provider = provider
+                            config.openai_auth_mode = "chatgpt_plan"
+                            break  # no API key to ask for
                         config.provider = provider
+                    if provider == "openai":
+                        # A key was chosen (or preset): the key route, not the plan.
+                        config.openai_auth_mode = "api_key"
 
                     try:
                         _configure_provider_connection(
@@ -616,7 +656,15 @@ def _run_onboard(
                         f"  [green]✓ Model: {preset_model}[/green]   [dim](--model)[/dim]"
                     )
                 else:
-                    config.model = _step_model(config, provider)
+                    on_plan = (
+                        provider == "openai"
+                        and config.openai_auth_mode == "chatgpt_plan"
+                    )
+                    config.model = _step_model(
+                        config,
+                        provider,
+                        entries=_plan_model_entries() if on_plan else None,
+                    )
                 if _asks_reasoning_effort(provider) and _preset("model") is None:
                     config.reasoning_effort = _step_reasoning_effort(config, provider)
                 _autosave(config)
@@ -737,6 +785,7 @@ def _run_onboard(
                 console.print()
                 console.print("[green]✓ Configuration saved![/green]")
                 console.print(f"[dim]  → {get_config_path()}[/dim]")
+                _warn_start_folder(config, closing=True)
                 console.print()
                 return True
             else:

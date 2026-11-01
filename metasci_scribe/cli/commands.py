@@ -21,6 +21,7 @@ from ..gateway import (
     RunRequest,
 )
 from ..llm.context_window import DEFAULT_CONTEXT_WINDOW_FALLBACK, resolve_context_window
+from ..llm.credentials import ModelNotConfigured
 from ..paths import (
     SessionDirs,
     Workspace,
@@ -1905,14 +1906,20 @@ def _main_callback(
                     tid = await graph_gateway.create_thread()
                     session_dirs = dirs
                 console.print("[dim]Loading agent...[/dim]")
-                agent = await asyncio.to_thread(
-                    _load_agent,
-                    work_dir=str(session_dirs.work_dir),
-                    workspace=session_dirs.workspace,
-                    checkpointer=checkpointer,
-                    config=_single_shot_agent_config(config, rubric_text),
-                    runtime=async_runtime,
-                )
+                try:
+                    agent = await asyncio.to_thread(
+                        _load_agent,
+                        work_dir=str(session_dirs.work_dir),
+                        workspace=session_dirs.workspace,
+                        checkpointer=checkpointer,
+                        config=_single_shot_agent_config(config, rubric_text),
+                        runtime=async_runtime,
+                    )
+                except ModelNotConfigured as exc:
+                    # A first run before any sign-in or key: the one message,
+                    # not a traceback.
+                    console.print(f"[red]✗ {escape(str(exc))}[/red]")
+                    raise typer.Exit(1) from exc
                 rubric_result: str | None = None
                 try:
                     if effective_output_format == "stream-json":

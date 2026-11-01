@@ -11,6 +11,7 @@ from pathlib import Path
 import questionary
 from prompt_toolkit.formatted_text import FormattedText
 from questionary import Choice
+from rich.markup import escape
 
 from ...llm import DEFAULT_MODEL, get_models_for_provider
 from ...paths import Workspace
@@ -129,6 +130,7 @@ def _step_provider(
     *,
     label: str | None = None,
     default_value: str | None = None,
+    allow_chatgpt: bool = False,
 ) -> str:
     """Step 1: Select LLM provider.
 
@@ -138,18 +140,37 @@ def _step_provider(
             provider is for. When omitted, the generic main-model prompt is used.
         default_value: Preselect this provider instead of ``config.provider``
             (e.g. the auxiliary provider when configuring the co-pilot).
+        allow_chatgpt: Offer "Continue with ChatGPT" as the first choice, with
+            the API keys as the other way in. Only the main model has it: the
+            co-pilot follows the OpenAI route the session already uses.
 
     Returns:
-        Selected provider name.
+        Selected provider name, or ``"chatgpt_plan"`` for the ChatGPT sign-in.
     """
+    from ...auth.notices import CONTINUE_LABEL
+
     choices = [
         Choice(title="OpenAI (GPT models — API key)", value="openai"),
         Choice(title="Anthropic (Claude models — API key)", value="anthropic"),
     ]
+    preferred = default_value or config.provider
+    if allow_chatgpt:
+        choices.insert(
+            0,
+            Choice(
+                title=f"{CONTINUE_LABEL} (use your ChatGPT plan)",
+                value="chatgpt_plan",
+            ),
+        )
+        on_plan = (
+            config.provider == "openai" and config.openai_auth_mode == "chatgpt_plan"
+        )
+        has_key = bool(config.openai_api_key or config.anthropic_api_key)
+        if not default_value and (on_plan or not has_key):
+            preferred = "chatgpt_plan"
 
     # Set default based on current config (or an explicit override).
     valid_providers = {c.value for c in choices}
-    preferred = default_value or config.provider
     default = preferred if preferred in valid_providers else "openai"
 
     provider = questionary.select(
@@ -165,6 +186,69 @@ def _step_provider(
         raise KeyboardInterrupt()
 
     return provider
+
+
+def _step_chatgpt_signin():
+    """Step 1b: sign in with ChatGPT in the browser.
+
+    Returns the credentials when the plan can be used, else ``None`` after
+    saying why, and the wizard offers the choice again. Ctrl+C ends the wait
+    and the wizard, like at any other step.
+    """
+    from ...auth import chatgpt_plan as plan_auth
+    from ...auth.notices import (
+        LOGIN_WARNING,
+        USAGE_URL,
+        WELCOME,
+        describe_auth_error,
+        plan_off_lines,
+    )
+
+    for line in LOGIN_WARNING:
+        console.print(f"  [yellow]{escape(line)}[/yellow]")
+    console.print(
+        "  [dim]Opening your browser to continue with ChatGPT. "
+        "Press Ctrl+C to cancel.[/dim]"
+    )
+    try:
+        creds = plan_auth.login()
+    except plan_auth.ChatGPTAuthError as exc:
+        message, style = describe_auth_error(
+            exc, retry="Pick Continue with ChatGPT to try again."
+        )
+        console.print(f"  [{style}]{escape(message)}[/{style}]")
+        return None
+
+    who = f"Signed in as {creds.email}" if creds.email else "Signed in to ChatGPT"
+    if not creds.plan_enabled:
+        headline, advice = plan_off_lines(who)
+        console.print(f"  [yellow]{escape(headline)}[/yellow]")
+        console.print(f"  [dim]{escape(advice)}[/dim]")
+        return None
+    console.print(f"  [green]✓ {escape(who)}. ChatGPT plan usage is on.[/green]")
+    if plan_auth.claim_plan_welcome():
+        console.print(f"  [green]{escape(WELCOME[0])}[/green]")
+        console.print(f"  [dim]{escape(WELCOME[1])}[/dim]")
+    console.print(f"  [dim]Manage usage: {USAGE_URL}[/dim]")
+    return creds
+
+
+def _plan_model_entries() -> list[tuple[str, str]] | None:
+    """The signed-in account's models for the picker, or ``None`` to use the
+    built-in list. Best effort: a catalog that cannot be read is no reason to
+    stop the wizard, and the model can be changed later with ``/model``."""
+    from ...llm import chatgpt_plan as plan_llm
+
+    try:
+        catalog = plan_llm.list_models()
+    except Exception as exc:
+        console.print(
+            "  [yellow]Could not read your ChatGPT plan's model list: "
+            f"{escape(str(exc))}[/yellow]"
+        )
+        console.print("  [dim]Showing the built-in list instead.[/dim]")
+        return None
+    return catalog or None
 
 
 def _step_provider_api_key(
@@ -201,6 +285,7 @@ def _step_model(
     *,
     label: str | None = None,
     default_value: str | None = None,
+    entries: list[tuple[str, str]] | None = None,
 ) -> str:
     """Step 3: Select model for the provider.
 
@@ -211,6 +296,8 @@ def _step_model(
             the generic main-model prompt is used.
         default_value: Preselect this model instead of ``config.model`` (e.g. the
             auxiliary model when configuring the co-pilot).
+        entries: ``(name, hint)`` pairs to offer instead of the provider's
+            built-in models, such as the signed-in account's own list.
 
     Returns:
         Selected model name.
@@ -218,7 +305,8 @@ def _step_model(
     model_prompt = f"Select {label} model:" if label else "Select model:"
     model_default = default_value or config.model
     # Get models for the selected provider
-    entries = get_models_for_provider(provider)
+    if entries is None:
+        entries = get_models_for_provider(provider)
 
     if not entries:
         # Unknown provider: direct text input.
