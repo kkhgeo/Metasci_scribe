@@ -160,10 +160,23 @@ def test_openai_auth_mode_seam():
         validate_setting("openai_auth_mode", "oauth")
 
 
-def test_chatgpt_plan_builds_without_an_api_key(monkeypatch):
+def test_chatgpt_plan_builds_without_an_api_key(monkeypatch, tmp_path):
+    from metasci_scribe.auth import chatgpt_plan as auth
     from metasci_scribe.llm.chatgpt_plan import ChatGPTPlanModel
     from metasci_scribe.llm.models import get_chat_model
 
+    monkeypatch.setattr("metasci_scribe.paths.DATA_DIR", tmp_path)
+    auth.save(
+        auth.Credentials(
+            client_id="app_test",
+            access_token="saved-test-access",
+            refresh_token="saved-test-refresh",
+            id_token="saved-test-id",
+            expires_at=4_102_444_800.0,
+            scopes=frozenset({auth.DIRECT_SCOPE}),
+            email=None,
+        )
+    )
     monkeypatch.setenv("METASCI_SCRIBE_OPENAI_AUTH_MODE", "chatgpt_plan")
     model = get_chat_model("gpt-6-sol", provider="openai")
     assert isinstance(model, ChatGPTPlanModel)

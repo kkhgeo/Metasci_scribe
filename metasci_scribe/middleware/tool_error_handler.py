@@ -8,6 +8,9 @@ errors.
 With this middleware, the exception is caught and surfaced to the agent as a
 ToolMessage with ``status="error"`` containing the traceback.  The agent can
 then decide to retry, use a different tool, or yield to the user.
+
+A sub-agent runs inside the ``task`` tool, so its model failures come through
+here too. A ChatGPT plan stop must end the run, not invite another request.
 """
 
 from __future__ import annotations
@@ -21,6 +24,8 @@ from langchain.agents.middleware.types import AgentMiddleware
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 
+from ..llm.errors import PlanAction, PlanStop
+
 # GraphInterrupt must propagate — never catch it as a tool error.
 try:
     from langgraph.errors import GraphInterrupt as _GraphInterrupt
@@ -31,6 +36,12 @@ if TYPE_CHECKING:
     from langchain.agents.middleware.types import ToolCallRequest
 
 logger = logging.getLogger(__name__)
+
+
+def _must_propagate(exc: Exception) -> bool:
+    if _GraphInterrupt is not None and isinstance(exc, _GraphInterrupt):
+        return True
+    return isinstance(exc, PlanStop) and exc.action is not PlanAction.RETRY
 
 
 class ToolErrorHandlerMiddleware(AgentMiddleware):
@@ -46,7 +57,7 @@ class ToolErrorHandlerMiddleware(AgentMiddleware):
         try:
             return handler(request)
         except Exception as exc:
-            if _GraphInterrupt is not None and isinstance(exc, _GraphInterrupt):
+            if _must_propagate(exc):
                 raise
             return _build_error_message(request)
 
@@ -58,7 +69,7 @@ class ToolErrorHandlerMiddleware(AgentMiddleware):
         try:
             return await handler(request)
         except Exception as exc:
-            if _GraphInterrupt is not None and isinstance(exc, _GraphInterrupt):
+            if _must_propagate(exc):
                 raise
             return _build_error_message(request)
 

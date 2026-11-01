@@ -31,6 +31,7 @@ import logging
 import re
 from collections.abc import AsyncIterator, Iterator, Mapping
 from typing import Any, NamedTuple
+from urllib.request import getproxies, proxy_bypass
 
 import httpx
 from langchain_core.callbacks import (
@@ -101,6 +102,11 @@ _UNSUPPORTED_FIELDS = (
     "max_completion_tokens",
 )
 _TOOL_TYPES = frozenset({"function", "custom"})
+# What M0 showed a conversation needs, and the tools item this module adds,
+# which has to survive a second pass.
+_INPUT_ITEM_TYPES = frozenset(
+    {"message", "function_call", "function_call_output", "additional_tools"}
+)
 # Sent only by the API key route; this bearer belongs to a ChatGPT account.
 _ACCOUNT_HEADERS = ("openai-organization", "openai-project")
 
@@ -184,15 +190,21 @@ def _split_system(items: list[Any]) -> tuple[list[str], list[Any]]:
 
 
 def _replayable(items: list[Any]) -> list[Any]:
-    """With ``store: false`` the server cannot resolve its item IDs, and M0
-    showed reasoning items are not needed to continue a conversation."""
+    """Only the item types M0 proved, without IDs: with ``store: false`` the
+    server cannot resolve its own. An item with no type is a message."""
     kept: list[Any] = []
+    dropped: set[str] = set()
     for item in items:
-        if isinstance(item, dict):
-            if item.get("type") == "reasoning":
-                continue
-            item = {k: v for k, v in item.items() if k not in ("id", "status")}
-        kept.append(item)
+        kind = item.get("type", "message") if isinstance(item, dict) else None
+        if isinstance(kind, str) and kind in _INPUT_ITEM_TYPES:
+            kept.append({k: v for k, v in item.items() if k not in ("id", "status")})
+        elif kind != "reasoning":  # expected: never needed, so not worth a warning
+            dropped.add(str(kind))
+    if dropped:
+        logger.warning(
+            "ChatGPT plan route: left items of types %s out of the history",
+            sorted(dropped),
+        )
     return kept
 
 
@@ -240,10 +252,15 @@ def normalize_payload(payload: dict) -> dict:
 
 
 class _ErrorFields(NamedTuple):
-    code: Any = None
-    param: Any = None
-    kind: Any = None
+    code: str | None = None
+    param: str | None = None
+    kind: str | None = None
     message: str | None = None
+
+
+def _text_or_none(value: Any) -> str | None:
+    """An error body is whatever the server sent; only text can be a field."""
+    return value if isinstance(value, str) else None
 
 
 def _error_fields(body: dict | str) -> _ErrorFields:
@@ -260,10 +277,10 @@ def _error_fields(body: dict | str) -> _ErrorFields:
     fields = error if isinstance(error, dict) else parsed
     message = fields.get("message") or parsed.get("detail") or error
     return _ErrorFields(
-        code=fields.get("code"),
-        param=fields.get("param"),
-        kind=fields.get("type"),
-        message=message if isinstance(message, str) else None,
+        code=_text_or_none(fields.get("code")),
+        param=_text_or_none(fields.get("param")),
+        kind=_text_or_none(fields.get("type")),
+        message=_text_or_none(message),
     )
 
 
@@ -448,12 +465,34 @@ def _request_id(headers: httpx.Headers) -> str | None:
     return _safe_field(value, _CODE_PATTERN, None)
 
 
-def _network_stop(exc: httpx.TransportError) -> PlanStop:
+def _network_stop(exc: httpx.RequestError) -> PlanStop:
     return _stop(
         PlanAction.RETRY,
-        guidance=f"Could not reach OpenAI ({type(exc).__name__}). Your sign-in is kept.",
+        guidance=(
+            f"Could not reach OpenAI ({type(exc).__name__}). Check the network or "
+            "proxy settings. Your sign-in is kept."
+        ),
         code="network_error",
     )
+
+
+def _read_error_body(response: httpx.Response) -> bytes:
+    """The body, or nothing if it was cut off: the status still says what happened."""
+    try:
+        return b"".join(response.stream)
+    except httpx.TransportError:
+        return b""
+    finally:
+        response.close()
+
+
+async def _aread_error_body(response: httpx.Response) -> bytes:
+    try:
+        return b"".join([chunk async for chunk in response.stream])
+    except httpx.TransportError:
+        return b""
+    finally:
+        await response.aclose()
 
 
 def _http_failure(response: httpx.Response, body: bytes, token: str) -> PlanStop:
@@ -528,7 +567,7 @@ class _EventWatch:
         elif kind == "response.failed":
             body = {"error": response.get("error") or {}}
             raise self._event_failure(body)
-        elif kind == "error":
+        elif kind == "error" or (kind is None and event.get("error")):
             raise self._event_failure(event)
         elif kind == "response.incomplete":
             details = response.get("incomplete_details")
@@ -619,9 +658,7 @@ class _PlanTransport(httpx.BaseTransport):
         else:
             if response.status_code < 400:
                 return _watched(outgoing, response, _WatchedStream, token)
-            body = b"".join(response.stream)
-            response.close()
-            stop = _http_failure(response, body, token)
+            stop = _http_failure(response, _read_error_body(response), token)
         raise stop
 
     def close(self) -> None:
@@ -644,8 +681,7 @@ class _AsyncPlanTransport(httpx.AsyncBaseTransport):
         else:
             if response.status_code < 400:
                 return _watched(outgoing, response, _AsyncWatchedStream, token)
-            body = b"".join([chunk async for chunk in response.stream])
-            await response.aclose()
+            body = await _aread_error_body(response)
             stop = _http_failure(response, body, token)
         raise stop
 
@@ -653,12 +689,25 @@ class _AsyncPlanTransport(httpx.AsyncBaseTransport):
         await self._inner.aclose()
 
 
+def _proxy_url() -> str | None:
+    """The proxy for the API host, from the environment or the system settings.
+
+    httpx reads these only when it builds its own transport, and it ignores them
+    once it is handed one, as it is here.
+    """
+    proxies = getproxies()
+    proxy = proxies.get("https") or proxies.get("all")
+    if not proxy or proxy_bypass(API_HOST):
+        return None
+    return proxy if "://" in proxy else f"http://{proxy}"
+
+
 def _base_transport() -> httpx.BaseTransport:
-    return httpx.HTTPTransport()
+    return httpx.HTTPTransport(proxy=_proxy_url())
 
 
 def _base_async_transport() -> httpx.AsyncBaseTransport:
-    return httpx.AsyncHTTPTransport()
+    return httpx.AsyncHTTPTransport(proxy=_proxy_url())
 
 
 # ---------------------------------------------------------------- the model
@@ -772,8 +821,14 @@ def list_models() -> list[tuple[str, str]]:
         PlanStop: The catalog could not be read.
     """
     transport = _PlanTransport(_base_transport())
-    with httpx.Client(transport=transport, timeout=_TIMEOUT) as client:
-        response = client.get(f"{RESOURCE}/models")
+    failure: PlanStop | None = None
+    try:
+        with httpx.Client(transport=transport, timeout=_TIMEOUT) as client:
+            response = client.get(f"{RESOURCE}/models")
+    except httpx.RequestError as exc:  # the client reads this body itself
+        failure = _network_stop(exc)
+    if failure is not None:
+        raise failure
     try:
         document = response.json()
     except ValueError:
@@ -787,7 +842,7 @@ def list_models() -> list[tuple[str, str]]:
             request_id=_request_id(response.headers),
         )
     return [
-        (model["slug"], model.get("display_name") or model["slug"])
+        (model["slug"], _text_or_none(model.get("display_name")) or model["slug"])
         for model in models
         if isinstance(model, dict)
         and model.get("visibility") == "list"

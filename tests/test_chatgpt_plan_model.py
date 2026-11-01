@@ -8,24 +8,35 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import inspect
 import itertools
 import json
 import logging
 import pickle
+import socket
 import threading
+import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
+from deepagents import graph as deepagents_graph
+from deepagents.backends import FilesystemBackend
 from langchain.agents import create_agent
+from langchain.agents.middleware._retry import default_retry_on
 from langchain_core.exceptions import ContextOverflowError
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
+from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import BaseModel
 
+import metasci_scribe
+from metasci_scribe.agent import create_cli_agent
 from metasci_scribe.auth import chatgpt_plan as auth
+from metasci_scribe.config import ScribeConfig
 from metasci_scribe.llm import chatgpt_plan as plan
 from metasci_scribe.llm.chatgpt_plan import (
     PlanAction,
@@ -39,6 +50,10 @@ from metasci_scribe.llm.models import get_chat_model
 from metasci_scribe.middleware.context_overflow import ContextOverflowMapperMiddleware
 from metasci_scribe.middleware.error_normalization import ErrorNormalizationMiddleware
 from metasci_scribe.middleware.model_retry import ModelRetryMiddleware, is_transient
+from metasci_scribe.middleware.summarization import (
+    create_per_run_summarization_middleware,
+)
+from metasci_scribe.paths import Workspace
 
 TOKEN = "plan-access-token-DO-NOT-LEAK"
 SSE_HEADERS = {"content-type": "text/event-stream", "x-request-id": "req_stream"}
@@ -252,14 +267,31 @@ def token(monkeypatch):
 def serve(monkeypatch, token):
     """Install a scripted server under the real wrapper transports."""
 
-    def install(*replies: Reply) -> FakeOpenAI:
-        server = FakeOpenAI(*replies)
+    def install(*replies: Reply, server: FakeOpenAI | None = None) -> FakeOpenAI:
+        server = server or FakeOpenAI(*replies)
         transport = httpx.MockTransport(server)
         monkeypatch.setattr(plan, "_base_transport", lambda: transport)
         monkeypatch.setattr(plan, "_base_async_transport", lambda: transport)
         return server
 
     return install
+
+
+@pytest.fixture
+def signed_in(monkeypatch, tmp_path):
+    """A saved sign-in made of test values, in a folder of this test's own."""
+    monkeypatch.setattr("metasci_scribe.paths.DATA_DIR", tmp_path)
+    auth.save(
+        auth.Credentials(
+            client_id="app_test",
+            access_token="saved-test-access",
+            refresh_token="saved-test-refresh",
+            id_token="saved-test-id",
+            expires_at=time.time() + 3600,
+            scopes=frozenset({auth.DIRECT_SCOPE}),
+            email=None,
+        )
+    )
 
 
 def run(model: Any, mode: str, messages: Any = "hello", **kwargs: Any) -> Any:
@@ -967,7 +999,7 @@ def test_a_context_overflow_still_reaches_compaction(serve, reply):
         build_model("gpt-6.1-sol").invoke("hi")
 
 
-def test_no_fallback_on_plan_stop(serve, monkeypatch):
+def test_no_fallback_on_plan_stop(serve, monkeypatch, signed_in):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-fallback-key")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-fallback-key")
     monkeypatch.setenv("METASCI_SCRIBE_OPENAI_AUTH_MODE", "chatgpt_plan")
@@ -1208,7 +1240,7 @@ def test_list_models_refuses_a_body_that_is_not_json(serve):
 # ------------------------------------------------------------------- models.py wiring
 
 
-def test_plan_mode_builds_the_plan_model(serve, monkeypatch):
+def test_plan_mode_builds_the_plan_model(serve, monkeypatch, signed_in):
     monkeypatch.setenv("METASCI_SCRIBE_OPENAI_AUTH_MODE", "chatgpt_plan")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-unused")
     monkeypatch.setenv("OPENAI_BASE_URL", "https://proxy.example.test/v1")
@@ -1223,7 +1255,7 @@ def test_plan_mode_builds_the_plan_model(serve, monkeypatch):
     assert server.requests[0].headers["authorization"] == f"Bearer {TOKEN}"
 
 
-def test_plan_mode_keeps_the_configured_reasoning_effort(serve, monkeypatch):
+def test_plan_mode_keeps_the_configured_reasoning_effort(serve, monkeypatch, signed_in):
     monkeypatch.setenv("METASCI_SCRIBE_OPENAI_AUTH_MODE", "chatgpt_plan")
     monkeypatch.setenv("METASCI_SCRIBE_REASONING_EFFORT", "medium")
     server = serve(sse(*text_events()))
@@ -1461,3 +1493,393 @@ def test_a_stop_keeps_its_type_with_tool_history_in_the_request(serve):
     ]
     with pytest.raises(PlanStop):
         build_model("gpt-6.1-sol").invoke(history)
+
+
+# ------------------------------------------------------------- the production stack
+
+
+class MainAndSubAgent(FakeOpenAI):
+    """Scripts the main agent and its sub-agent apart, by the tools they carry."""
+
+    def __init__(self, main: list[Reply], sub: list[Reply]) -> None:
+        super().__init__(sse(*text_events()))
+        self.main, self.sub = main, sub
+        self.main_calls = self.sub_calls = 0
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        body = json.loads(request.content)
+        tools = [
+            tool["name"]
+            for item in body["input"]
+            if item.get("type") == "additional_tools"
+            for tool in item["tools"]
+        ]
+        if "task" in tools:
+            self.main_calls += 1
+            return self.main[min(self.main_calls, len(self.main)) - 1]()
+        self.sub_calls += 1
+        return self.sub[min(self.sub_calls, len(self.sub)) - 1]()
+
+
+def task_call() -> Reply:
+    arguments = {
+        "description": "draft the paragraph",
+        "subagent_type": "general-purpose",
+    }
+    return sse(*tool_call_events("task", json.dumps(arguments)))
+
+
+def production_agent(tmp_path: Path, monkeypatch: Any) -> Any:
+    config = ScribeConfig(enable_async_subagents=False, model_retry_wait_seconds=0)
+    monkeypatch.setattr("metasci_scribe.agent._config", config)
+    return create_cli_agent(
+        workspace=Workspace(tmp_path),
+        config=config,
+        chat_model=build_model("gpt-6.1-sol"),
+        checkpointer=InMemorySaver(),
+    )
+
+
+def run_production(agent: Any, mode: str) -> dict[str, Any]:
+    state = {"messages": [HumanMessage(content="write it")]}
+    config = {"configurable": {"thread_id": "t"}}
+    if mode == "async":
+        return asyncio.run(agent.ainvoke(state, config))
+    return agent.invoke(state, config)
+
+
+@pytest.mark.usefixtures("no_mcp")
+@both_modes
+@pytest.mark.parametrize(
+    ("reply", "action"),
+    [
+        (
+            http_error(429, structured("subscription_sharing_usage_limit_exceeded")),
+            PlanAction.STOP_USAGE,
+        ),
+        (
+            sse(
+                CREATED,
+                event(
+                    "response.failed",
+                    response=response_object(
+                        "failed",
+                        error={
+                            "code": "subscription_sharing_usage_limit_exceeded",
+                            "message": "x",
+                        },
+                    ),
+                ),
+            ),
+            PlanAction.STOP_USAGE,
+        ),
+        (
+            http_error(403, structured("subscription_sharing_user_not_eligible")),
+            PlanAction.STOP_INELIGIBLE,
+        ),
+        (
+            http_error(401, structured("subscription_sharing_invalid_user")),
+            PlanAction.RELOGIN,
+        ),
+    ],
+    ids=["usage-http", "usage-event", "ineligible", "relogin"],
+)
+def test_a_sub_agent_stop_reaches_the_caller_and_ends_the_run(
+    serve, tmp_path, monkeypatch, mode, reply, action
+):
+    server = MainAndSubAgent(main=[task_call(), sse(*text_events())], sub=[reply])
+    serve(server=server)
+    agent = production_agent(tmp_path, monkeypatch)
+    with pytest.raises(PlanStop) as caught:
+        run_production(agent, mode)
+    assert caught.value.action is action
+    assert (server.main_calls, server.sub_calls) == (1, 1)
+
+
+@pytest.mark.usefixtures("no_mcp")
+@both_modes
+def test_a_sub_agent_retry_stays_a_tool_error_for_the_main_agent(
+    serve, tmp_path, monkeypatch, mode
+):
+    server = MainAndSubAgent(
+        main=[task_call(), sse(*text_events("carried on"))],
+        sub=[http_error(503, structured("subscription_sharing_usage_unavailable"))],
+    )
+    serve(server=server)
+    agent = production_agent(tmp_path, monkeypatch)
+    result = run_production(agent, mode)
+    assert result["messages"][-1].text == "carried on"
+    tool_message = next(m for m in result["messages"] if isinstance(m, ToolMessage))
+    assert tool_message.status == "error"
+    assert server.main_calls == 2
+
+
+# ----------------------------------------------------------------- summarization
+
+
+def long_history() -> list[Any]:
+    history: list[Any] = []
+    for turn in range(8):
+        history.append(HumanMessage(content=f"question {turn} " + "word " * 200))
+        history.append(AIMessage(content=f"answer {turn} " + "word " * 200))
+    history.append(HumanMessage(content="and now?"))
+    return history
+
+
+def summarizing_agent(tmp_path: Path) -> Any:
+    """The summarization middleware production mounts, on a small context window."""
+    model = build_model("gpt-6.1-sol")
+    model.profile = {"max_input_tokens": 2_000}
+    backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
+    return create_agent(
+        model, middleware=[create_per_run_summarization_middleware(model, backend)]
+    )
+
+
+@both_modes
+@pytest.mark.parametrize(
+    ("reply", "action"),
+    [
+        (
+            http_error(429, structured("subscription_sharing_usage_limit_exceeded")),
+            PlanAction.STOP_USAGE,
+        ),
+        (
+            http_error(403, structured("subscription_sharing_user_not_eligible")),
+            PlanAction.STOP_INELIGIBLE,
+        ),
+        (
+            http_error(401, structured("subscription_sharing_invalid_user")),
+            PlanAction.RELOGIN,
+        ),
+        (
+            http_error(503, structured("subscription_sharing_usage_unavailable")),
+            PlanAction.RETRY,
+        ),
+    ],
+    ids=["usage", "ineligible", "relogin", "retry"],
+)
+def test_a_failed_summary_call_is_sent_once_and_stays_typed(
+    serve, tmp_path, mode, reply, action
+):
+    """``model_retry`` is the one retry layer, here too."""
+    server = serve(reply)
+    agent = summarizing_agent(tmp_path)
+    state = {"messages": long_history()}
+
+    def turn() -> Any:
+        if mode == "async":
+            return asyncio.run(agent.ainvoke(state))
+        return agent.invoke(state)
+
+    with pytest.raises(PlanStop) as caught:
+        turn()
+    assert caught.value.action is action
+    assert len(server.requests) == 1
+
+
+@pytest.mark.parametrize("action", list(PlanAction))
+def test_runnable_retries_leave_every_plan_failure_alone(action):
+    assert default_retry_on(PlanStop(action, "text")) is False
+
+
+def test_the_compact_tool_that_turns_errors_into_messages_is_not_mounted():
+    """Its handlers turn any exception into a ToolMessage. Mounting it would hide a
+    plan stop from the caller, so it must learn to re-raise one first."""
+    name = "SummarizationToolMiddleware"
+    assert name not in inspect.getsource(deepagents_graph)
+    package = Path(metasci_scribe.__file__).parent
+    mounts = [
+        path
+        for path in package.rglob("*.py")
+        if name in path.read_text(encoding="utf-8")
+    ]
+    assert mounts == []
+
+
+# ------------------------------------------------------------------------- proxies
+
+
+class _ProxyListener:
+    """A loopback proxy that records the first request line, then hangs up."""
+
+    def __init__(self) -> None:
+        self.server = socket.create_server(("127.0.0.1", 0))
+        self.lines: list[str] = []
+        self.url = f"http://127.0.0.1:{self.server.getsockname()[1]}"
+        self.thread = threading.Thread(target=self._serve, daemon=True)
+        self.thread.start()
+
+    def _serve(self) -> None:
+        while True:
+            try:
+                connection, _ = self.server.accept()
+            except OSError:
+                return
+            with connection:
+                data = connection.recv(4096)
+                self.lines.append(data.split(b"\r\n", 1)[0].decode())
+                connection.sendall(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
+
+    def close(self) -> None:
+        self.server.close()
+
+
+@pytest.fixture
+def proxy():
+    listener = _ProxyListener()
+    yield listener
+    listener.close()
+
+
+@both_modes
+def test_a_turn_goes_through_the_configured_proxy(token, proxy, monkeypatch, mode):
+    monkeypatch.setenv("HTTPS_PROXY", proxy.url)
+    with pytest.raises(PlanStop) as caught:
+        run(build_model("gpt-6.1-sol"), mode)
+    assert proxy.lines == ["CONNECT api.openai.com:443 HTTP/1.1"]
+    assert caught.value.action is PlanAction.RETRY
+    assert "proxy" in str(caught.value)
+
+
+def test_the_catalog_goes_through_the_configured_proxy(token, proxy, monkeypatch):
+    monkeypatch.setenv("HTTPS_PROXY", proxy.url)
+    with pytest.raises(PlanStop):
+        list_models()
+    assert proxy.lines == ["CONNECT api.openai.com:443 HTTP/1.1"]
+
+
+@pytest.mark.parametrize(
+    ("env", "expected"),
+    [
+        ({"HTTPS_PROXY": "http://p.test:3128"}, "http://p.test:3128"),
+        ({"https_proxy": "http://p.test:3128"}, "http://p.test:3128"),
+        ({"ALL_PROXY": "http://p.test:3128"}, "http://p.test:3128"),
+        ({"HTTPS_PROXY": "p.test:3128"}, "http://p.test:3128"),
+        ({"HTTPS_PROXY": "http://p.test:3128", "NO_PROXY": "api.openai.com"}, None),
+        ({"HTTPS_PROXY": "http://p.test:3128", "NO_PROXY": ".openai.com"}, None),
+        ({"HTTPS_PROXY": "http://p.test:3128", "NO_PROXY": "*"}, None),
+    ],
+)
+def test_the_proxy_comes_from_the_environment(monkeypatch, env, expected):
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    assert plan._proxy_url() == expected
+
+
+def test_a_proxy_for_plain_http_does_not_apply(monkeypatch):
+    monkeypatch.setattr(plan, "getproxies", lambda: {"http": "http://p.test:3128"})
+    assert plan._proxy_url() is None
+
+
+def test_no_proxy_settings_mean_a_direct_connection(monkeypatch):
+    monkeypatch.setattr(plan, "getproxies", dict)
+    assert plan._proxy_url() is None
+
+
+# ---------------------------------------------------------------- every odd ending
+
+
+def test_an_error_event_without_a_type_raises_plan_stop(serve):
+    untyped = {"error": {"code": "subscription_sharing_usage_limit_exceeded"}}
+    body = sse_bytes([CREATED]) + f"data: {json.dumps(untyped)}\n\n".encode()
+    serve(lambda: httpx.Response(200, headers=SSE_HEADERS, content=body))
+    with pytest.raises(PlanStop) as caught:
+        build_model("gpt-6.1-sol").invoke("hi")
+    assert caught.value.action is PlanAction.STOP_USAGE
+
+
+@pytest.mark.parametrize("code", [["a", "list"], {"a": "dict"}, 503, True])
+def test_a_code_that_is_not_text_is_no_code(code):
+    body = {"error": {"code": code, "type": code}}
+    assert classify_error(400, body) is PlanAction.STOP_BAD_REQUEST
+    assert classify_error(200, body) is PlanAction.STOP_BAD_REQUEST
+    assert classify_error(503, body) is PlanAction.RETRY
+
+
+@both_modes
+def test_a_code_that_is_not_text_still_ends_as_plan_stop(serve, mode):
+    serve(http_error(400, {"error": {"code": ["x"], "message": "odd"}}))
+    with pytest.raises(PlanStop) as caught:
+        run(build_model("gpt-6.1-sol"), mode)
+    assert caught.value.code is None
+
+
+class _ClosableDrop(_Dropped):
+    def __init__(self) -> None:
+        super().__init__([b'{"error"'])
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
+@both_modes
+@pytest.mark.parametrize(
+    ("status", "action"),
+    [
+        (429, PlanAction.RETRY),
+        (401, PlanAction.RELOGIN),
+        (403, PlanAction.STOP_INELIGIBLE),
+    ],
+)
+def test_an_error_body_cut_off_keeps_the_status_and_closes_the_response(
+    serve, mode, status, action
+):
+    stream = _ClosableDrop()
+    serve(
+        lambda: httpx.Response(
+            status, headers={"x-request-id": "req_cut"}, stream=stream
+        )
+    )
+    with pytest.raises(PlanStop) as caught:
+        run(build_model("gpt-6.1-sol"), mode)
+    assert caught.value.action is action
+    assert caught.value.status_code == status
+    assert caught.value.request_id == "req_cut"
+    assert stream.closed
+
+
+def test_a_catalog_cut_off_mid_body_is_a_typed_retry(serve):
+    serve(lambda: httpx.Response(200, stream=_Dropped([b'{"models": ['])))
+    with pytest.raises(PlanStop) as caught:
+        list_models()
+    assert caught.value.action is PlanAction.RETRY
+    assert caught.value.code == "network_error"
+    _assert_no_token(caught.value)
+
+
+def test_a_display_name_that_is_not_text_falls_back_to_the_slug(serve):
+    models = [{"slug": "a", "display_name": ["x"], "visibility": "list"}]
+    serve(lambda: httpx.Response(200, json={"models": models}))
+    assert list_models() == [("a", "a")]
+
+
+# ------------------------------------------------------------------ replay whitelist
+
+
+@pytest.mark.parametrize(
+    "item",
+    [
+        {"type": "web_search_call", "id": "ws_1", "status": "completed"},
+        {"type": "image_generation_call", "id": "ig_1", "result": "b64"},
+        {"type": "item_reference", "id": "msg_1"},
+        {"type": "compaction", "encrypted_content": "blob"},
+        {"type": "mcp_call", "id": "mcp_1"},
+        {"type": "reasoning", "id": "rs_1", "summary": []},
+        "a bare string",
+    ],
+    ids=lambda item: item["type"] if isinstance(item, dict) else "string",
+)
+def test_replay_drops_everything_outside_the_whitelist(item):
+    user = {"type": "message", "role": "user", "content": "hi"}
+    assert normalize_payload({"input": [item, user]})["input"] == [user]
+
+
+def test_replay_keeps_a_message_that_names_no_type():
+    item = {"role": "user", "content": "hi"}
+    assert normalize_payload({"input": [item]})["input"] == [item]

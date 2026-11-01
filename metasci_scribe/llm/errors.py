@@ -29,6 +29,8 @@ from collections.abc import Mapping
 from enum import Enum
 from typing import Any
 
+from langchain_core.exceptions import ModelError
+
 # ---------------------------------------------------------------------------
 # ChatGPT plan failures
 # ---------------------------------------------------------------------------
@@ -44,7 +46,7 @@ class PlanAction(Enum):
     RELOGIN = "relogin"
 
 
-class PlanStop(RuntimeError):
+class PlanStop(RuntimeError, ModelError):
     """A ChatGPT plan request ended without ``response.completed``.
 
     Inference stops here: nothing switches to another model or billing path.
@@ -52,9 +54,15 @@ class PlanStop(RuntimeError):
     bounds those. The type is kept all the way to the caller, which tells a
     usage limit from other failures by ``action``.
 
+    A ``ModelError`` so that langchain's own ``with_retry`` layers, such as the
+    one around the summary call, leave it alone. ``is_retryable`` is what they
+    read, so it is false for every action: ``model_retry`` goes by ``action``.
+
     ``headers`` holds only what sets the retry wait. No attribute may hold a
     token or a raw response body.
     """
+
+    is_retryable = False
 
     def __init__(
         self,

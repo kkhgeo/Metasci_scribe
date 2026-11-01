@@ -6,6 +6,7 @@ import pytest
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 
+from metasci_scribe.llm.errors import PlanAction, PlanStop
 from metasci_scribe.middleware.tool_error_handler import (
     ToolErrorHandlerMiddleware,
     _build_error_message,
@@ -199,6 +200,56 @@ class TestWrapToolCallAsync:
         req = _make_request()
         with pytest.raises(KeyboardInterrupt):
             await self.mw.awrap_tool_call(req, handler)
+
+
+# ---------------------------------------------------------------------------
+# ChatGPT plan failures from a sub-agent
+# ---------------------------------------------------------------------------
+
+STOPS = [action for action in PlanAction if action is not PlanAction.RETRY]
+
+
+def _raising(exc):
+    def handler(_request):
+        raise exc
+
+    return handler
+
+
+class TestPlanStop:
+    @pytest.mark.parametrize("action", STOPS)
+    def test_a_stop_propagates(self, action):
+        with pytest.raises(PlanStop) as caught:
+            ToolErrorHandlerMiddleware().wrap_tool_call(
+                _make_request(), _raising(PlanStop(action, "stop"))
+            )
+        assert caught.value.action is action
+
+    @pytest.mark.parametrize("action", STOPS)
+    async def test_a_stop_propagates_async(self, action):
+        async def handler(_request):
+            raise PlanStop(action, "stop")
+
+        with pytest.raises(PlanStop) as caught:
+            await ToolErrorHandlerMiddleware().awrap_tool_call(_make_request(), handler)
+        assert caught.value.action is action
+
+    def test_a_temporary_failure_stays_a_tool_error(self):
+        result = ToolErrorHandlerMiddleware().wrap_tool_call(
+            _make_request(), _raising(PlanStop(PlanAction.RETRY, "later"))
+        )
+        assert isinstance(result, ToolMessage)
+        assert result.status == "error"
+
+    async def test_a_temporary_failure_stays_a_tool_error_async(self):
+        async def handler(_request):
+            raise PlanStop(PlanAction.RETRY, "later")
+
+        result = await ToolErrorHandlerMiddleware().awrap_tool_call(
+            _make_request(), handler
+        )
+        assert isinstance(result, ToolMessage)
+        assert result.status == "error"
 
 
 # ---------------------------------------------------------------------------
