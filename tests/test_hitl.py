@@ -948,17 +948,6 @@ class TestAsyncSubagentGuard:
         assert kw.get("refuse_delete") is False
 
 
-class TestOrchestratorRelayGuidance:
-    """The orchestrator needs the recovery path spelled out in its prompt."""
-
-    def test_delegation_prompt_explains_blocked_command_relay(self):
-        from metasci_scribe.prompts import DELEGATION_STRATEGY
-
-        text = DELEGATION_STRATEGY.lower()
-        assert "update_async_task" in text
-        assert "blocked" in text
-
-
 class TestHitlResumeKeying:
     """The HITL resume payload must be keyed by interrupt_id so parallel
     sub-agent interrupts don't hit langgraph's multi-pending-interrupt crash."""

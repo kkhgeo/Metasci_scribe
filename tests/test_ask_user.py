@@ -277,20 +277,27 @@ class TestAskUserMiddleware:
         mw = AskUserMiddleware(system_prompt="custom prompt")
         assert mw.system_prompt == "custom prompt"
 
-    def test_system_prompt_mentions_resource_estimation(self):
+    def test_system_prompt_asks_before_changing_the_outline(self):
         from metasci_scribe.middleware.ask_user import ASK_USER_SYSTEM_PROMPT
 
-        assert "estimation" in ASK_USER_SYSTEM_PROMPT.lower()
+        assert "outline.md" in ASK_USER_SYSTEM_PROMPT
+        assert "[evidence needed]" in ASK_USER_SYSTEM_PROMPT
 
-    def test_system_prompt_mentions_timeout(self):
-        from metasci_scribe.middleware.ask_user import ASK_USER_SYSTEM_PROMPT
+    def test_prompts_are_about_writing_not_experiments(self):
+        from metasci_scribe.middleware.ask_user import (
+            ASK_USER_SYSTEM_PROMPT,
+            ASK_USER_TOOL_DESCRIPTION,
+        )
 
-        assert "timeout" in ASK_USER_SYSTEM_PROMPT.lower()
+        for text in (ASK_USER_SYSTEM_PROMPT, ASK_USER_TOOL_DESCRIPTION):
+            lowered = text.lower()
+            for word in ("experiment", "gpu", "web search", "background"):
+                assert word not in lowered, word
 
-    def test_tool_description_mentions_resource(self):
+    def test_tool_description_mentions_the_outline(self):
         from metasci_scribe.middleware.ask_user import ASK_USER_TOOL_DESCRIPTION
 
-        assert "resource" in ASK_USER_TOOL_DESCRIPTION.lower()
+        assert "outline" in ASK_USER_TOOL_DESCRIPTION.lower()
 
 
 # ---------------------------------------------------------------------------

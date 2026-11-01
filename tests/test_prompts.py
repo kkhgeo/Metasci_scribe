@@ -4,11 +4,10 @@ import pytest
 
 from metasci_scribe.prompts import (
     DELEGATION_STRATEGY,
-    EXPERIMENT_WORKFLOW,
     METASCI_SCRIBE_IDENTITY,
-    REPORT_TEMPLATE,
     SHELL_GUIDELINES,
     WRITING_GUIDELINES,
+    WRITING_WORKFLOW,
     get_system_prompt,
 )
 
@@ -22,15 +21,11 @@ class TestGetSystemPrompt:
     def test_contains_identity(self):
         result = get_system_prompt()
         assert "Metasci Scribe" in result
-        assert "self-evolving" in result
+        assert "paper" in result
 
     def test_contains_workflow(self):
         result = get_system_prompt()
-        assert "Experiment Workflow" in result
-
-    def test_contains_report_template(self):
-        result = get_system_prompt()
-        assert "Experiment Report Template" in result
+        assert "Writing Workflow" in result
 
     def test_contains_writing_guidelines(self):
         result = get_system_prompt()
@@ -50,7 +45,7 @@ class TestGetSystemPrompt:
         assert "{max_iterations}" not in result
 
     def test_workflow_constant_not_empty(self):
-        assert len(EXPERIMENT_WORKFLOW) > 0
+        assert len(WRITING_WORKFLOW) > 0
 
     def test_delegation_no_placeholders(self):
         assert "{max_concurrent}" not in DELEGATION_STRATEGY
@@ -60,7 +55,7 @@ class TestGetSystemPrompt:
         """Identity must precede workflow; workflow must precede delegation."""
         result = get_system_prompt()
         idx_identity = result.find("# Identity")
-        idx_workflow = result.find("# Experiment Workflow")
+        idx_workflow = result.find("# Writing Workflow")
         idx_delegation = result.find("# Sub-Agent Delegation")
         assert 0 <= idx_identity < idx_workflow < idx_delegation
 
@@ -74,12 +69,6 @@ class TestGetSystemPrompt:
 
         result = get_system_prompt()
         assert not re.search(r"Current date: \d{4}-\d{2}-\d{2}", result)
-
-    def test_mentions_skill_manager_for_discovery(self):
-        """Agent must know it can browse/install skills from the EvoSkills catalog."""
-        result = get_system_prompt()
-        assert "skill_manager" in result
-        assert "EvoSkills" in result
 
     def test_no_stale_memory_path_singular(self):
         """Backend route is `/memories/`, not `/memory/`. Catch silent-bug regressions.
@@ -106,47 +95,19 @@ class TestScribeIdentity:
     def test_states_role(self):
         assert "You are Metasci Scribe" in METASCI_SCRIBE_IDENTITY
 
-    def test_mentions_human_on_the_loop_paradigm(self):
-        # Behavioral cue: agent should know it isn't asking permission for every action
-        assert "on-the-loop" in METASCI_SCRIBE_IDENTITY
-
-
-class TestReportTemplate:
-    def test_constant_not_empty(self):
-        assert len(REPORT_TEMPLATE) > 0
-
-    def test_contains_six_sections(self):
-        # Match the six recommended sections (lowercased to be tolerant of phrasing)
-        body = REPORT_TEMPLATE.lower()
-        for section in (
-            "summary",
-            "experiment plan",
-            "setup",
-            "baselines",
-            "results",
-            "limitations",
-        ):
-            assert section in body, section
-
-    def test_not_duplicated_in_workflow_step5(self):
-        """Step 5 should reference REPORT_TEMPLATE, not redefine the schema."""
-        # Positive: Step 5 must actually reference the report template.
-        assert "Experiment Report Template" in EXPERIMENT_WORKFLOW
-        # Negative: section headers unique to REPORT_TEMPLATE must not appear
-        # inlined inside EXPERIMENT_WORKFLOW (would mean the schema was
-        # duplicated again, regardless of indentation style).
-        assert "Baselines and comparisons" not in EXPERIMENT_WORKFLOW
+    def test_author_owns_the_claims(self):
+        assert "The author owns the claims" in METASCI_SCRIBE_IDENTITY
 
 
 class TestWritingGuidelines:
     def test_constant_not_empty(self):
         assert len(WRITING_GUIDELINES) > 0
 
-    def test_mentions_first_person_avoidance(self):
-        assert (
-            "first-person" in WRITING_GUIDELINES.lower()
-            or "I ..." in WRITING_GUIDELINES
-        )
+    def test_follows_the_authors_language(self):
+        assert "language" in WRITING_GUIDELINES.lower()
+
+    def test_leaves_specialist_rules_to_skills(self):
+        assert "skills" in WRITING_GUIDELINES
 
 
 class TestShellGuidelines:
@@ -157,27 +118,35 @@ class TestShellGuidelines:
         assert "300" in SHELL_GUIDELINES  # default timeout
         assert "3600" in SHELL_GUIDELINES  # per-command override ceiling
 
-    def test_mentions_background_execution(self):
-        assert "background" in SHELL_GUIDELINES.lower()
+    def test_is_for_an_attended_conversation(self):
+        assert "the author approves each command" in SHELL_GUIDELINES
+        assert "only in a conversation" in SHELL_GUIDELINES
+
+    def test_no_long_running_jobs(self):
+        lowered = SHELL_GUIDELINES.lower()
+        assert "background" not in lowered
+        assert "gpu" not in lowered
+        assert "output.log" not in lowered
 
     def test_not_duplicated_in_workflow(self):
         """SHELL_GUIDELINES content should live ONLY in its own constant."""
         # Sentinel phrase unique to SHELL_GUIDELINES
-        assert "Sandbox limits" not in EXPERIMENT_WORKFLOW
+        assert "Sandbox limits" not in WRITING_WORKFLOW
 
 
 class TestDangerousShellGuidelines:
-    def test_default_uses_virtual_paths(self):
+    def test_default_uses_the_sandbox_wording(self):
         result = get_system_prompt()
-        assert "> /output.log" in result
+        assert "Sandbox limits" in result
         assert "DANGEROUS MODE" not in result
 
     def test_dangerous_swaps_guidelines(self):
         result = get_system_prompt(dangerous=True, cwd="/Users/me/ws/demo")
         assert "DANGEROUS MODE" in result
         assert "/Users/me/ws/demo" in result
-        # virtual-path example is gone
-        assert "> /output.log" not in result
+        # sandbox wording is gone
+        assert "Sandbox limits" not in result
+        assert "the author approves each command" not in result
         # privileged-command blocklist still advertised
         assert "sudo" in result
         assert "rm -rf /" in result
@@ -197,7 +166,7 @@ class TestBashOnWindowsShellGuidelines:
         assert "The shell is bash (Git for Windows)." in result
         assert "Write Windows paths" not in result
         assert "C:/Users/you" not in result
-        assert "> /output.log" in result
+        assert "Sandbox limits" in result
 
     @pytest.mark.parametrize("dangerous", [False, True])
     def test_both_modes_explain_git_bash_path_conversion(self, dangerous):

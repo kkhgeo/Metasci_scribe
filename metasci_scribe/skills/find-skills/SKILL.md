@@ -1,11 +1,13 @@
 ---
 name: find-skills
-description: Helps users discover agent skills from the open ecosystem. Searches skills.sh and presents options for installation via the built-in skill_manager tool.
+description: Helps users discover agent skills from the open ecosystem and install them through the built-in skill_manager tool. Needs `execute` with the author's approval, so it works only in a conversation with the author.
 ---
 
 # Find Skills
 
 This skill helps you discover skills from the open agent skills ecosystem.
+
+**Availability:** searching and installing both need the `execute` tool and the author's approval of each command, so this works only in a conversation with the author. In an autonomous run there is no `execute`; do not use this skill there.
 
 ## When to Use This Skill
 

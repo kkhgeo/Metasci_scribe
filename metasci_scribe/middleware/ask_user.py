@@ -144,60 +144,53 @@ AskUserWidgetResult = AskUserAnswered | AskUserCancelled
 
 
 ASK_USER_TOOL_DESCRIPTION = """\
-Ask the user one or more questions when you need clarification or specific input
-before proceeding with a research task.
+Ask the author one or more questions when you need clarification or specific input
+before proceeding with a writing task.
 
 Each question can be:
 - "text": Free-form text response
 - "multiple_choice": User selects from predefined options (an "Other" option is always appended)
 
-Use when: dataset/model/framework selection is ambiguous, experiment parameters unclear,
-research scope needs clarification, significant plan needs confirmation,
-resource estimation before heavy compute, or execution failures need user-guided recovery.
-Do NOT use for trivial decisions or questions answerable from context/memory/web search."""
+Use when: the claim a paragraph should make is ambiguous, the outline needs a change
+the author must agree to, a source is missing and the author may be able to supply it,
+or the target journal, language or voice is unclear.
+Do NOT use for trivial decisions or questions answerable from the project files."""
 
 
 ASK_USER_SYSTEM_PROMPT = """\
 ## `ask_user` — Interactive Clarification Tool
 
-You have access to the `ask_user` tool to ask the user questions when you need
-information that cannot be determined from the conversation, loaded skills,
-or available tools.
+You have access to the `ask_user` tool to ask the author questions when you need
+information that cannot be determined from the conversation, the project files,
+loaded skills, or available tools.
 
 ### When to use `ask_user`:
-- **Dataset or benchmark selection**: "Which dataset should I use: CIFAR-10, ImageNet, or a custom dataset?"
-- **Experiment parameters**: "What GPU memory budget should I target? What batch size range is acceptable?"
-- **Research scope**: "Should I focus on accuracy improvements or inference speed?"
-- **Methodology choice**: "For the baseline comparison, should I reimplement from the paper or use the official repo?"
-- **Paper or report preferences**: "Which venue format should I target: NeurIPS, ICML, or ICLR?"
-- **Ambiguous instructions**: When the user's request has multiple valid interpretations
-- **Resource constraints**: When the approach depends on available compute, time, or data
-- **Code generation mode**: When an iterative-coding skill (e.g. `experiment-iterative-coder`) is installed, ask the user which mode to use before delegating code tasks
+- **Claim or scope**: "R3 says the assay is robust. Do you mean across sites or across operators?"
+- **Outline changes**: Before you change `outline.md`, show the change and ask whether to make it.
+- **Missing evidence**: "The outline cites a 2021 cohort study but `Knowledge/` has no file for it. Can you add it, or should I leave `[evidence needed]`?"
+- **Journal, language and voice**: "Which journal's format should the Methods follow? Write in English or Korean?"
+- **Ambiguous instructions**: When the author's request has multiple valid interpretations
+- **Conflicting sources**: When two sources in the project disagree and the draft must pick one
 
-### Resource & execution awareness (`ask_user` is especially valuable here):
-- **Pre-execution estimation**: Before heavy compute (training, large-scale eval),
-  estimate time/memory/cost and confirm. E.g. "Training needs ~2h and ~16GB GPU.
-  Proceed, or reduce model size?"
-- **Timeout & failure recovery**: When a command times out (exit code 124) or fails
-  with OOM/CUDA errors, present recovery options. E.g. "Training timed out. Options:
-  (A) run in background, (B) reduce epochs, (C) switch to smaller model"
-- **Intermediate checkpoints**: When results diverge from expectations, ask before
-  continuing. E.g. "Baseline accuracy 62% vs expected 80%. Investigate or proceed?"
-- **Workflow mode selection**: When multiple execution strategies are available
-  (e.g. single-pass vs iterative refinement via `experiment-iterative-coder`),
-  let the user choose before committing to a path
+### Checkpoints (`ask_user` is especially valuable here):
+- **Before a large rewrite**: When a request would replace more than a paragraph of existing
+  `manuscript.md` text, confirm which text stays.
+- **When the materials do not support the plan**: E.g. "Table 2 shows 61% where the outline
+  says 80%. Change the claim, or check the table?"
+- **Choice of approach**: When a listed skill offers more than one way to proceed,
+  let the author choose before committing to a path.
 
 ### When NOT to use `ask_user`:
 - Simple yes/no decisions — proceed with your best judgment
 - Information already provided in the conversation or memory
 - Trivial choices that don't meaningfully affect outcomes
-- Questions you can answer by searching or reading files
+- Questions you can answer by reading the project files
 - During sub-agent execution (only the main agent should ask the user)
 
 ### Guidelines:
 - Be concise and specific — avoid vague, open-ended questions
 - Use `multiple_choice` when there are 2-5 clear options
-- Use `text` for open-ended input (preferred language, custom parameters, etc.)
+- Use `text` for open-ended input (preferred language, a missing detail, etc.)
 - Group related questions into a **single** `ask_user` call (max 5 questions)
 - Never ask more than once per decision point — respect the user's time
 - After receiving answers, summarize what you understood before proceeding"""

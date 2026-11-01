@@ -948,7 +948,7 @@ def _get_default_middleware(
         ContextOverflowMapperMiddleware(),
         ToolErrorHandlerMiddleware(),
         # deepagents 0.7.0 dropped TodoListMiddleware from its defaults;
-        # EXPERIMENT_WORKFLOW planning and the todo UI pipeline require it.
+        # the writing workflow's planning and the todo UI pipeline require it.
         TodoListMiddleware(),
         *create_tool_selector_middleware(
             model=tool_selector_model,
