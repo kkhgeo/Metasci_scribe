@@ -1,1 +1,10 @@
 .superpowers/
+
+# secrets and spike artefacts
+spike_token.json
+spike_token.json.tmp
+*.token.json
+.metasci-scribe/
+__pycache__/
+.pytest_cache/
+*.pyc

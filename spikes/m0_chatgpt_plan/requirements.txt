@@ -1,0 +1,5 @@
+deepagents
+langchain-openai
+httpx
+pyjwt[crypto]
+pytest
