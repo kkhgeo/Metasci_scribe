@@ -44,8 +44,16 @@ class TestWorkspace:
         ws = Workspace(tmp_path)
         root = tmp_path.resolve()
         assert ws.root == root
-        assert ws.skills_dir == root / "skills"
+        assert ws.state_dir == root / ".metasci-scribe"
+        assert ws.skills_dir == root / ".metasci-scribe" / "skills"
         assert ws.runs_dir == root / "runs"
+
+    def test_skills_dir_lives_under_project_state_dir(self, tmp_path):
+        """Project state (skills) sits in <root>/.metasci-scribe, not beside the project files."""
+        ws = Workspace(tmp_path)
+        assert ws.skills_dir == tmp_path.resolve() / ".metasci-scribe" / "skills"
+        assert ws.skills_dir.parent == ws.state_dir
+        assert not (tmp_path / "skills").exists()
 
     def test_accepts_string_path(self, tmp_path):
         assert Workspace(str(tmp_path)).root == tmp_path.resolve()
@@ -98,7 +106,7 @@ class TestWorkspace:
         monkeypatch.setenv("METASCI_SCRIBE_SKILLS_DIR", str(tmp_path / "s"))
         monkeypatch.setenv("METASCI_SCRIBE_RUNS_DIR", str(tmp_path / "r"))
         ws = Workspace(tmp_path / "proj")
-        assert ws.skills_dir == ws.root / "skills"
+        assert ws.skills_dir == ws.root / ".metasci-scribe" / "skills"
         assert ws.runs_dir == ws.root / "runs"
 
 

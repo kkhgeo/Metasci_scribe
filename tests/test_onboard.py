@@ -747,7 +747,7 @@ class TestStepSkills:
             f"evo-memory:\n  source: {pack_source}\n"
             f"research-survey:\n  source: {pack_source}\n"
         )
-        workspace.skills_dir.mkdir()
+        workspace.skills_dir.mkdir(parents=True)
 
         captured: list = []
 
@@ -800,7 +800,7 @@ class TestStepSkills:
         (global_dir / ".installed.yaml").write_text(
             f"paper-writing:\n  source: {pack_source}\n  commit: aaa111\n"
         )
-        workspace.skills_dir.mkdir()
+        workspace.skills_dir.mkdir(parents=True)
 
         captured: list = []
 
@@ -850,7 +850,7 @@ class TestStepSkills:
         (global_dir / ".installed.yaml").write_text(
             f"paper-writing:\n  source: {pack_source}\n  commit: aaa111\n"
         )
-        workspace.skills_dir.mkdir()
+        workspace.skills_dir.mkdir(parents=True)
 
         captured: list = []
 

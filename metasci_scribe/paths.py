@@ -68,9 +68,14 @@ class Workspace:
         object.__setattr__(self, "root", normalize_path(self.root))
 
     @property
+    def state_dir(self) -> Path:
+        """Project state folder (``<root>/.metasci-scribe``)."""
+        return self.root / ".metasci-scribe"
+
+    @property
     def skills_dir(self) -> Path:
-        """Workspace skills tier (``<root>/skills``)."""
-        return self.root / "skills"
+        """Workspace skills tier (``<root>/.metasci-scribe/skills``)."""
+        return self.state_dir / "skills"
 
     @property
     def runs_dir(self) -> Path:

@@ -1632,7 +1632,7 @@ class MergedSkillsBackend(BackendProtocol):
     """Skills backend that merges up to three skill directories.
 
     Priority (high → low):
-    1. primary   — workspace/skills/  (project-local, writable)
+    1. primary   — workspace/.metasci-scribe/skills/  (project-local, writable)
     2. global    — ~/.metasci-scribe/skills/  (user global, read-only)
     3. secondary — metasci_scribe/skills/  (built-in, PyPI, read-only)
 
@@ -1720,7 +1720,7 @@ class MergedSkillsBackend(BackendProtocol):
                 pass
         return GlobResult(matches=sorted(merged.values(), key=lambda x: x["path"]))
 
-    # -- write / edit: only workspace/skills/ (primary) is writable --
+    # -- write / edit: only workspace/.metasci-scribe/skills/ (primary) is writable --
 
     def write(self, file_path: str, content: str) -> WriteResult:
         return self._primary.write(file_path, content)

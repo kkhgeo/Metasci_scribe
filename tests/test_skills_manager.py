@@ -34,8 +34,8 @@ from metasci_scribe.tools.skills_manager import (
 @pytest.fixture
 def temp_skills_dir(tmp_path):
     """Create a temporary skills directory, isolated from the real global tier."""
-    skills_dir = tmp_path / "skills"
-    skills_dir.mkdir()
+    skills_dir = Workspace(tmp_path).skills_dir
+    skills_dir.mkdir(parents=True)
     empty_global = tmp_path / "global_skills"
     empty_global.mkdir()
     with patch("metasci_scribe.paths.GLOBAL_SKILLS_DIR", empty_global):
@@ -43,9 +43,9 @@ def temp_skills_dir(tmp_path):
 
 
 @pytest.fixture
-def skills_ws(temp_skills_dir):
+def skills_ws(tmp_path, temp_skills_dir):
     """A ``Workspace`` whose skills tier is ``temp_skills_dir``."""
-    return Workspace(temp_skills_dir.parent)
+    return Workspace(tmp_path)
 
 
 @pytest.fixture

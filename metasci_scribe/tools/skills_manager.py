@@ -2,7 +2,7 @@
 
 This module provides functions for installing, listing, and uninstalling user skills.
 Skills are installed to GLOBAL_SKILLS_DIR by default (~/.metasci-scribe/skills/).
-Pass global_install=False to install to the workspace skills tier (<workspace>/skills/) instead.
+Pass global_install=False to install to the workspace skills tier (<workspace>/.metasci-scribe/skills/) instead.
 
 Supported installation sources:
 - Local directory paths
