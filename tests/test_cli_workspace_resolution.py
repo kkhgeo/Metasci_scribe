@@ -355,3 +355,38 @@ def test_network_workdir_is_not_created(monkeypatch, tmp_path):
     with pytest.raises(typer.Exit):
         _run(monkeypatch, _config(), workdir=str(target))
     assert not target.exists()
+
+
+def _link_dir(link: Path, target: Path) -> None:
+    try:
+        link.symlink_to(target, target_is_directory=True)
+        return
+    except OSError:
+        pass
+    try:
+        import _winapi
+
+        _winapi.CreateJunction(str(target), str(link))
+    except (ImportError, OSError):
+        pytest.skip("cannot make a link or junction here")
+
+
+def test_a_local_looking_link_to_a_network_folder_is_refused(monkeypatch, tmp_path):
+    """A junction on C: that points at a share passes the raw-path check only."""
+    import typer
+
+    from metasci_scribe import project
+
+    share = tmp_path / "share-target"
+    share.mkdir()
+    link = tmp_path / "paper"
+    _link_dir(link, share)
+    # Stand-in for the share: whatever resolves into ``share-target``.
+    monkeypatch.setattr(
+        project, "is_network_path", lambda p: str(p).endswith("share-target")
+    )
+    printed: list[str] = []
+    monkeypatch.setattr(commands.console, "print", lambda *a, **k: printed.append(a[0]))
+    with pytest.raises(typer.Exit):
+        _run(monkeypatch, _config(), workdir=str(link))
+    assert any("local" in line.lower() for line in printed)

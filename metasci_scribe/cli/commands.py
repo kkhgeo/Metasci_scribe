@@ -6,7 +6,7 @@ import logging
 import os
 import re
 import sys
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from importlib.metadata import version as _pkg_version
 from typing import Annotated, Any, cast
 
@@ -777,6 +777,16 @@ async def _move_server_or_keep_session(
     return True
 
 
+@contextmanager
+def _local_folders_only():
+    """Turn a network-folder refusal into the message and exit code 1."""
+    try:
+        yield
+    except project.NetworkPathError as exc:
+        console.print(f"[red]✗ {escape(str(exc))}[/red]")
+        raise typer.Exit(code=1) from exc
+
+
 async def _restore_thread_dirs(
     thread_id: str,
     *,
@@ -798,10 +808,24 @@ async def _restore_thread_dirs(
     from ..langgraph_dev.manager import WorkspaceMismatchError
 
     metadata = await graph_gateway.get_thread_metadata(thread_id) or {}
-    restored = (
-        SessionDirs.from_stored(metadata.get("workspace_dir"), metadata.get("run_dir"))
-        or dirs
-    )
+    # Refuse a network folder by its stored spelling, before anything resolves
+    # it (which would touch the share), then again once resolved: a local
+    # looking link can lead to one.
+    try:
+        with _local_folders_only():
+            project.require_local_stored(
+                metadata.get("workspace_dir"), metadata.get("run_dir")
+            )
+            restored = (
+                SessionDirs.from_stored(
+                    metadata.get("workspace_dir"), metadata.get("run_dir")
+                )
+                or dirs
+            )
+            project.require_local_path(restored.workspace.root)
+    except typer.Exit:
+        _remove_unused_run_dir(dirs.run_dir)
+        raise
     try:
         synced = await _move_server_or_keep_session(
             config, target=restored, current=served, backend=backend
@@ -1824,14 +1848,14 @@ def _main_callback(
         effective_mode = mode or config.default_mode
     # Before the path is resolved (a mapped drive resolves to a UNC path) or
     # created: network folders are not supported.
-    try:
+    with _local_folders_only():
         project.require_local_path(workspace_root)
-    except project.NetworkPathError as exc:
-        console.print(f"[red]✗ {escape(str(exc))}[/red]")
-        raise typer.Exit(code=1) from exc
     if workdir and not use_cwd:
         os.makedirs(workspace_root, exist_ok=True)
     workspace = Workspace(workspace_root)
+    with _local_folders_only():
+        # Resolved now: a junction or link on a local drive may lead to a share.
+        project.require_local_path(workspace.root)
     try:
         require_workspace_root(workspace.root)
     except WorkspaceRootError as exc:

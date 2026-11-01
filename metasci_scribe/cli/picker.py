@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from prompt_toolkit.styles import Style as PtStyle  # type: ignore[import-untyped]
 
+from .. import project
 from ..paths import SessionDirs
 
 # Style for questionary pickers used by the Rich CLI ``/resume`` and
@@ -130,8 +131,16 @@ def _build_items(threads: list[dict]) -> list[dict]:
     seen_order: list[str] = []
     run_paths: set[str] = set()
     for t in threads:
-        dirs = SessionDirs.from_stored(t.get("workspace_dir"), t.get("run_dir"))
-        raw = dirs.work_dir.as_posix() if dirs is not None else ""
+        stored, stored_run = t.get("workspace_dir"), t.get("run_dir")
+        if project.stored_network_path(stored, stored_run):
+            # Listed as stored: resolving it would touch the share.
+            dirs = None
+            raw = str(stored_run or stored).replace("\\", "/")
+            if stored_run:
+                run_paths.add(_normalize_path(raw) or raw)
+        else:
+            dirs = SessionDirs.from_stored(stored, stored_run)
+            raw = dirs.work_dir.as_posix() if dirs is not None else ""
         norm = _normalize_path(raw) or raw
         if dirs is not None and dirs.run_dir is not None:
             run_paths.add(norm)

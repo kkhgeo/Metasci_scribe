@@ -13,8 +13,10 @@ stop with a clear message instead of failing later with strange path errors.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
+import uuid
 from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path, PurePath, PureWindowsPath
@@ -45,10 +47,27 @@ class NetworkPathError(RuntimeError):
 
 @dataclass
 class InitResult:
-    """What ``init_project`` did: new items, and existing ones it left alone."""
+    """What ``init_project`` did.
+
+    ``created`` are new items, ``skipped`` existing ones of the right kind that
+    were left alone, ``problems`` existing items of the wrong kind (a file where
+    a folder belongs, or the reverse), which were left alone and cannot be used.
+    """
 
     created: list[Path] = field(default_factory=list)
     skipped: list[Path] = field(default_factory=list)
+    problems: list[Path] = field(default_factory=list)
+
+
+class InitError(RuntimeError):
+    """``init_project`` hit a file system error part way through.
+
+    ``result`` lists what had been created before it stopped.
+    """
+
+    def __init__(self, message: str, result: InitResult) -> None:
+        super().__init__(message)
+        self.result = result
 
 
 def _drive_type(root: str) -> int:
@@ -96,6 +115,26 @@ def require_local_path(path: str | os.PathLike[str] | PurePath) -> None:
         raise NetworkPathError(NETWORK_PATH_MESSAGE.format(path=path))
 
 
+def stored_network_path(*stored: str | None) -> str | None:
+    """The first of the stored folder spellings that is a network path.
+
+    For folders read back from a stored thread. Judged by the stored text
+    alone, so nothing touches the share (a dead one can hang a stat for a
+    long time).
+    """
+    for value in stored:
+        if value and is_network_path(value):
+            return value
+    return None
+
+
+def require_local_stored(*stored: str | None) -> None:
+    """Raise ``NetworkPathError`` if any stored folder is on a network."""
+    bad = stored_network_path(*stored)
+    if bad is not None:
+        raise NetworkPathError(NETWORK_PATH_MESSAGE.format(path=bad))
+
+
 def extract_dir(root: Path) -> Path:
     """Where text extracted from ``Knowledge/`` PDFs is kept."""
     return root / STATE_DIR_NAME / "extracted"
@@ -109,20 +148,48 @@ def _template(name: str) -> str:
     )
 
 
+def _write_temp(path: Path, text: str) -> None:
+    with open(path, "x", encoding="utf-8", newline="\n") as f:
+        f.write(text)
+
+
+def _publish(tmp: Path, target: Path) -> None:
+    """Move *tmp* to *target*, failing with ``FileExistsError`` if it exists."""
+    if os.name == "nt":
+        os.rename(tmp, target)  # never replaces on Windows
+        return
+    try:
+        os.link(tmp, target)  # never replaces
+    except FileExistsError:
+        raise
+    except OSError:
+        # No hard links here (some removable file systems).
+        if os.path.lexists(target):
+            raise FileExistsError(str(target)) from None
+        os.rename(tmp, target)
+        return
+    os.unlink(tmp)
+
+
 def _write_new(path: Path, text: str) -> bool:
     """Create *path* with *text* unless something is already there.
 
-    A link, even a dangling one, counts as something there: Windows would
-    follow it and create its target. Exclusive creation covers a file made
-    between the check and the write.
+    The text goes to a temporary file in the same folder first and is moved
+    into place whole, so a write that fails leaves nothing at *path* for a
+    later ``/init`` to mistake for the real file. A link, even a dangling one,
+    counts as something there: Windows would follow it and create its target.
     """
     if os.path.lexists(path):
         return False
+    tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex[:8]}.tmp")
     try:
-        with open(path, "x", encoding="utf-8", newline="\n") as f:
-            f.write(text)
+        _write_temp(tmp, text)
+        _publish(tmp, path)
     except FileExistsError:
         return False
+    finally:
+        with contextlib.suppress(OSError):
+            tmp.unlink()
     return True
 
 
@@ -134,20 +201,34 @@ def _make_dir(path: Path) -> bool:
     return True
 
 
+def problem_reason(path: Path) -> str:
+    """Why an existing *path* cannot serve as the layout item it is named for."""
+    is_folder_item = path.name in _FOLDERS
+    if is_folder_item:
+        return "is a file, not a folder"
+    if path.is_dir():
+        return "is a folder, not a file"
+    return "is not a regular file (a broken link?)"
+
+
+_FOLDERS = ("Knowledge", "Figures", "Tables", STATE_DIR_NAME)
+
+
 def init_project(root: Path) -> InitResult:
     """Create the paper folder layout in *root*, skipping what already exists.
 
     Raises ``NetworkPathError`` for a network folder and
     ``paths.WorkspaceRootError`` for one that holds the app's data (the home
-    folder, say). Nothing is written in either case. Existing files and
-    folders are listed in ``skipped`` and left exactly as they are.
+    folder, say). Nothing is written in either case. Existing items of the
+    right kind are listed in ``skipped``, existing items of the wrong kind in
+    ``problems``; both are left exactly as they are. A file system error
+    raises ``InitError`` carrying what had been created so far.
     """
     require_local_path(root)
     paths.require_workspace_root(root)
     root = Path(root)
     if root.exists() and not root.is_dir():
         raise NotADirectoryError(f"{root} is not a folder")
-    root.mkdir(parents=True, exist_ok=True)
 
     result = InitResult()
     files = {
@@ -155,10 +236,25 @@ def init_project(root: Path) -> InitResult:
         "outline.md": _template("outline.md"),
         "manuscript.md": "",
     }
-    for name, text in files.items():
-        target = root / name
-        (result.created if _write_new(target, text) else result.skipped).append(target)
-    for name in ("Knowledge", "Figures", "Tables", STATE_DIR_NAME):
-        target = root / name
-        (result.created if _make_dir(target) else result.skipped).append(target)
+    target = root
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        for name, text in files.items():
+            target = root / name
+            if _write_new(target, text):
+                result.created.append(target)
+            elif target.is_file():
+                result.skipped.append(target)
+            else:
+                result.problems.append(target)
+        for name in _FOLDERS:
+            target = root / name
+            if _make_dir(target):
+                result.created.append(target)
+            elif target.is_dir():
+                result.skipped.append(target)
+            else:
+                result.problems.append(target)
+    except OSError as exc:
+        raise InitError(f"Could not create {target}: {exc}", result) from exc
     return result

@@ -7,6 +7,7 @@ from typing import ClassVar
 
 from rich.table import Table
 
+from ... import project
 from ...gateway import GraphGateway, GraphTarget
 from ...paths import SessionDirs, WorkspaceRootError, require_workspace_root
 from ..base import Argument, Command, CommandContext
@@ -26,7 +27,12 @@ def _workspace_label(thread: dict, *, name_only: bool = False) -> str:
     folder at the filesystem root (e.g. ``/`` in a container) has no name, so it shows
     as the root itself. Empty when the thread has no stored workspace.
     """
-    dirs = SessionDirs.from_stored(thread.get("workspace_dir"), thread.get("run_dir"))
+    stored, stored_run = thread.get("workspace_dir"), thread.get("run_dir")
+    if project.stored_network_path(stored, stored_run):
+        # Shown as stored: resolving it would touch the share.
+        raw = str(stored_run or stored).replace("\\", "/").rstrip("/")
+        return raw.rsplit("/", 1)[-1] if name_only else raw
+    dirs = SessionDirs.from_stored(stored, stored_run)
     if dirs is None:
         return ""
     if name_only:
@@ -209,13 +215,24 @@ class ResumeCommand(Command):
         metadata = await gateway.get_thread_metadata(resolved) or {}
         # A thread from another workspace switches everything: skills,
         # memory and the folder the agent works in.
+        # Network folders are refused by their stored spelling, before anything
+        # resolves them (which would touch the share).
+        try:
+            project.require_local_stored(
+                metadata.get("workspace_dir"), metadata.get("run_dir")
+            )
+        except project.NetworkPathError as exc:
+            ctx.ui.append_system(f"✗ {exc}", style="red")
+            return
         restored = SessionDirs.from_stored(
             metadata.get("workspace_dir"), metadata.get("run_dir")
         )
         if restored is not None:
             try:
+                # A local-looking link can still lead to a share.
+                project.require_local_path(restored.workspace.root)
                 require_workspace_root(restored.workspace.root)
-            except WorkspaceRootError as exc:
+            except (project.NetworkPathError, WorkspaceRootError) as exc:
                 ctx.ui.append_system(str(exc), style="red")
                 return
             ctx.dirs = restored
