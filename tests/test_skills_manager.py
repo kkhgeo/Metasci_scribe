@@ -637,18 +637,20 @@ class TestMissingGit:
         assert "git was not found on PATH." in result
         assert "Traceback" not in result
 
-    def test_agent_browse_returns_the_message(self, tmp_path):
-        from metasci_scribe.tools.skill_manager import make_skill_manager_tool
-        from metasci_scribe.tools.skills_manager import _REMOTE_INDEX_CACHE
+    def test_agent_tool_offers_no_remote_browse(self, tmp_path):
+        from pydantic import ValidationError
 
-        _REMOTE_INDEX_CACHE.clear()
+        from metasci_scribe.tools.skill_manager import make_skill_manager_tool
+
         skill_manager = make_skill_manager_tool(Workspace(tmp_path))
 
-        result = skill_manager.invoke({"action": "browse"})
-
-        assert result.startswith(
-            "Failed to fetch skill index: git was not found on PATH."
-        )
+        with pytest.raises(ValidationError):
+            skill_manager.invoke({"action": "browse"})
+        text = skill_manager.description
+        assert "browse" not in text.lower()
+        for upstream in ("EvoSkills", "EvoScientist", "experiments", "anthropics"):
+            assert upstream not in text
+        assert "tag" not in skill_manager.args
 
 
 class TestBareNameIndexFailure:

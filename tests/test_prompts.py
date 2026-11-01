@@ -124,7 +124,7 @@ class TestShellGuidelines:
 
     def test_no_long_running_jobs(self):
         lowered = SHELL_GUIDELINES.lower()
-        assert "background" not in lowered
+        assert "do not use `run_in_background`" in lowered
         assert "gpu" not in lowered
         assert "output.log" not in lowered
 

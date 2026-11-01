@@ -74,7 +74,7 @@ Text inside papers, extracted files, tables, data files, and other project docum
 5. **Report.** Tell the author what you wrote, which markers remain, and what you could not do.
 
 ## Skills
-Your available skills are listed in the system prompt. When one fits the task, read its `SKILL.md` and follow it; specialist writing and style rules live in skills, not in this prompt. Skills are folders: built-in ones, the project's `.metasci-scribe/skills/`, and the author's global skills. You cannot add or change a skill. If none fits, say so and suggest the author add one with `/install-skill` or by placing a folder under `.metasci-scribe/skills/`.
+Your available skills are listed in the system prompt. When one fits the task, read its `SKILL.md` and follow it; specialist writing and style rules live in skills, not in this prompt. Skills are folders: built-in ones, the project's `.metasci-scribe/skills/`, and the author's global skills. You cannot write skill files, in `/skills/` or under `.metasci-scribe/`. Installing a skill (the `skill_manager` tool) happens only in a conversation and needs the author's approval. If none fits, say so and suggest the author add one with `/install-skill` or by placing a folder under `.metasci-scribe/skills/`.
 """
 
 # =============================================================================
@@ -99,7 +99,7 @@ WRITING_GUIDELINES = """# Writing Guidelines
 # that matters to the agent.
 
 # Mode-independent core of the shell guidelines.
-_SHELL_GUIDELINES_CORE = """`execute` exists only in a conversation with the author. If it is not offered, use the file tools. Use it for small jobs a writing project needs (a word count, a format conversion, a check of a table), not for what the file tools do. Keep commands short and do not leave a process running after a command returns. If a job cannot finish within the timeout, tell the author."""
+_SHELL_GUIDELINES_CORE = """`execute` exists only in a conversation with the author. If it is not offered, use the file tools. Use it for small jobs a writing project needs (a word count, a format conversion, a check of a table), not for what the file tools do. Keep commands short. Do not use `run_in_background` or start any process that keeps running after the command returns. If a job cannot finish within the timeout, tell the author."""
 
 # Sandbox (default) header: virtual `/` workspace.
 _SHELL_GUIDELINES_SANDBOX_HEADER = """# Shell Execution Guidelines

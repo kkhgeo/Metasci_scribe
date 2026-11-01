@@ -114,6 +114,18 @@ class TestSystemPrompt:
         assert "300" in text
         assert "3600" in text
 
+    def test_skill_install_needs_the_authors_approval(self):
+        flat = " ".join(prompts.WRITING_WORKFLOW.split())
+        assert "You cannot add or change a skill" not in flat
+        assert "cannot write skill files" in flat
+        assert "needs the author's approval" in flat
+        assert "`skill_manager`" in flat
+
+    def test_no_background_processes(self):
+        text = prompts.get_system_prompt()
+        assert "Do not use `run_in_background`" in text
+        assert "leave a process running" not in text
+
     def test_skills_are_project_folders_the_user_installs(self):
         flat = " ".join(prompts.WRITING_WORKFLOW.split())
         assert ".metasci-scribe/skills" in flat
@@ -176,9 +188,15 @@ class _Scripted(GenericFakeChatModel):
 
     seen: list = Field(default_factory=list)
     tools_seen: list = Field(default_factory=list)
+    descriptions: dict = Field(default_factory=dict)
 
     def bind_tools(self, tools, **kwargs):
         self.tools_seen.append([getattr(t, "name", None) or t["name"] for t in tools])
+        for t in tools:
+            name = getattr(t, "name", None) or t["name"]
+            self.descriptions[name] = str(
+                getattr(t, "description", None) or t.get("description", "")
+            )
         return self
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
@@ -305,3 +323,147 @@ async def test_a_project_skill_added_between_messages_is_listed_next_message(
     await agent.ainvoke({"messages": [("user", "two")]}, config=cfg)
     after = _skill_names(_system_text(model.seen[-1]))
     assert after == {"find-skills", "skill-creator", "journal-style"}
+
+
+def _tool_texts(result) -> dict[str, str]:
+    return {
+        m.tool_call_id: str(m.content) for m in result["messages"] if m.type == "tool"
+    }
+
+
+@pytest.mark.usefixtures("no_mcp")
+async def test_a_sub_agent_reads_the_real_project_folder(tmp_path):
+    (tmp_path / "Knowledge").mkdir()
+    (tmp_path / "Knowledge" / "notes.md").write_text(
+        "Sensitivity was 91% in the pilot.\n", encoding="utf-8"
+    )
+    agent, model = _agent(
+        tmp_path,
+        [
+            AIMessage(
+                "",
+                tool_calls=[
+                    _call(
+                        "t1",
+                        "task",
+                        subagent_type="research-agent",
+                        description="Find the sensitivity in Knowledge/notes.md.",
+                    )
+                ],
+            ),
+            AIMessage(
+                "",
+                tool_calls=[
+                    _call("s1", "read_file", file_path="/Knowledge/notes.md"),
+                    _call("s2", "grep", pattern="Sensitivity", path="/"),
+                    _call("s3", "glob", pattern="Knowledge/*.md"),
+                ],
+            ),
+            AIMessage("Sensitivity 91% [notes.md]."),
+            AIMessage("Done."),
+        ],
+    )
+
+    result = await agent.ainvoke(
+        {"messages": [("user", "Ask research.")]}, config=_cfg()
+    )
+
+    assert result["messages"][-1].content == "Done."
+    assert len(model.seen) == len(model.tools_seen)
+    sub_calls = [
+        i
+        for i, messages in enumerate(model.seen)
+        if "You are a research assistant" in _system_text(messages)
+    ]
+    assert len(sub_calls) == 2
+    assert {"read_file", "grep", "glob"} <= set(model.tools_seen[sub_calls[0]])
+    sub_tool_text = " ".join(
+        str(m.content) for m in model.seen[sub_calls[-1]] if m.type == "tool"
+    )
+    assert sub_tool_text.count("Sensitivity was 91% in the pilot.") >= 1
+    assert "notes.md" in sub_tool_text
+
+
+@pytest.mark.usefixtures("no_mcp")
+async def test_file_tools_refuse_writes_under_the_state_folder(tmp_path):
+    state = tmp_path / ".metasci-scribe"
+    (state / "extracted").mkdir(parents=True)
+    paper = state / "extracted" / "paper.pdf.md"
+    paper.write_text("[p. 1]\nOriginal text.\n", encoding="utf-8")
+    agent, _ = _agent(
+        tmp_path,
+        [
+            AIMessage(
+                "",
+                tool_calls=[
+                    _call(
+                        "w1",
+                        "write_file",
+                        file_path="/.metasci-scribe/x.md",
+                        content="x",
+                    ),
+                    _call(
+                        "w2",
+                        "write_file",
+                        file_path="/.metasci-scribe/skills/evil/SKILL.md",
+                        content="---\nname: evil\ndescription: d\n---\n",
+                    ),
+                    _call(
+                        "w3",
+                        "write_file",
+                        file_path="/skills/evil2/SKILL.md",
+                        content="---\nname: evil2\ndescription: d\n---\n",
+                    ),
+                    _call(
+                        "e1",
+                        "edit_file",
+                        file_path="/.metasci-scribe/extracted/paper.pdf.md",
+                        old_string="Original",
+                        new_string="Changed",
+                    ),
+                ],
+            ),
+            AIMessage(
+                "",
+                tool_calls=[
+                    _call(
+                        "d1",
+                        "delete",
+                        file_path="/.metasci-scribe/extracted/paper.pdf.md",
+                    )
+                ],
+            ),
+            AIMessage("done"),
+        ],
+    )
+
+    # The author approved everything that waits for approval (the delete), so
+    # only the tools' own guard stands between the agent and these files.
+    cfg = {"configurable": {"thread_id": "guard", "hitl_approve_all": True}}
+    result = await agent.ainvoke({"messages": [("user", "write")]}, config=cfg)
+
+    assert not result.get("__interrupt__")
+    texts = _tool_texts(result)
+    for call_id in ("w1", "w2", "w3", "e1", "d1"):
+        assert "file tools may not write it" in texts[call_id], (
+            call_id,
+            texts[call_id],
+        )
+    assert not (state / "x.md").exists()
+    assert not (state / "skills" / "evil").exists()
+    assert not (state / "skills" / "evil2").exists()
+    assert paper.read_text(encoding="utf-8") == "[p. 1]\nOriginal text.\n"
+
+
+@pytest.mark.usefixtures("no_mcp")
+async def test_no_tool_description_invites_experiments_or_upstream_packs(tmp_path):
+    agent, model = _agent(tmp_path, [AIMessage("hi")])
+    await agent.ainvoke({"messages": [("user", "hi")]}, config=_cfg())
+
+    assert {"think_tool", "skill_manager", "ask_user", "task"} <= set(
+        model.descriptions
+    )
+    for name, text in model.descriptions.items():
+        lowered = text.lower()
+        for word in ("experiment", "evoskills", "evoscientist", "web search", "gpu"):
+            assert word not in lowered, (name, word)

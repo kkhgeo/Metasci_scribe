@@ -18,5 +18,11 @@ class TestThinkTool:
         assert "Reflection recorded" in result
 
     def test_docstring_has_resource_dimension(self):
-        assert "resource" in think_tool.description.lower()
+        assert "resource limits" in think_tool.description.lower()
         assert "300" in think_tool.description
+
+    def test_description_is_about_writing(self):
+        lowered = think_tool.description.lower()
+        for word in ("experiment", "training", "background", "gpu", "ideation"):
+            assert word not in lowered, word
+        assert "[evidence needed]" in think_tool.description
