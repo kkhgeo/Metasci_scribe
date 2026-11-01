@@ -246,10 +246,10 @@ Where the upstream project's name still appears, on purpose:
 - `NOTICE` and the README origin note: the attribution the Apache License asks for.
 - `LICENSE`: the upstream copyright line, which must stay.
 - The coordinate `EvoScientist/EvoSkills`, which `/evoskills`, the bare-name form of `/install-skill` and
-  `skill_manager install`, the MCP marketplace index (`mcp/registry.py`) and the onboarding skills step
-  use as a skill catalog: `commands/implementation/skills.py`, `config/onboard/steps.py`,
-  `mcp/registry.py` and `tools/skills_manager.py`. It is a public third-party repository, not code that
-  ships here. Removing the feature was not smaller than keeping it. `tests/test_identity.py` allows exactly
+  `skill_manager install` and the MCP marketplace index (`mcp/registry.py`) use as a skill catalog:
+  `commands/implementation/skills.py`, `mcp/registry.py` and `tools/skills_manager.py`. It is a public
+  third-party repository, not code that ships here, and `/evoskills` says so. Removing the feature was not
+  smaller than keeping it. Onboarding no longer recommends it. `tests/test_identity.py` allows exactly
   this coordinate and nothing else in the package source.
 - Class and function names that begin with `Evo` (`EvoMemory`, `EvoMemoryMiddleware`,
   `EvoRubricMiddleware`, `EvoFilteredGraph`, ...) stay in code. Renaming them touches every import and
@@ -271,3 +271,37 @@ Other decisions:
   `gateway_backend_standalone`), `channel_send_thinking` and "channel" test name were fixed.
 - **Cp949 baseline.** `.env.example` is ASCII now, so `test_copied_template_does_not_shadow_config_keys`
   passes on a cp949 machine.
+
+## Final review fixes
+
+Removed, with no replacement. A value left in an old config file or the environment is ignored:
+
+- `--dangerous`, `dangerous_mode` and `METASCI_SCRIBE_DANGEROUS_MODE`, with the banner, the dangerous-mode shell
+  prompt and the real-filesystem branch of `CustomSandboxBackend`, which no longer takes `virtual_mode`: it is
+  always rooted at its folder. `dangerous` in `check_dangerous_command` and `guard_dangerous` is about commands
+  and stays.
+- `--mode`, `--name`, `default_mode`, `METASCI_SCRIBE_DEFAULT_MODE`, `onboard --workspace-mode`,
+  `configure workspace` and the onboarding step behind them. These moved chat into `runs/<name>`, while `run`
+  works in the paper folder. Chat now always works in the workspace root. The `run_dir` plumbing in `paths.py`,
+  `sessions.py`, the gateways and `langgraph_dev/` stays only so a thread stored with a run folder still resumes.
+- `--host`. `langgraph_dev_host` stays a setting (`config set`).
+- The bundled `find-skills`, which had no provenance and drove `npx -y skills`.
+
+Kept: `metasci-scribe server`. `langgraph_dev_keepalive` starts a server that outlives the CLI, and the drift and
+leftover-server messages in `langgraph_dev/manager.py`, `agent_shell.py`, `setup/research_env.py` and
+`cli/commands.py` name `server stop` as the way out. It can go with those.
+
+Changed:
+
+- `/memories/` is mounted only when `MemoryControls.memory_enabled` (`agent._agent_routes`). With memory off a
+  `/memories/...` path is an ordinary path in the workspace.
+- File tools refuse `.env` and `.env.*` for every operation, any case, through a link and through an 8.3 short
+  name (`policy.is_env_file`, called from `backends.guarded_path`). `.env.example` is covered. `grep`, `glob` and
+  `ls` leave these files out. Not covered: the shell, where a person approves every command, and an `@.env`
+  mention the user types.
+- `/threads` and the `/resume` picker hide `run-<32 hex>` threads. `/resume <id>` still reaches one by name.
+- `ensure_model_configured("openai")` accepts `OPENAI_BASE_URL` with no key, on the API-key route only. There is
+  no `openai_base_url` setting, so this comes from the shell; a workspace `.env` cannot set it. `get_chat_model`
+  passes a placeholder key in that case, because the client will not start without one.
+- The top-level help describes a paper-writing agent. `/evoskills` is labelled third-party. The README install
+  line is the local form until the public URL exists.

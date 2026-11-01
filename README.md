@@ -50,7 +50,8 @@ Then, inside the app:
 
 To come back to a paper later, open a terminal in the same folder and run
 `metasci-scribe` again. `/threads` and `/resume` bring back an earlier
-conversation, and `/run` continues a draft where it stopped.
+conversation (the threads an autonomous run keeps for itself are not listed),
+and `/run` continues a draft where it stopped.
 
 Other commands: `/help` lists them all. `/model` switches the model, `/logout`
 signs out, `/rubric` and `/goal` set acceptance criteria that the agent's work is
@@ -90,6 +91,10 @@ failed or could not start, 3 plan usage limit, 4 a paragraph needs your decision
   (names such as `OPENAI_API_KEY`). Everything else in it is ignored, because a
   paper folder can come from someone else. Endpoints, proxies and
   `METASCI_SCRIBE_*` settings must come from your shell or the config file.
+  The app reads `.env` itself; the agent's file tools refuse `.env` and
+  `.env.*`, and those files do not appear in its listings and searches.
+- With `OPENAI_BASE_URL` set in your shell, an OpenAI-compatible server works
+  with no API key.
 - The agent **cannot search the web.** Its evidence is the paper folder:
   `Knowledge/`, `Figures/`, `Tables/` and your own text.
 - **PDFs are extracted as text.** The text of every PDF in `Knowledge/` is made
@@ -98,7 +103,8 @@ failed or could not start, 3 plan usage limit, 4 a paragraph needs your decision
 - **Paper folders must be on a local disk.** A network drive, a mapped drive
   letter such as `Z:` or a `\\server\share` path is refused with a message.
 - **Memory and scheduled features are off.** The app does not learn between
-  papers and does not run anything on a schedule.
+  papers and does not run anything on a schedule. With memory off the agent
+  has no path to the memory folder.
 
 ## Where things live
 
