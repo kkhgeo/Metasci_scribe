@@ -148,22 +148,76 @@ def _skills_workspace(config: ScribeConfig) -> Workspace:
     )
 
 
-def _warn_start_folder(config: ScribeConfig, *, closing: bool = False) -> None:
-    """Say so when the folder metasci-scribe would start in is one it refuses.
+def _start_folder_problem(config: ScribeConfig) -> str | None:
+    """Why the folder metasci-scribe would start in is refused, or ``None``.
 
     The first start rejects a folder that holds the app's data folder, the home
-    folder for one; setup must not end as if all were ready. ``closing`` adds
-    what to do, for the end of the wizard.
+    folder for one.
     """
     try:
         require_workspace_root(_skills_workspace(config).root)
     except WorkspaceRootError as exc:
-        console.print(f"[yellow]⚠ {escape(str(exc))}[/yellow]")
-        if closing:
-            console.print(
-                "[dim]  Before you start: cd into a paper folder, then run "
-                "metasci-scribe.[/dim]"
-            )
+        return str(exc)
+    return None
+
+
+def _warn_start_folder(config: ScribeConfig, *, closing: bool = False) -> None:
+    """Warn about a refused start folder, for a run that goes on regardless
+    (one section re-run). ``closing`` adds what to do, for the end of it."""
+    problem = _start_folder_problem(config)
+    if problem is None:
+        return
+    console.print(f"[yellow]⚠ {escape(problem)}[/yellow]")
+    if closing:
+        console.print(
+            "[dim]  Before you start: cd into a paper folder, then run "
+            "metasci-scribe.[/dim]"
+        )
+
+
+def _stop_for_start_folder(problem: str) -> None:
+    """The message that ends onboarding in a folder the first start refuses."""
+    console.print()
+    console.print(f"[red]✗ {escape(problem)}[/red]")
+    console.print(
+        "[bold]Setup stopped; nothing was changed.[/bold] Make a folder for "
+        "the paper inside it and start there:"
+    )
+    console.print("  [cyan]mkdir paper[/cyan]")
+    console.print("  [cyan]cd paper[/cyan]")
+    console.print("  [cyan]metasci-scribe onboard[/cyan]")
+    console.print()
+
+
+def _credentials_missing(config: ScribeConfig) -> bool:
+    """Whether the saved setup has no way to reach its model yet."""
+    if config.provider == "openai":
+        if config.openai_auth_mode == "chatgpt_plan":
+            from ...auth.chatgpt_plan import ChatGPTAuthError, load
+
+            try:
+                return load() is None
+            except ChatGPTAuthError:
+                return False  # unreadable, not absent: the first request says so
+        return not (config.openai_api_key or os.environ.get("OPENAI_API_KEY"))
+    if config.provider == "anthropic":
+        return not (
+            config.anthropic_api_key
+            or os.environ.get("ANTHROPIC_API_KEY")
+            or os.environ.get("ANTHROPIC_BASE_URL")
+        )
+    return False
+
+
+def _print_not_ready() -> None:
+    console.print(
+        "[yellow]⚠ Not ready yet: no ChatGPT sign-in or API key is set up.[/yellow]"
+    )
+    console.print(
+        "[dim]  Start metasci-scribe in a paper folder and run /login "
+        "(Continue with ChatGPT), or add an API key with "
+        "`metasci-scribe configure provider`.[/dim]"
+    )
 
 
 def _apply_preset_provider_api_key(
@@ -480,6 +534,10 @@ def _run_onboard(
             # file that DID exist doesn't get downgraded to "no file" —
             # which would cause revert to delete the user's config.
             config = load_config()
+            start_problem = _start_folder_problem(config)
+            if start_problem is not None and only_sections is None:
+                _stop_for_start_folder(start_problem)
+                return False
             _warn_start_folder(config)
             snapshot = copy.deepcopy(config)
             config_path = get_config_path()
@@ -717,11 +775,16 @@ def _run_onboard(
                                 )
                                 continue
                         break
+                    aux_on_plan = (
+                        aux_provider == "openai"
+                        and config.openai_auth_mode == "chatgpt_plan"
+                    )
                     config.auxiliary_model = _step_model(
                         config,
                         aux_provider,
                         label="co-pilot",
                         default_value=config.auxiliary_model,
+                        entries=_plan_model_entries() if aux_on_plan else None,
                     )
                 else:
                     # Skip: single driver — clear any prior auxiliary config.
@@ -786,6 +849,8 @@ def _run_onboard(
                 console.print("[green]✓ Configuration saved![/green]")
                 console.print(f"[dim]  → {get_config_path()}[/dim]")
                 _warn_start_folder(config, closing=True)
+                if _credentials_missing(config):
+                    _print_not_ready()
                 console.print()
                 return True
             else:

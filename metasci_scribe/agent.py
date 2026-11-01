@@ -204,6 +204,7 @@ def _ensure_auxiliary_chat_model():
     """
     global _auxiliary_chat_model, _auxiliary_chat_model_key
     from .llm import get_chat_model
+    from .llm.credentials import ensure_model_configured
 
     cfg = _ensure_config()
     aux_model = cfg.auxiliary_model or cfg.model
@@ -212,6 +213,7 @@ def _ensure_auxiliary_chat_model():
         return _ensure_chat_model()
     key = (aux_model, aux_provider)
     if _auxiliary_chat_model is None or _auxiliary_chat_model_key != key:
+        ensure_model_configured(aux_provider)
         _auxiliary_chat_model = get_chat_model(model=aux_model, provider=aux_provider)
         _auxiliary_chat_model_key = key
     return _auxiliary_chat_model
@@ -926,7 +928,9 @@ def _get_default_middleware(
             tool_selector_model = model
         else:
             from .llm import get_chat_model
+            from .llm.credentials import ensure_model_configured
 
+            ensure_model_configured(aux_provider)
             tool_selector_model = get_chat_model(model=aux_model, provider=aux_provider)
     mw = [
         # Retries transient provider failures around everything below.

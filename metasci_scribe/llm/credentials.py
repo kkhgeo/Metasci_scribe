@@ -25,6 +25,13 @@ _NOT_CONFIGURED = {
     ),
 }
 
+# The route is the ChatGPT plan but no sign-in is saved. An API key does not
+# stand in for it: moving to the key is a decision the person makes.
+_PLAN_NOT_SIGNED_IN = (
+    "Not signed in to ChatGPT. Run /login, or use an OpenAI API key instead: "
+    "metasci-scribe config set openai_auth_mode api_key, with OPENAI_API_KEY set."
+)
+
 
 class ModelNotConfigured(RuntimeError):
     """No sign-in or API key exists for the chosen provider.
@@ -34,8 +41,9 @@ class ModelNotConfigured(RuntimeError):
     message names ``/login`` and the API key alternative.
     """
 
-    def __init__(self, provider: str = "openai") -> None:
-        super().__init__(_NOT_CONFIGURED.get(provider, _NOT_CONFIGURED["openai"]))
+    def __init__(self, provider: str = "openai", *, plan: bool = False) -> None:
+        text = _PLAN_NOT_SIGNED_IN if plan else _NOT_CONFIGURED.get(provider)
+        super().__init__(text or _NOT_CONFIGURED["openai"])
         self.provider = provider
 
 
@@ -56,7 +64,8 @@ def _plan_sign_in_saved() -> bool:
 def ensure_model_configured(provider: str | None) -> None:
     """Raise :class:`ModelNotConfigured` when ``provider`` cannot be used yet.
 
-    OpenAI needs a saved ChatGPT sign-in in plan mode, otherwise an API key.
+    OpenAI needs a saved ChatGPT sign-in in plan mode, otherwise an API key; the
+    key is never used for the plan route.
     Anthropic needs an API key, or a base URL for a gateway that holds it.
     """
     if provider == "anthropic":
@@ -69,7 +78,7 @@ def ensure_model_configured(provider: str | None) -> None:
         return
     if os.environ.get("METASCI_SCRIBE_OPENAI_AUTH_MODE") == "chatgpt_plan":
         if not _plan_sign_in_saved():
-            raise ModelNotConfigured("openai")
+            raise ModelNotConfigured("openai", plan=True)
         return
     if not os.environ.get("OPENAI_API_KEY"):
         raise ModelNotConfigured("openai")

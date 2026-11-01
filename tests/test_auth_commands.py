@@ -114,6 +114,27 @@ class TestModelNotConfigured:
         cfg = SimpleNamespace(model="gpt-6.1-sol", provider="openai")
         assert _build_chat_model(cfg) is not None
 
+    def test_a_leftover_auxiliary_model_without_a_key_is_refused_by_name(
+        self, monkeypatch
+    ):
+        from metasci_scribe import agent
+
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
+        cfg = SimpleNamespace(
+            model="gpt-6.1-sol",
+            provider="openai",
+            auxiliary_model="claude-haiku-5-5",
+            auxiliary_provider="anthropic",
+        )
+        monkeypatch.setattr(agent, "_auxiliary_chat_model", None)
+        monkeypatch.setattr(agent, "_auxiliary_chat_model_key", None)
+        with (
+            patch("metasci_scribe.agent._ensure_config", return_value=cfg),
+            pytest.raises(ModelNotConfigured) as caught,
+        ):
+            agent._ensure_auxiliary_chat_model()
+        assert "ANTHROPIC_API_KEY" in str(caught.value)
+
     def test_it_is_a_runtime_error_without_a_traceback_chain(self):
         error = ModelNotConfigured("openai")
         assert isinstance(error, RuntimeError)
@@ -261,6 +282,8 @@ def _live_config(**changes):
         "model": "gpt-6.1-sol",
         "provider": "openai",
         "openai_auth_mode": "api_key",
+        "auxiliary_model": "",
+        "auxiliary_provider": "",
     }
     return SimpleNamespace(**{**values, **changes})
 
@@ -311,7 +334,24 @@ def _login_raises(monkeypatch, error: Exception):
 # ------------------------------------------------------------------- /login
 
 
+CATALOG = [("gpt-6.1-sol", "GPT 6.1 Sol"), ("gpt-5.6-terra", "GPT 5.6 Terra")]
+
+
 class TestLoginCommand:
+    @pytest.fixture(autouse=True)
+    def catalog(self, monkeypatch):
+        """The account's model list, faked; nothing here reaches OpenAI."""
+        from metasci_scribe.llm import chatgpt_plan as plan_llm
+
+        listing = MagicMock(return_value=list(CATALOG))
+        monkeypatch.setattr(plan_llm, "list_models", listing)
+        return listing
+
+    def test_description_uses_the_exact_label(self):
+        from metasci_scribe.commands.implementation.auth import LoginCommand
+
+        assert LoginCommand.description.startswith("Continue with ChatGPT")
+
     def test_is_registered(self):
         from metasci_scribe.commands.implementation import auth  # noqa: F401
         from metasci_scribe.commands.manager import manager
@@ -379,16 +419,163 @@ class TestLoginCommand:
         assert "/model" in ctx.ui.text
 
     async def test_a_catalog_model_the_user_chose_is_kept(
-        self, monkeypatch, switch, saved_config
+        self, monkeypatch, switch, saved_config, catalog
     ):
         from metasci_scribe.commands.implementation.auth import LoginCommand
 
+        catalog.return_value = [("gpt-from-the-catalog", "X"), *CATALOG]
         cfg = _live_config(model="gpt-from-the-catalog")
         _sign_in_as(monkeypatch, _creds())
         with patch("metasci_scribe.agent._ensure_config", return_value=cfg):
             await LoginCommand().execute(_ctx(), [])
         assert switch.await_args.args[1] == "gpt-from-the-catalog"
         assert "model" not in saved_config.call_args.args[0]
+
+    async def test_a_model_the_account_does_not_list_gives_way_to_the_first_listed(
+        self, monkeypatch, switch, saved_config
+    ):
+        from metasci_scribe.commands.implementation.auth import LoginCommand
+
+        cfg = _live_config(model="gpt-not-on-this-plan")
+        _sign_in_as(monkeypatch, _creds())
+        ctx = _ctx()
+        with patch("metasci_scribe.agent._ensure_config", return_value=cfg):
+            await LoginCommand().execute(ctx, [])
+        assert switch.await_args.args[1] == "gpt-6.1-sol"
+        assert saved_config.call_args.args[0]["model"] == "gpt-6.1-sol"
+        assert "gpt-not-on-this-plan" in ctx.ui.text
+        assert "gpt-6.1-sol" in ctx.ui.text
+
+    async def test_the_default_model_is_checked_against_the_account_too(
+        self, monkeypatch, switch, saved_config, catalog
+    ):
+        from metasci_scribe.commands.implementation.auth import LoginCommand
+
+        catalog.return_value = [("gpt-only-this", "Only")]
+        cfg = _live_config(model="claude-opus-5-5", provider="anthropic")
+        _sign_in_as(monkeypatch, _creds())
+        with patch("metasci_scribe.agent._ensure_config", return_value=cfg):
+            await LoginCommand().execute(_ctx(), [])
+        assert switch.await_args.args[1] == "gpt-only-this"
+        assert saved_config.call_args.args[0]["model"] == "gpt-only-this"
+
+    async def test_an_unreadable_catalog_keeps_the_model_and_goes_on(
+        self, monkeypatch, switch, saved_config, catalog
+    ):
+        from metasci_scribe.commands.implementation.auth import LoginCommand
+        from metasci_scribe.llm.errors import PlanAction, PlanStop
+
+        catalog.side_effect = PlanStop(PlanAction.RETRY, "Could not reach OpenAI.")
+        cfg = _live_config(model="gpt-not-checked")
+        _sign_in_as(monkeypatch, _creds())
+        ctx = _ctx()
+        with patch("metasci_scribe.agent._ensure_config", return_value=cfg):
+            await LoginCommand().execute(ctx, [])
+        assert switch.await_args.args[1] == "gpt-not-checked"
+        assert "model" not in saved_config.call_args.args[0]
+        assert "Could not check" in ctx.ui.text
+
+    async def test_a_leftover_auxiliary_model_is_cleared_and_said_so(
+        self, monkeypatch, switch, saved_config
+    ):
+        from metasci_scribe.commands.implementation.auth import LoginCommand
+
+        cfg = _live_config(
+            auxiliary_model="claude-haiku-5-5", auxiliary_provider="anthropic"
+        )
+        seen = {}
+
+        async def during_switch(*args, **kwargs):
+            seen["aux"] = (cfg.auxiliary_model, cfg.auxiliary_provider)
+            return True
+
+        switch.side_effect = during_switch
+        _sign_in_as(monkeypatch, _creds())
+        ctx = _ctx()
+        with patch("metasci_scribe.agent._ensure_config", return_value=cfg):
+            await LoginCommand().execute(ctx, [])
+        assert seen["aux"] == ("", "")
+        changes = saved_config.call_args.args[0]
+        assert changes["auxiliary_model"] is None
+        assert changes["auxiliary_provider"] is None
+        assert "co-pilot" in ctx.ui.text
+
+    async def test_the_auxiliary_model_comes_back_when_the_switch_fails(
+        self, monkeypatch, switch, saved_config
+    ):
+        from metasci_scribe.commands.implementation.auth import LoginCommand
+
+        switch.return_value = False
+        cfg = _live_config(
+            auxiliary_model="claude-haiku-5-5", auxiliary_provider="anthropic"
+        )
+        _sign_in_as(monkeypatch, _creds())
+        with patch("metasci_scribe.agent._ensure_config", return_value=cfg):
+            await LoginCommand().execute(_ctx(), [])
+        assert (cfg.auxiliary_model, cfg.auxiliary_provider) == (
+            "claude-haiku-5-5",
+            "anthropic",
+        )
+
+    async def test_no_auxiliary_model_means_nothing_to_clear(
+        self, monkeypatch, switch, saved_config, live_config
+    ):
+        from metasci_scribe.commands.implementation.auth import LoginCommand
+
+        _sign_in_as(monkeypatch, _creds())
+        ctx = _ctx()
+        await LoginCommand().execute(ctx, [])
+        assert "auxiliary_model" not in saved_config.call_args.args[0]
+        assert "co-pilot" not in ctx.ui.text
+
+    async def test_the_manual_address_is_shown_through_the_command_ui(
+        self, monkeypatch, switch, saved_config, live_config, capsys
+    ):
+        from metasci_scribe.commands.implementation.auth import LoginCommand
+
+        def fake_login(**kwargs):
+            kwargs["show_url"]("Could not open a browser. Open this address: https://x")
+            cp.save(_creds())
+            return _creds()
+
+        monkeypatch.setattr(cp, "login", fake_login)
+        ctx = _ctx()
+        await LoginCommand().execute(ctx, [])
+        assert "Open this address: https://x" in ctx.ui.text
+        assert capsys.readouterr().out == ""
+
+    async def test_ctrl_c_during_the_exchange_returns_within_a_second(
+        self, monkeypatch, switch, saved_config, live_config
+    ):
+        """The sign-in is past the browser wait and cannot see the event; the
+        command stops waiting, and nothing is switched when the thread finishes."""
+        import signal
+
+        from metasci_scribe.commands.implementation.auth import LoginCommand
+
+        started = threading.Event()
+        finished = threading.Event()
+
+        def stuck_in_the_exchange(**kwargs):
+            started.set()
+            time.sleep(2.5)  # a token request that is slow to answer
+            finished.set()
+            return _creds()
+
+        monkeypatch.setattr(cp, "login", stuck_in_the_exchange)
+        ctx = _ctx()
+        task = asyncio.ensure_future(LoginCommand().execute(ctx, []))
+        while not started.is_set():
+            await asyncio.sleep(0.01)
+        signal.raise_signal(signal.SIGINT)
+        began = time.monotonic()
+        await asyncio.wait_for(task, 10)
+        assert time.monotonic() - began < 2.0
+        assert "cancel" in ctx.ui.text.lower()
+        assert finished.wait(5)
+        await asyncio.sleep(0.1)
+        switch.assert_not_awaited()
+        saved_config.assert_not_called()
 
     async def test_warns_in_two_lines_before_the_browser_opens(
         self, monkeypatch, switch, saved_config, live_config
@@ -601,6 +788,11 @@ class TestLoginCommand:
 
 
 class TestLogoutCommand:
+    @pytest.fixture(autouse=True)
+    def live_config(self):
+        with patch("metasci_scribe.agent._ensure_config", return_value=_live_config()):
+            yield
+
     @pytest.fixture
     def revoked(self, monkeypatch):
         """OpenAI's endpoints, faked: discovery and revocation."""
@@ -707,6 +899,183 @@ class TestLogoutCommand:
         with patch("metasci_scribe.config.settings.set_config_values") as saved:
             await LogoutCommand().execute(_ctx(), [])
         saved.assert_not_called()
+
+    async def test_it_says_what_happens_to_the_running_session(self, revoked):
+        from metasci_scribe.commands.implementation.auth import LogoutCommand
+
+        cp.save(_creds())
+        ctx = _ctx()
+        await LogoutCommand().execute(ctx, [])
+        assert "this session" in ctx.ui.text.lower()
+
+    async def test_a_record_that_stays_is_reported_beside_the_revocation(
+        self, monkeypatch
+    ):
+        from metasci_scribe.commands.implementation.auth import LogoutCommand
+
+        monkeypatch.setattr(
+            cp,
+            "sign_out",
+            lambda: cp.SignOutResult(
+                True, True, None, "Could not remove the saved sign-in (OSError)."
+            ),
+        )
+        ctx = _ctx()
+        with patch("metasci_scribe.config.settings.set_config_values") as saved:
+            await LogoutCommand().execute(ctx, [])
+        text = ctx.ui.text
+        assert "revoked" in text.lower()
+        assert "Could not remove" in text
+        assert "chatgpt.json" in text
+        saved.assert_not_called()  # the sign-in is still there: keep the route
+
+    async def test_a_failed_revocation_and_a_failed_removal_are_both_said(
+        self, monkeypatch
+    ):
+        from metasci_scribe.commands.implementation.auth import LogoutCommand
+
+        monkeypatch.setattr(
+            cp,
+            "sign_out",
+            lambda: cp.SignOutResult(
+                True,
+                False,
+                "OpenAI answered HTTP 503.",
+                "Could not remove the saved sign-in (OSError).",
+            ),
+        )
+        ctx = _ctx()
+        await LogoutCommand().execute(ctx, [])
+        assert "503" in ctx.ui.text
+        assert "Could not remove" in ctx.ui.text
+
+
+class TestLogoutOnThePlanRoute:
+    """``/logout`` under ``openai_auth_mode=chatgpt_plan`` returns the route to
+    the key, so the session follows the configured state; plan traffic is never
+    sent on a key without saying so."""
+
+    @pytest.fixture(autouse=True)
+    def signed_in(self, monkeypatch):
+        import httpx
+
+        def handler(request):
+            if str(request.url) == cp.DISCOVERY_URL:
+                return httpx.Response(200, json={"issuer": cp.ISSUER})
+            raise AssertionError(request.url)
+
+        monkeypatch.setattr(
+            cp,
+            "_http_client",
+            lambda: httpx.Client(transport=httpx.MockTransport(handler)),
+        )
+        monkeypatch.setattr(cp, "_REVOKE_BACKOFF_S", (0.0, 0.0))
+        cp.save(_creds())
+
+    async def _logout(self, cfg):
+        from metasci_scribe.commands.implementation.auth import LogoutCommand
+
+        ctx = _ctx()
+        with (
+            patch("metasci_scribe.agent._ensure_config", return_value=cfg),
+            patch("metasci_scribe.agent.set_active_config") as activate,
+        ):
+            await LogoutCommand().execute(ctx, [])
+        return ctx, activate
+
+    async def test_with_a_key_the_session_is_rebuilt_on_it_and_told_so(
+        self, monkeypatch, switch, saved_config
+    ):
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
+        cfg = _live_config(openai_auth_mode="chatgpt_plan")
+        ctx, _ = await self._logout(cfg)
+        saved_config.assert_called_once_with({"openai_auth_mode": "api_key"})
+        switch.assert_awaited_once_with(
+            ctx, "gpt-6.1-sol", "openai", auth_mode="api_key"
+        )
+        assert "API key" in ctx.ui.text
+        assert "billed" in ctx.ui.text.lower()
+
+    async def test_without_a_key_the_route_returns_and_the_session_says_it_is_stuck(
+        self, switch, saved_config
+    ):
+        cfg = _live_config(openai_auth_mode="chatgpt_plan")
+        ctx, activate = await self._logout(cfg)
+        saved_config.assert_called_once_with({"openai_auth_mode": "api_key"})
+        switch.assert_not_awaited()
+        assert cfg.openai_auth_mode == "api_key"
+        activate.assert_called_once_with(cfg)
+        text = ctx.ui.text
+        assert "/login" in text
+        assert "OPENAI_API_KEY" in text
+        assert "cannot send requests" in text
+
+    async def test_another_provider_keeps_its_session(
+        self, monkeypatch, switch, saved_config
+    ):
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
+        cfg = _live_config(
+            openai_auth_mode="chatgpt_plan",
+            provider="anthropic",
+            model="claude-opus-5-5",
+        )
+        await self._logout(cfg)
+        saved_config.assert_called_once_with({"openai_auth_mode": "api_key"})
+        switch.assert_not_awaited()
+
+    async def test_a_failed_rebuild_is_said(self, monkeypatch, switch, saved_config):
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
+        switch.return_value = False
+        cfg = _live_config(openai_auth_mode="chatgpt_plan")
+        ctx, _ = await self._logout(cfg)
+        assert "could not" in ctx.ui.text.lower()
+
+    async def test_a_save_failure_is_reported(self, monkeypatch, switch):
+        from metasci_scribe.commands.implementation.auth import LogoutCommand
+        from metasci_scribe.config.store import ConfigError
+
+        cfg = _live_config(openai_auth_mode="chatgpt_plan")
+        ctx = _ctx()
+        with (
+            patch("metasci_scribe.agent._ensure_config", return_value=cfg),
+            patch("metasci_scribe.agent.set_active_config"),
+            patch(
+                "metasci_scribe.config.settings.set_config_values",
+                side_effect=ConfigError("locked"),
+            ),
+        ):
+            await LogoutCommand().execute(ctx, [])
+        assert "Could not save" in ctx.ui.styled("red")
+
+    async def test_the_key_route_is_left_alone(self, switch, saved_config):
+        cfg = _live_config()
+        ctx, activate = await self._logout(cfg)
+        saved_config.assert_not_called()
+        switch.assert_not_awaited()
+        activate.assert_not_called()
+        assert "unaffected" in ctx.ui.text.lower()
+
+
+class TestPlanRouteMessage:
+    def test_the_message_gives_the_real_next_step(self):
+        from metasci_scribe.llm.credentials import ModelNotConfigured
+
+        text = str(ModelNotConfigured("openai", plan=True))
+        assert "/login" in text
+        assert "config set openai_auth_mode api_key" in text
+        assert "OPENAI_API_KEY" in text
+
+    def test_a_key_never_stands_in_for_the_plan(self, monkeypatch):
+        from metasci_scribe.llm.credentials import (
+            ModelNotConfigured,
+            ensure_model_configured,
+        )
+
+        monkeypatch.setenv("METASCI_SCRIBE_OPENAI_AUTH_MODE", "chatgpt_plan")
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
+        with pytest.raises(ModelNotConfigured) as caught:
+            ensure_model_configured("openai")
+        assert "openai_auth_mode api_key" in str(caught.value)
 
 
 # ------------------------------------------------------------------- /model

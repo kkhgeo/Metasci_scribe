@@ -157,10 +157,7 @@ def _step_provider(
     if allow_chatgpt:
         choices.insert(
             0,
-            Choice(
-                title=f"{CONTINUE_LABEL} (use your ChatGPT plan)",
-                value="chatgpt_plan",
-            ),
+            Choice(title=CONTINUE_LABEL, value="chatgpt_plan"),
         )
         on_plan = (
             config.provider == "openai" and config.openai_auth_mode == "chatgpt_plan"

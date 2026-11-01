@@ -2041,7 +2041,7 @@ class TestStepProviderOffersChatGPTFirst:
     def test_chatgpt_is_the_first_choice_and_the_api_keys_follow(self):
         choices, _ = self._choices(ScribeConfig(), allow_chatgpt=True)
         assert [c.value for c in choices] == ["chatgpt_plan", "openai", "anthropic"]
-        assert "Continue with ChatGPT" in choices[0].title
+        assert choices[0].title == "Continue with ChatGPT"
         assert "API key" in choices[1].title
 
     def test_a_fresh_config_preselects_chatgpt(self):
@@ -2267,70 +2267,188 @@ class TestWizardChatGPTPath:
         assert saved[-1].openai_api_key == "sk-preset"
 
 
-class TestStartFolderNotice:
-    """The first start refuses a folder that holds the data folder; onboarding
-    says so instead of finishing as if all were well."""
+def _run_wizard(selects, *, config=None, sections=None, login=None, save=True):
+    """Drive the wizard with every prompt and the network faked.
 
-    def _printed(self, cwd, *, save=True):
-        from metasci_scribe.config.onboard.wizard import run_onboard
+    Returns ``(result, printed lines of the wizard, mock questionary, saved configs)``.
+    """
+    from metasci_scribe.config.onboard.wizard import run_onboard
 
-        mock_q = MagicMock()
-        with (
-            _patch_all_questionary(mock_q),
-            patch("metasci_scribe.config.onboard.wizard.load_config") as mock_load,
-            patch("metasci_scribe.config.onboard.wizard.save_config"),
-            patch("metasci_scribe.config.onboard.wizard.console") as wizard_console,
-            patch("metasci_scribe.config.onboard.steps.console"),
-            patch("metasci_scribe.config.onboard.helpers.console"),
-            patch("metasci_scribe.config.onboard.wizard._step_tinytex"),
-        ):
-            mock_load.return_value = ScribeConfig()
-            mock_q.select.return_value.ask.side_effect = [
-                "anthropic",
-                "claude-sonnet-5-5",
-                "skip",
-                "daemon",
-                True,
-            ]
-            mock_q.password.return_value.ask.side_effect = ["", ""]
-            mock_q.confirm.return_value.ask.side_effect = [save]
-            mock_q.text.return_value.ask.side_effect = [""]
-            mock_q.checkbox.return_value.ask.return_value = []
-            run_onboard(skip_validation=True)
-        return [str(c.args[0]) for c in wizard_console.print.call_args_list if c.args]
-
-    def test_a_folder_holding_the_data_folder_is_flagged_at_the_start_and_end(
-        self, monkeypatch
+    mock_q = MagicMock()
+    saved = []
+    with (
+        _patch_all_questionary(mock_q),
+        patch("metasci_scribe.config.onboard.wizard.load_config") as mock_load,
+        patch(
+            "metasci_scribe.config.onboard.wizard.save_config",
+            side_effect=lambda cfg: saved.append(cfg),
+        ),
+        patch("metasci_scribe.config.onboard.wizard.console") as wizard_console,
+        patch("metasci_scribe.config.onboard.steps.console"),
+        patch("metasci_scribe.config.onboard.helpers.console"),
+        patch("metasci_scribe.config.onboard.wizard._step_tinytex"),
+        patch(
+            "metasci_scribe.auth.chatgpt_plan.login",
+            MagicMock(side_effect=login or (lambda **kw: _plan_creds())),
+        ),
+        patch(
+            "metasci_scribe.auth.chatgpt_plan.claim_plan_welcome", return_value=False
+        ),
+        patch(
+            "metasci_scribe.llm.chatgpt_plan.list_models",
+            return_value=[("gpt-plan-a", "GPT Plan A")],
+        ),
+        patch("metasci_scribe.config.onboard.wizard.get_config_path") as config_path,
+        patch("metasci_scribe.config.onboard.wizard.remove_config_file"),
     ):
+        config_path.return_value.exists.return_value = False
+        mock_load.return_value = config or ScribeConfig()
+        mock_q.select.return_value.ask.side_effect = selects
+        mock_q.password.return_value.ask.side_effect = ["", ""]
+        mock_q.confirm.return_value.ask.side_effect = [save]
+        mock_q.text.return_value.ask.side_effect = [""]
+        mock_q.checkbox.return_value.ask.return_value = []
+        result = run_onboard(skip_validation=True, only_sections=sections)
+    lines = [str(c.args[0]) for c in wizard_console.print.call_args_list if c.args]
+    return result, lines, mock_q, saved
+
+
+_ANTHROPIC_RUN = ["anthropic", "claude-sonnet-5-5", "skip", "daemon", True]
+
+
+class TestStartFolderStopsOnboarding:
+    """The first start refuses a folder that holds the data folder. Onboarding
+    stops there, says which folder to make, and never says it succeeded."""
+
+    def _in_home(self, monkeypatch):
         from metasci_scribe import paths
 
-        monkeypatch.chdir(paths.DATA_DIR.parent)
         paths.DATA_DIR.parent.mkdir(parents=True, exist_ok=True)
+        monkeypatch.chdir(paths.DATA_DIR.parent)
         monkeypatch.delenv("METASCI_SCRIBE_WORKSPACE_DIR", raising=False)
-        lines = self._printed(paths.DATA_DIR.parent)
-        flagged = [line for line in lines if "cannot be a workspace" in line]
-        assert len(flagged) == 2
-        assert "Open a paper folder instead" in flagged[0]
-        assert any("cd" in line and "paper folder" in line for line in lines)
 
-    def test_a_paper_folder_is_not_flagged(self, tmp_path, monkeypatch):
+    def test_it_stops_before_asking_anything_and_returns_false(self, monkeypatch):
+        self._in_home(monkeypatch)
+        result, _lines, mock_q, saved = _run_wizard(_ANTHROPIC_RUN)
+        assert result is False
+        assert saved == []
+        mock_q.select.assert_not_called()
+        mock_q.confirm.assert_not_called()
+
+    def test_the_message_names_a_subfolder_and_the_command_to_rerun(self, monkeypatch):
+        self._in_home(monkeypatch)
+        _, lines, _, _ = _run_wizard(_ANTHROPIC_RUN)
+        text = "\n".join(lines)
+        assert "cannot be a workspace" in text
+        assert "mkdir paper" in text
+        assert "cd paper" in text
+        assert "metasci-scribe onboard" in text
+
+    def test_it_never_says_the_setup_succeeded(self, monkeypatch):
+        self._in_home(monkeypatch)
+        _, lines, _, _ = _run_wizard(_ANTHROPIC_RUN)
+        text = "\n".join(lines).lower()
+        assert "configuration saved" not in text
+        assert "ready" not in text
+        assert "setup complete" not in text
+
+    def test_a_paper_folder_goes_on_as_before(self, tmp_path, monkeypatch):
         paper = tmp_path / "paper"
         paper.mkdir()
         monkeypatch.chdir(paper)
         monkeypatch.delenv("METASCI_SCRIBE_WORKSPACE_DIR", raising=False)
-        lines = self._printed(paper)
+        result, lines, _, saved = _run_wizard(_ANTHROPIC_RUN)
+        assert result is True
+        assert saved
         assert not [line for line in lines if "cannot be a workspace" in line]
 
-    def test_a_declined_save_is_not_flagged_at_the_end(self, monkeypatch):
+    def test_a_configured_workdir_that_is_fine_is_not_blocked(
+        self, tmp_path, monkeypatch
+    ):
         from metasci_scribe import paths
 
         paths.DATA_DIR.parent.mkdir(parents=True, exist_ok=True)
-        monkeypatch.chdir(paths.DATA_DIR.parent)
+        monkeypatch.chdir(paths.DATA_DIR.parent)  # a bad cwd, but not where it starts
+        paper = tmp_path / "paper"
+        paper.mkdir()
         monkeypatch.delenv("METASCI_SCRIBE_WORKSPACE_DIR", raising=False)
-        with (
-            patch("metasci_scribe.config.onboard.wizard.get_config_path") as path,
-            patch("metasci_scribe.config.onboard.wizard.remove_config_file"),
-        ):
-            path.return_value.exists.return_value = False
-            lines = self._printed(paths.DATA_DIR.parent, save=False)
-        assert len([line for line in lines if "cannot be a workspace" in line]) == 1
+        result, _, _, _ = _run_wizard(
+            _ANTHROPIC_RUN, config=ScribeConfig(default_workdir=str(paper))
+        )
+        assert result is True
+
+    def test_configuring_one_section_only_warns(self, monkeypatch):
+        self._in_home(monkeypatch)
+        result, lines, _, saved = _run_wizard(
+            ["claude-sonnet-5-5"],
+            config=ScribeConfig(provider="anthropic", anthropic_api_key="sk-ant-x"),
+            sections={"model"},
+        )
+        assert result is True
+        assert saved
+        assert [line for line in lines if "cannot be a workspace" in line]
+
+
+class TestFinishDoesNotClaimReady:
+    """Setup that leaves no way to reach a model ends by saying what to do."""
+
+    def test_no_key_and_no_sign_in_points_to_login(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("METASCI_SCRIBE_WORKSPACE_DIR", raising=False)
+        result, lines, _, _ = _run_wizard(_ANTHROPIC_RUN)
+        text = "\n".join(lines)
+        assert result is True
+        assert "/login" in text
+        assert "Continue with ChatGPT" in text
+        assert "not ready" in text.lower()
+
+    def test_a_key_in_the_config_is_enough(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("METASCI_SCRIBE_WORKSPACE_DIR", raising=False)
+        _, lines, _mock_q, _ = _run_wizard(
+            _ANTHROPIC_RUN, config=ScribeConfig(anthropic_api_key="sk-ant-x")
+        )
+        assert "not ready" not in "\n".join(lines).lower()
+
+    def test_a_saved_chatgpt_sign_in_is_enough(self, tmp_path, monkeypatch):
+        from metasci_scribe.auth import chatgpt_plan as plan_auth
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("METASCI_SCRIBE_WORKSPACE_DIR", raising=False)
+
+        def signs_in_and_saves(**kwargs):
+            creds = _plan_creds()
+            plan_auth.save(creds)
+            return creds
+
+        _, lines, _, _ = _run_wizard(
+            ["chatgpt_plan", "gpt-plan-a", "high", "skip", "daemon", True],
+            login=signs_in_and_saves,
+        )
+        assert "not ready" not in "\n".join(lines).lower()
+
+    def test_the_plan_route_without_a_saved_sign_in_says_login(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("METASCI_SCRIBE_WORKSPACE_DIR", raising=False)
+        config = ScribeConfig(provider="openai", openai_auth_mode="chatgpt_plan")
+        _, lines, _, _ = _run_wizard(
+            ["gpt-plan-a", "high"], config=config, sections={"model"}
+        )
+        assert "/login" in "\n".join(lines)
+
+
+class TestCoPilotOnThePlan:
+    def test_the_picker_lists_the_accounts_models(self):
+        config = ScribeConfig(provider="openai", openai_auth_mode="chatgpt_plan")
+        _, _, mock_q, saved = _run_wizard(
+            ["assemble", "openai", "gpt-plan-a"],
+            config=config,
+            sections={"auxiliary_model"},
+        )
+        values = [c.value for c in mock_q.select.call_args_list[2].kwargs["choices"]]
+        assert values[0] == "gpt-plan-a"
+        assert "gpt-6.1-sol" not in values
+        assert saved[-1].auxiliary_model == "gpt-plan-a"
+        mock_q.password.assert_not_called()

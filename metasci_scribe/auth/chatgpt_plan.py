@@ -569,6 +569,8 @@ class SignOutResult:
     had_sign_in: bool
     revoked: bool
     problem: str | None = None
+    # Set when the saved record could not be deleted afterwards.
+    removal_problem: str | None = None
 
 
 def _revocation_endpoint() -> tuple[str | None, str | None]:
@@ -645,20 +647,26 @@ def sign_out() -> SignOutResult:
     included, so a different ChatGPT account can sign in next; :func:`clear`
     keeps them. ``host_id`` stays: it names this machine, not an account.
 
-    Raises :class:`CredentialStoreError` when the store cannot be read or
-    changed.
+    Raises :class:`CredentialStoreError` when the store cannot be read; a record
+    that cannot be deleted is reported in ``removal_problem``.
     """
     if not _auth_dir().is_dir():
         return SignOutResult(had_sign_in=False, revoked=False)
     with _locked():
         creds = _credentials_from(_read_record())
         problem = _revoke(creds) if creds is not None else None
-        _remove_record()
-        _remove_stale_temps(_auth_dir())
+        removal_problem = None
+        try:
+            _remove_record()
+            _remove_stale_temps(_auth_dir())
+        except CredentialStoreError as exc:
+            # The revocation already ran, whatever came of it: report both.
+            removal_problem = str(exc)
     return SignOutResult(
         had_sign_in=creds is not None,
         revoked=creds is not None and problem is None,
         problem=problem,
+        removal_problem=removal_problem,
     )
 
 
@@ -1042,6 +1050,11 @@ def _validate_id_token(id_token: str, client_id: str, nonce: str) -> dict[str, A
 # ---------------------------------------------------------------- sign-in
 
 
+def _raise_if_cancelled(cancel: threading.Event | None) -> None:
+    if cancel is not None and cancel.is_set():
+        raise LoginCancelled("The sign-in was cancelled.")
+
+
 def _try_open(open_browser: Callable[[str], bool], url: str) -> bool:
     try:
         return bool(open_browser(url))
@@ -1054,11 +1067,15 @@ def login(
     open_browser: Callable[[str], bool] = webbrowser.open,
     timeout: float = 300.0,
     cancel: threading.Event | None = None,
+    show_url: Callable[[str], None] = print,
 ) -> Credentials:
     """Sign in through the system browser and save the result.
 
     Setting ``cancel`` from another thread ends the wait, closes the local
-    listener and raises :class:`LoginCancelled`.
+    listener and raises :class:`LoginCancelled`; it is read again before the
+    exchange result is saved, so a sign-in the user gave up on leaves no
+    tokens. ``show_url`` receives the message with the address to open by hand
+    when no browser could be opened.
 
     Raises :class:`LoginCancelled`, :class:`LoginTimeout` or
     :class:`LoginFailed`; on any of them saved tokens stay as they were.
@@ -1090,7 +1107,7 @@ def login(
         if not _try_open(open_browser, url):
             # Same attempt without the hint: it only skips the account
             # selector, and it must not reach the terminal or its scrollback.
-            print(
+            show_url(
                 "Could not open a browser. Open this address to sign in:\n"
                 + build_authorize_url(**url_args)
             )
@@ -1128,6 +1145,7 @@ def login(
             "resource": RESOURCE,
         }
     )
+    _raise_if_cancelled(cancel)
     claims = _validate_id_token(tokens["id_token"], client_id, nonce)
     saved_subject = saved.get("subject")
     if saved_subject and saved_subject != claims["sub"]:
@@ -1149,6 +1167,7 @@ def login(
         email=_nonempty_str(claims.get("email")),
         subject=claims["sub"],
     )
+    _raise_if_cancelled(cancel)
     save(creds)
     return creds
 

@@ -165,7 +165,21 @@ Other decisions:
   when the session was on another provider), then rebuilds the session through `/model`'s transactional
   switch (`_apply_model(..., auth_mode=...)`). The route is set in the environment for the trial build and
   put back if the build or the agent load fails. Not applied to a running langgraph server (the command says
-  to restart).
+  to restart). The model the session keeps is checked against the account's `list_models()`: one the account
+  does not list gives way to the first listed (said, and saved); an unreadable catalog keeps the model. A
+  co-pilot (auxiliary) model setting is cleared, in the config and the session, so the main instance serves
+  background work (said; restored in the session if the switch fails). The browser-could-not-open message
+  goes through the command UI (`login(show_url=...)`). Ctrl+C returns within about a second even inside the
+  token exchange, and `login` re-reads the cancel event before saving, so a sign-in finished after a cancel
+  saves nothing and the session is not half-switched.
+- **`/logout` and the route.** Under `openai_auth_mode=chatgpt_plan` it saves `api_key` and the session
+  follows: with `OPENAI_API_KEY` set an OpenAI session is rebuilt on the key and told so ("billed to your API
+  account, not your ChatGPT plan"); without one it says the session cannot send requests until `/login` or a
+  key plus restart. `ensure_model_configured` never lets a key serve the plan route: under a persisted plan
+  mode with no sign-in the message is "Not signed in to ChatGPT. Run /login, or ... config set
+  openai_auth_mode api_key". A record that cannot be deleted after the revocation is reported beside it
+  (`SignOutResult.removal_problem`) and leaves the route alone. The auxiliary build paths in `agent.py` now
+  go through `ensure_model_configured` too.
 - **`/model` on the plan** lists the account's models (`list_models()`, run in a thread) and accepts a slug
   only if the account lists it; Claude names still go by their own key. A `PlanStop` is shown with its own
   message (code and request ID included), yellow for `RETRY`, red otherwise.
@@ -179,9 +193,12 @@ Other decisions:
 - **Onboarding** offers `Continue with ChatGPT` first (preselected for a fresh or plan config), signs in
   inside the wizard, skips the API key step, and lists the account's models. A declined, timed-out or
   plan-off sign-in returns to the choice. Choosing an OpenAI key (or `--provider openai`) sets
-  `openai_auth_mode=api_key`. The co-pilot picker has no ChatGPT entry and reuses the plan sign-in for
-  OpenAI. If the folder the CLI would start in holds the data folder (the home folder, say), the
-  `require_workspace_root` message is printed when the wizard opens and again after the configuration is
-  saved, with "cd into a paper folder".
+  `openai_auth_mode=api_key`. The co-pilot picker has no ChatGPT entry, reuses the plan sign-in for
+  OpenAI and lists the account's models on the plan route. If the folder the CLI would start in holds
+  the data folder (the home folder, say), a full run stops before asking anything: it prints the
+  `require_workspace_root` message with `mkdir paper`, `cd paper`, `metasci-scribe onboard`, says nothing
+  was changed, never says the setup succeeded, and returns `False`. Re-running a single section
+  (`configure <section>`) only warns. A run that saves a setup with no key and no saved sign-in prints
+  "Not ready yet" and points to `/login` (Continue with ChatGPT) or `configure provider`.
 - The `/login` warning, two lines, before the browser opens: the agent can read the paper folder; commands
   always need approval in chat and autonomous runs get no shell.

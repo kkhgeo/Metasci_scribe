@@ -504,6 +504,43 @@ def test_cancel_event_ends_the_wait_and_closes_the_listener():
     probe.close()
 
 
+def test_a_cancel_during_the_token_exchange_saves_nothing(openai):
+    cancel = threading.Event()
+
+    def cancelled_mid_exchange(form):
+        cancel.set()
+        return httpx.Response(
+            200,
+            json={
+                "access_token": ACCESS,
+                "refresh_token": REFRESH,
+                "id_token": openai.id_token(),
+                "expires_in": 3600,
+                "scope": ALL_SCOPES,
+            },
+        )
+
+    openai.token_reply = cancelled_mid_exchange
+    with pytest.raises(LoginCancelled):
+        login(open_browser=_browser(openai), timeout=10, cancel=cancel)
+    assert load() is None
+    assert ACCESS not in _token_path().read_text(encoding="utf-8")
+
+
+def test_the_manual_address_goes_to_the_callback_not_to_print(openai, capsys):
+    shown = []
+
+    def no_browser(url):
+        _browser(openai)(url)
+        return False
+
+    login(open_browser=no_browser, timeout=10, show_url=shown.append)
+    assert capsys.readouterr().out == ""
+    assert len(shown) == 1
+    assert "Open this address" in shown[0]
+    assert "id_token_hint" not in shown[0]
+
+
 def test_cancel_already_set_saves_nothing(openai):
     cancel = threading.Event()
     cancel.set()
@@ -1156,6 +1193,37 @@ def test_sign_out_when_signed_out_makes_no_request(openai):
     assert not result.revoked
     assert openai.revoke_forms == []
     assert not (paths.DATA_DIR / "auth").exists()
+
+
+def test_a_record_that_cannot_be_deleted_is_reported_beside_the_revocation(
+    openai, monkeypatch
+):
+    login(open_browser=_browser(openai), timeout=10)
+
+    def stuck():
+        raise cp.CredentialStoreError("Could not remove the saved sign-in (OSError).")
+
+    monkeypatch.setattr(cp, "_remove_record", stuck)
+    result = cp.sign_out()
+    assert result.revoked
+    assert "Could not remove" in result.removal_problem
+    assert len(openai.revoke_forms) == 1
+
+
+def test_a_failed_revocation_and_a_failed_removal_are_both_reported(
+    openai, monkeypatch
+):
+    login(open_browser=_browser(openai), timeout=10)
+    openai.revoke_reply = lambda form: httpx.Response(400, json={"error": "x"})
+
+    def stuck():
+        raise cp.CredentialStoreError("Could not remove the saved sign-in (OSError).")
+
+    monkeypatch.setattr(cp, "_remove_record", stuck)
+    result = cp.sign_out()
+    assert not result.revoked
+    assert "400" in result.problem
+    assert "Could not remove" in result.removal_problem
 
 
 def test_sign_out_after_clear_drops_the_leftover_registration(openai):
