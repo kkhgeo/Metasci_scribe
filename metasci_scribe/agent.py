@@ -1240,6 +1240,7 @@ def create_cli_agent(
     runtime: "AsyncRuntime | None" = None,
     extra_tools: "Sequence[BaseTool]" = (),
     with_mcp: bool = True,
+    refuse_delete: bool = False,
 ) -> "CompiledStateGraph":
     """Create agent with checkpointer for CLI multi-turn support.
 
@@ -1270,11 +1271,16 @@ def create_cli_agent(
             favor of the ``_ensure_chat_model()`` fallback.
         runtime: Optional application-scoped runtime for synchronous MCP tool
             discovery. Direct callers get a scoped runtime when omitted.
-        extra_tools: Tools added to the main agent only (not its sub-agents).
-            The autonomous run adds its progress tool here; a chat session
-            passes none.
+        extra_tools: Tools added to the main agent only. deepagents gives a
+            sub-agent spec that names no tools every tool of the main agent,
+            so each such spec is first given the tools it would have had
+            without these. The autonomous run adds its progress tool here; a
+            chat session passes none.
         with_mcp: When False the agent gets no MCP tools at all (none are
             loaded or connected). The autonomous run builds without them.
+        refuse_delete: Refuse the recursive ``delete`` file tool outright. A
+            run with no approval prompt (the autonomous run) sets it: with
+            the interrupt disarmed nothing else would stop a delete.
     """
     from deepagents import create_deep_agent
     from deepagents.backends import CompositeBackend
@@ -1318,6 +1324,7 @@ def create_cli_agent(
         # Guard derived per call from the run's HITL-suppression state (see
         # CustomSandboxBackend._effective_guard_dangerous), not baked here.
         guard_dangerous=False,
+        refuse_delete=refuse_delete,
         env=research_env_overrides(),
         skills_dir=workspace.skills_dir,
     )
@@ -1371,7 +1378,16 @@ def create_cli_agent(
             chat_model=chat_model,
         )
     if extra_tools:
-        kwargs["tools"] = [*kwargs["tools"], *extra_tools]
+        main_tools = list(kwargs["tools"])
+        for spec in kwargs.get("subagents", ()):
+            # A remote (async) spec has no tools of its own to widen.
+            if (
+                isinstance(spec, dict)
+                and "tools" not in spec
+                and "graph_id" not in spec
+            ):
+                spec["tools"] = list(main_tools)
+        kwargs["tools"] = [*main_tools, *extra_tools]
 
     return create_deep_agent(
         **kwargs,

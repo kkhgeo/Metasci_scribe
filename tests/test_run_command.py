@@ -4,6 +4,8 @@ and the child process of the chat command. No provider is ever called."""
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 import sys
 import textwrap
 from pathlib import Path
@@ -120,6 +122,18 @@ def cli():
 
     def run(root: Path):
         return runner.invoke(app, ["run", "--workdir", str(root)])
+
+    return run
+
+
+@pytest.fixture
+def cli_with():
+    from metasci_scribe.cli import app
+
+    runner = CliRunner()
+
+    def run(root: Path, *options: str):
+        return runner.invoke(app, ["run", "--workdir", str(root), *options])
 
     return run
 
@@ -323,12 +337,29 @@ def test_a_chat_session_agent_never_gets_mark_paragraph(tmp_path, model):
 
 
 def test_extra_tools_go_to_the_main_agent_only(tmp_path, model):
+    """Not to the general-purpose sub-agent either, which inherits the main
+    agent's tools unless its spec names its own."""
     from langgraph.checkpoint.memory import InMemorySaver
 
     from metasci_scribe.agent import create_cli_agent
     from metasci_scribe.config import ScribeConfig
     from metasci_scribe.run import make_mark_paragraph_tool
 
+    model.replies = [
+        AIMessage(
+            "",
+            tool_calls=[
+                call(
+                    "task",
+                    "t1",
+                    description="look something up",
+                    subagent_type="general-purpose",
+                )
+            ],
+        ),
+        AIMessage("sub-agent done"),
+        AIMessage("main done"),
+    ]
     create_cli_agent(
         workspace=Workspace(tmp_path),
         config=ScribeConfig(enable_async_subagents=False),
@@ -338,6 +369,10 @@ def test_extra_tools_go_to_the_main_agent_only(tmp_path, model):
         with_mcp=False,
     ).invoke({"messages": [("user", "hi")]}, {"configurable": {"thread_id": "t"}})
     assert "mark_paragraph" in model.offered[0]
+    assert "task" in model.offered[0]
+    # call 1 is the sub-agent's own model call
+    assert "think_tool" in model.offered[1]
+    assert "mark_paragraph" not in model.offered[1]
 
 
 def test_mcp_tools_are_still_loaded_for_a_chat_session(tmp_path, model, monkeypatch):
@@ -394,6 +429,10 @@ STUB = textwrap.dedent(
         say("cwd=" + os.getcwd())
         say("args=" + "|".join(sys.argv[2:]))
         sys.exit(int(sys.argv[2]))
+    if mode == "crash":
+        say("Traceback (most recent call last):")
+        say("ModuleNotFoundError: No module named 'nothing'")
+        sys.exit(1)
     if mode == "badbytes":
         out.write(b"bad \\xff\\xfe bytes\\n"); out.flush()
         sys.exit(0)
@@ -429,7 +468,7 @@ def stub(tmp_path, monkeypatch):
         monkeypatch.setattr(
             run_cmd,
             "_child_argv",
-            lambda root: [sys.executable, "-X", "utf8", str(script), *args],
+            lambda root, *_a, **_k: [sys.executable, "-X", "utf8", str(script), *args],
         )
 
     return use
@@ -519,9 +558,81 @@ def test_the_real_child_command_runs_from_the_folder_without_path(tmp_path):
     assert argv[argv.index("-m") + 1] == "metasci_scribe"
     assert argv[-3:] == ["run", "--workdir", str(tmp_path)]
     assert "-I" in argv  # the paper folder is not on the child's import path
-    env = _child_env()
-    assert env["PYTHONUTF8"] == "1"
-    assert env["PYTHONIOENCODING"] == "utf-8"
+    assert argv[argv.index("-X") + 1] == "utf8"
+    assert "-u" in argv
+    # -I makes the child ignore PYTHON* variables, so none is set for it
+    assert not [
+        k for k in _child_env() if k.startswith("PYTHON") and k not in os.environ
+    ]
+
+
+def test_the_child_gets_the_chats_model_provider_and_route(tmp_path):
+    from metasci_scribe.commands.implementation.run import _child_argv, _child_env
+
+    argv = _child_argv(tmp_path, "gpt-x", "openai")
+    assert argv[argv.index("--model") + 1] == "gpt-x"
+    assert argv[argv.index("--provider") + 1] == "openai"
+    assert (
+        _child_env("chatgpt_plan")["METASCI_SCRIBE_OPENAI_AUTH_MODE"] == "chatgpt_plan"
+    )
+
+
+async def test_run_uses_the_model_the_chat_switched_to_and_says_so(
+    tmp_path, stub, run_command, monkeypatch
+):
+    """After ``/model``, the live config differs from the one the chat started
+    with; the child must follow the live one, and the person is told."""
+    import metasci_scribe.agent as agent_mod
+    import metasci_scribe.commands.implementation.run as run_cmd
+    from metasci_scribe.config import ScribeConfig
+
+    live = ScribeConfig(
+        model="gpt-switched", provider="openai", openai_auth_mode="chatgpt_plan"
+    )
+    monkeypatch.setattr(agent_mod, "_config", live)
+    seen: dict = {}
+    stub("lines", "0")
+    stub_argv = run_cmd._child_argv
+
+    def argv(root, model=None, provider=None):
+        seen.update(model=model, provider=provider)
+        return stub_argv(root)
+
+    def env(auth_mode=None):
+        seen["auth_mode"] = auth_mode
+        return dict(os.environ)
+
+    monkeypatch.setattr(run_cmd, "_child_argv", argv)
+    monkeypatch.setattr(run_cmd, "_child_env", env)
+    ctx, ui, _ = make_ctx(tmp_path)
+    ctx.config = ScribeConfig(model="gpt-at-start", provider="anthropic")
+    await run_command.execute(ctx, [])
+    assert seen == {
+        "model": "gpt-switched",
+        "provider": "openai",
+        "auth_mode": "chatgpt_plan",
+    }
+    started = [m for m in ui.system_messages if m.startswith("Run started")]
+    assert len(started) == 1
+    assert "gpt-switched" in started[0]
+    assert "provider openai" in started[0]
+    assert "ChatGPT plan" in started[0]
+
+
+def test_run_takes_model_and_provider_options(paper, model, cli_with, monkeypatch):
+    import metasci_scribe.agent as agent_mod
+
+    built: list = []
+    monkeypatch.setattr(
+        agent_mod, "_build_chat_model", lambda cfg: built.append(cfg) or model
+    )
+    manuscript(paper)
+    model.replies = [write_para("R1", "1"), write_para("R2", "2")]
+    result = cli_with(paper, "--model", "gpt-flag", "--provider", "openai")
+    assert result.exit_code == 0, result.output
+    assert built[0].model == "gpt-flag"
+    assert built[0].provider == "openai"
+    assert "Model: gpt-flag (provider openai" in result.output
 
 
 async def test_the_prompt_loop_keeps_running_while_the_child_runs(
@@ -635,3 +746,213 @@ async def test_the_real_child_starts_without_path_and_reports_its_exit(
     lines = shown(ui)
     assert any("outline.md" in line for line in lines), lines
     assert any("exit code 2" in line for line in lines), lines
+
+
+# ---------------------------------------------------- fix round 1
+
+
+def test_the_autonomous_agent_cannot_delete(paper, model, cli):
+    """The delete interrupt is off in an unattended run, so the tool itself
+    must refuse: an injected agent could remove the sources or the draft."""
+    manuscript(paper)
+    (paper / "Knowledge").mkdir()
+    source = paper / "Knowledge" / "source.txt"
+    source.write_text("evidence", encoding="utf-8")
+    model.replies = [
+        AIMessage(
+            "",
+            tool_calls=[
+                call("delete", "d1", file_path="/manuscript.md"),
+                call("delete", "d2", file_path="/Knowledge"),
+            ],
+        ),
+        write_para("R1", "1"),
+        write_para("R2", "2"),
+    ]
+    result = cli(paper)
+    assert result.exit_code == 0, result.output
+    assert "delete" in model.offered[0]  # the tool exists; it refuses
+    assert source.read_text(encoding="utf-8") == "evidence"
+    assert (paper / "manuscript.md").read_text(encoding="utf-8") == "Draft.\n"
+    replies = [str(m.content) for m in model.seen[1] if m.type == "tool"]
+    assert replies
+    assert all("approval" in r.lower() or "refus" in r.lower() for r in replies)
+
+
+def test_a_second_run_and_a_later_ctrl_c_do_not_end_the_app(tmp_path, stub):
+    """The runner's SIGINT handler counts interrupts for the whole app; the
+    command must not leave that count at 1, or the next Ctrl+C is fatal."""
+    import signal
+
+    from metasci_scribe.commands.implementation.run import RunCommand
+
+    stub("wait")
+    outcome: dict = {}
+
+    async def main():
+        loop = asyncio.get_running_loop()
+        runners_handler = signal.getsignal(signal.SIGINT)
+        for n in (1, 2):
+            ctx, ui, _ = make_ctx(tmp_path)
+            task = asyncio.create_task(RunCommand().execute(ctx, []))
+            for _ in range(200):
+                await asyncio.sleep(0.1)
+                if "started" in shown(ui):
+                    break
+            assert "started" in shown(ui), f"run {n} never started"
+            # a real Ctrl+C: the signal, not a cancel
+            loop.call_soon(signal.raise_signal, signal.SIGINT)
+            await asyncio.wait_for(task, timeout=40)
+            assert not task.cancelled()
+            assert any("exit code 130" in line for line in shown(ui)), shown(ui)
+            assert signal.getsignal(signal.SIGINT) is runners_handler
+        # The app is alive, and the runner has not counted an interrupt.
+        outcome["alive"] = True
+        outcome["cancelling"] = asyncio.current_task().cancelling()
+
+    asyncio.run(main())
+    assert outcome == {"alive": True, "cancelling": 0}
+
+
+async def test_a_child_that_fails_to_start_shows_why(tmp_path, stub, run_command):
+    stub("crash")
+    ctx, ui, _ = make_ctx(tmp_path)
+    await run_command.execute(ctx, [])
+    report = [m for m in ui.system_messages if "Run ended" in m]
+    assert len(report) == 1
+    assert "exit code 1" in report[0]
+    assert "ModuleNotFoundError: No module named 'nothing'" in report[0]
+    assert "unexpectedly" not in report[0]
+
+
+# --- one event loop for all passes, through a real HTTP transport -------------
+
+
+def _function_call(call_id: str, name: str, arguments: dict) -> list[dict]:
+    from tests.test_chatgpt_plan_model import event, response_object
+
+    item = {
+        "id": f"fc_{call_id}",
+        "type": "function_call",
+        "status": "completed",
+        "call_id": call_id,
+        "name": name,
+        "arguments": json.dumps(arguments),
+    }
+    return [
+        event("response.created", response=response_object("in_progress")),
+        event(
+            "response.output_item.added",
+            output_index=0,
+            item={**item, "status": "in_progress", "arguments": ""},
+        ),
+        event(
+            "response.function_call_arguments.delta",
+            item_id=item["id"],
+            output_index=0,
+            delta=item["arguments"],
+        ),
+        event("response.output_item.done", output_index=0, item=item),
+        event("response.completed", response=response_object(output=[item])),
+    ]
+
+
+class FakeResponsesServer:
+    """A real HTTP/1.1 keep-alive server on loopback that streams scripted
+    Responses API replies, one per POST."""
+
+    def __init__(self, scripts: list[list[dict]]) -> None:
+        import http.server
+        import threading
+
+        from tests.test_chatgpt_plan_model import sse_bytes
+
+        outer = self
+        self.scripts = list(scripts)
+        self.requests = 0
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("content-length", 0)))
+                outer.requests += 1
+                body = sse_bytes(outer.scripts.pop(0))
+                self.send_response(200)
+                self.send_header("content-type", "text/event-stream")
+                self.send_header("content-length", str(len(body)))
+                self.send_header("x-request-id", f"req_{outer.requests}")
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.port = self.server.server_address[1]
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+
+    def close(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+
+
+def test_two_passes_share_one_event_loop_and_one_http_client(paper, monkeypatch, cli):
+    """Pass 1 ends with a paragraph pending, so ``run_project`` starts pass 2 in
+    the same process. The model's HTTP client is cached, with its connection
+    pool, for the whole process; a new event loop per pass left pass 2 with
+    "Event loop is closed". Nothing here is a fake model: the plan model, its
+    transport and its connection pool are real, and only the far end is ours."""
+    import httpx
+
+    import metasci_scribe.agent as agent_mod
+    from metasci_scribe.llm import chatgpt_plan as plan
+    from tests.test_chatgpt_plan_model import text_events
+
+    mark_r1 = {"paragraph_id": "R1", "status": "done"}
+    mark_r2 = {"paragraph_id": "R2", "status": "done"}
+    server = FakeResponsesServer(
+        [
+            _function_call("c1", "mark_paragraph", mark_r1),
+            text_events("pass one over"),
+            _function_call("c2", "mark_paragraph", mark_r2),
+            text_events("pass two over"),
+        ]
+    )
+
+    class ToLoopback(httpx.AsyncBaseTransport):
+        """Sends the plan route's request to the local server instead."""
+
+        def __init__(self) -> None:
+            self.inner = httpx.AsyncHTTPTransport()
+
+        async def handle_async_request(self, request):
+            body = await request.aread()
+            url = request.url.copy_with(
+                scheme="http", host="127.0.0.1", port=server.port
+            )
+            sent = httpx.Request(
+                request.method, url, headers=request.headers, content=body
+            )
+            return await self.inner.handle_async_request(sent)
+
+    try:
+        monkeypatch.setattr(agent_mod, "_config", None)
+        monkeypatch.setattr(agent_mod, "_chat_model", None)
+        monkeypatch.setattr(agent_mod, "_chat_model_key", None)
+        monkeypatch.setenv("METASCI_SCRIBE_OPENAI_AUTH_MODE", "chatgpt_plan")
+        monkeypatch.setattr(
+            "metasci_scribe.llm.credentials._plan_sign_in_saved", lambda: True
+        )
+        monkeypatch.setattr(plan, "get_access_token", lambda: "test-token")
+        transport = ToLoopback()
+        monkeypatch.setattr(plan, "_base_async_transport", lambda: transport)
+        manuscript(paper)
+        result = cli(paper)
+    finally:
+        server.close()
+    assert result.exit_code == 0, result.output
+    assert server.requests == 4
+    assert RunState.load(paper).paragraphs == {"R1": "done", "R2": "done"}
+    assert "Event loop is closed" not in result.output

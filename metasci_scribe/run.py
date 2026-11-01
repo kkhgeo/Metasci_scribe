@@ -32,6 +32,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import tempfile
 import threading
 import time
@@ -323,6 +324,105 @@ def _reconcile(
 
 _MARK_LOCK = threading.Lock()
 
+# ------------------------------------------------------- the manuscript guard
+#
+# ``write_file`` replaces a whole file, and only the prompt tells the model to
+# keep the paragraphs already finished. So the harness keeps copies and checks
+# that no line of the text it started a pass with, or had at the last
+# ``done`` mark, has disappeared. Lines are compared stripped and as a set: a
+# moved paragraph is fine, a missing one is not.
+
+_BACKUPS_KEPT = 3
+_BACKUP_NAME = re.compile(r"^manuscript\.pass-(\d+)\.bak$")
+MARK_SNAPSHOT = "manuscript.mark.bak"  # as of the last paragraph marked done
+LOST_MARKER = "manuscript.lost"  # written by the tool when it sees a loss
+
+
+def _read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def _missing_lines(before: str, after: str) -> list[str]:
+    """Non-blank lines of *before* (stripped, first occurrence) that *after*
+    no longer has."""
+    kept = {line.strip() for line in after.splitlines()}
+    seen: set[str] = set()
+    out: list[str] = []
+    for line in before.splitlines():
+        text = line.strip()
+        if text and text not in kept and text not in seen:
+            seen.add(text)
+            out.append(text)
+    return out
+
+
+def _backup_manuscript(root: Path, state_dir: Path) -> tuple[Path | None, str]:
+    """Copy ``manuscript.md`` to ``manuscript.pass-N.bak`` (N counts up across
+    runs), keep the newest ``_BACKUPS_KEPT``, and return the copy and its text.
+
+    No manuscript, nothing to lose: ``(None, "")``. Raises ``OSError``.
+    """
+    try:
+        data = (root / "manuscript.md").read_bytes()
+    except FileNotFoundError:
+        return None, ""
+    numbers = {
+        int(m.group(1)): f
+        for f in state_dir.iterdir()
+        if (m := _BACKUP_NAME.match(f.name))
+    }
+    target = state_dir / f"manuscript.pass-{max(numbers, default=0) + 1}.bak"
+    target.write_bytes(data)
+    numbers[int(_BACKUP_NAME.match(target.name).group(1))] = target
+    for number in sorted(numbers)[:-_BACKUPS_KEPT]:
+        with contextlib.suppress(OSError):
+            numbers[number].unlink()
+    return target, data.decode("utf-8", errors="replace")
+
+
+def _clear_marks(state_dir: Path) -> None:
+    for name in (MARK_SNAPSHOT, LOST_MARKER):
+        with contextlib.suppress(OSError):
+            (state_dir / name).unlink()
+
+
+def _lost_since(
+    root: Path, state_dir: Path, before: str, backup: Path | None
+) -> tuple[list[str], Path | None]:
+    """Lines lost from ``manuscript.md`` during a pass, and the copy that still
+    has them. Empty list: nothing was lost."""
+    after = _read_text(root / "manuscript.md")
+    snapshot = state_dir / MARK_SNAPSHOT
+    if (state_dir / LOST_MARKER).exists():
+        # The tool saw it mid-pass; what is missing now is not the point.
+        return _missing_lines(_read_text(snapshot), after) or ["(text)"], snapshot
+    if missing := _missing_lines(before, after):
+        return missing, backup
+    if missing := _missing_lines(_read_text(snapshot), after):
+        return missing, snapshot
+    return [], None
+
+
+def _mark_lost_text(root: Path, state_dir: Path) -> bool:
+    """Whether ``manuscript.md`` lacks text it had at the previous ``done``
+    mark. Leaves a marker for the harness when it does."""
+    snapshot = state_dir / MARK_SNAPSHOT
+    if not snapshot.exists():
+        return False
+    if not _missing_lines(_read_text(snapshot), _read_text(root / "manuscript.md")):
+        return False
+    with contextlib.suppress(OSError):
+        (state_dir / LOST_MARKER).write_text(MARK_SNAPSHOT, encoding="utf-8")
+    return True
+
+
+def _take_mark_snapshot(root: Path, state_dir: Path) -> None:
+    with contextlib.suppress(OSError):
+        shutil.copyfile(root / "manuscript.md", state_dir / MARK_SNAPSHOT)
+
 
 def make_mark_paragraph_tool(root: Path) -> BaseTool:
     """The ``mark_paragraph`` tool of the run in *root*.
@@ -367,6 +467,12 @@ def make_mark_paragraph_tool(root: Path) -> BaseTool:
                 return f"Unknown paragraph ID {pid!r}. Known IDs: {shown}."
             if status == BLOCKED and not why:
                 return "Rejected: a blocked paragraph needs a reason."
+            state_dir = Workspace(root).state_dir
+            if _mark_lost_text(root, state_dir):
+                return (
+                    "Rejected: manuscript.md lost text that was there at the last "
+                    "mark. The run will stop; do not rewrite finished paragraphs."
+                )
             if state.paragraphs[pid] == status and (
                 status == DONE or state.reasons.get(pid) == why
             ):
@@ -380,6 +486,8 @@ def make_mark_paragraph_tool(root: Path) -> BaseTool:
                 state.save(root)
             except (OSError, UnicodeError) as exc:
                 return f"Rejected: could not save ({type(exc).__name__})."
+            if status == DONE:
+                _take_mark_snapshot(root, state_dir)
             return f"{pid} marked {status} ({state.count(DONE)}/{len(state.paragraphs)} done)."
 
     mark_paragraph.handle_validation_error = lambda _exc: (
@@ -616,45 +724,32 @@ def _run_locked(root, invoke, paragraphs, titles, digest, saved, result) -> RunR
         )
 
     # -- the passes ------------------------------------------------------------
+    state_dir = Workspace(root).state_dir
     for attempt in range(MAX_PASSES):
         if state.count(PENDING) == 0:
             break
+        _clear_marks(state_dir)
+        try:
+            backup, before = _backup_manuscript(root, state_dir)
+        except OSError as exc:
+            return result(
+                RunExit.FAILED,
+                f"manuscript.md could not be backed up before the pass: {_short(exc)}",
+                state,
+                notes,
+            )
+        error: Exception | None = None
         try:
             invoke(state.thread_id, _prompt(attempt == 0, state, titles))
-        except PlanStop as exc:
+        except Exception as exc:  # PlanStop and the rest: handled below
+            error = exc
+        if error is not None:
             state = _reload_quietly(root, state)
-            progress = f"Progress is saved ({state.count(DONE)}/{len(state.paragraphs)} paragraphs marked done)."
-            if exc.action is PlanAction.STOP_USAGE:
-                return result(
-                    RunExit.USAGE_LIMIT,
-                    "The ChatGPT plan usage limit was reached. "
-                    f"{progress} Check your plan's usage in ChatGPT settings, "
-                    "and run again when it allows more use; the run continues where it stopped.",
-                    state,
-                    notes,
-                )
-            return result(
-                RunExit.FAILED, _plan_stop_message(exc, progress), state, notes
-            )
-        except (ChatGPTAuthError, ModelNotConfigured) as exc:
-            state = _reload_quietly(root, state)
-            return result(
-                RunExit.FAILED,
-                f"The model is not available ({type(exc).__name__}). Run /login, then run again. "
-                f"Progress is saved ({state.count(DONE)}/{len(state.paragraphs)} marked done).",
-                state,
-                notes,
-            )
-        except Exception as exc:
-            state = _reload_quietly(root, state)
-            return result(
-                RunExit.FAILED,
-                f"The agent stopped with an unexpected error ({type(exc).__name__}). "
-                f"Progress is saved ({state.count(DONE)}/{len(state.paragraphs)} marked done); "
-                "run again to continue.",
-                state,
-                notes,
-            )
+        lost, copy = _lost_since(root, state_dir, before, backup)
+        if lost:
+            return result(RunExit.FAILED, _loss_message(root, lost, copy), state, notes)
+        if error is not None:
+            return _error_result(error, state, result, notes)
         try:
             state = _reload(root, state)
         except RunStateError as exc:
@@ -711,6 +806,55 @@ def _run_locked(root, invoke, paragraphs, titles, digest, saved, result) -> RunR
         f"The agent marked {total} of {total} paragraphs done.{tail}\n"
         "Nobody has checked the draft yet: read manuscript.md, and check its "
         "claims and citations against your sources, before you use it.",
+        state,
+        notes,
+    )
+
+
+def _loss_message(root: Path, lost: list[str], copy: Path | None) -> str:
+    shown = "; ".join(f"“{_short(line)[:80]}”" for line in lost[:3])
+    more = f" and {len(lost) - 3} more" if len(lost) > 3 else ""
+    where = (
+        f"The last good copy is {copy.relative_to(root).as_posix()}"
+        if copy is not None
+        else "No copy was kept"
+    )
+    return (
+        f"manuscript.md lost {len(lost)} line(s) of finished text during the "
+        f"pass ({shown}{more}). {where}. Copy it over manuscript.md, check the "
+        "draft, and run again. The paragraphs marked done in this pass cannot "
+        "be trusted."
+    )
+
+
+def _error_result(exc: Exception, state: RunState, result, notes) -> RunResult:
+    """The result for an error out of ``invoke``. Only the type is shown for
+    anything but a plan stop, so nothing secret in an error text can leak."""
+    progress = f"Progress is saved ({state.count(DONE)}/{len(state.paragraphs)} paragraphs marked done)."
+    if isinstance(exc, PlanStop):
+        if exc.action is PlanAction.STOP_USAGE:
+            return result(
+                RunExit.USAGE_LIMIT,
+                "The ChatGPT plan usage limit was reached. "
+                f"{progress} Check your plan's usage in ChatGPT settings, "
+                "and run again when it allows more use; the run continues where it stopped.",
+                state,
+                notes,
+            )
+        return result(RunExit.FAILED, _plan_stop_message(exc, progress), state, notes)
+    if isinstance(exc, ChatGPTAuthError | ModelNotConfigured):
+        return result(
+            RunExit.FAILED,
+            f"The model is not available ({type(exc).__name__}). Run /login, then run again. "
+            f"Progress is saved ({state.count(DONE)}/{len(state.paragraphs)} marked done).",
+            state,
+            notes,
+        )
+    return result(
+        RunExit.FAILED,
+        f"The agent stopped with an unexpected error ({type(exc).__name__}). "
+        f"Progress is saved ({state.count(DONE)}/{len(state.paragraphs)} marked done); "
+        "run again to continue.",
         state,
         notes,
     )

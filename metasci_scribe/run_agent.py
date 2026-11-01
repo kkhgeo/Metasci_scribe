@@ -10,8 +10,11 @@ What the autonomous agent is, and is not:
 * ``auto_mode`` and ``auto_approve`` on, ``ask_user`` off: nobody answers.
 * No shell. A run with no human gate gets no ``execute`` and no
   ``run_in_background`` (``ShellGateMiddleware``), and no skill installs.
+* No recursive ``delete``: with the interrupt off nothing else would stop an
+  injected agent from removing ``Knowledge/`` or ``manuscript.md``.
 * No MCP tools at all, and no async sub-agents or ``langgraph dev`` server.
-* ``mark_paragraph`` is added to this agent only; a chat session never has it.
+* ``mark_paragraph`` is added to the main agent only (not to a sub-agent, and
+  never to a chat session).
 
 The single-shot text path (``cmd_run``) turns every error into a ``typer.Exit``,
 which would hide a :class:`~metasci_scribe.llm.errors.PlanStop` from
@@ -31,9 +34,9 @@ from typing import Any
 import click
 
 from .paths import SessionDirs, Workspace
-from .run import AgentInvoke, _short, make_mark_paragraph_tool
+from .run import _short, make_mark_paragraph_tool
 
-__all__ = ["autonomous_config", "build_run_agent", "real_invoke"]
+__all__ = ["RunInvoker", "autonomous_config", "build_run_agent", "real_invoke"]
 
 Progress = Callable[[str], None]
 
@@ -69,6 +72,7 @@ def build_run_agent(root: Path, cfg: Any, checkpointer: Any, chat_model: Any = N
         chat_model=chat_model,
         extra_tools=[make_mark_paragraph_tool(root)],
         with_mcp=False,
+        refuse_delete=True,
     )
 
 
@@ -120,28 +124,64 @@ async def _one_pass(
             await aclose_code_interpreters()
 
 
+class RunInvoker:
+    """The ``invoke`` of the real agent, and the event loop its passes share.
+
+    The chat model caches one HTTP client (one connection pool) for the whole
+    process, and a pool is tied to the loop it first ran on. A fresh loop per
+    pass would hand pass 2 a client whose loop is closed ("Event loop is
+    closed"), so every pass runs on the one ``asyncio.Runner`` this object
+    owns. A Runner keeps Ctrl+C working on Windows, where a loop on another
+    thread cannot be interrupted. Use it as a context manager, or call
+    :meth:`close`.
+    """
+
+    def __init__(
+        self, root: Path, cfg: Any, chat_model: Any, progress: Progress
+    ) -> None:
+        self._root = root
+        self._cfg = cfg
+        self._chat_model = chat_model
+        self._say = progress
+        self._runner: asyncio.Runner | None = None
+
+    def __call__(self, thread_id: str, prompt: str) -> None:
+        if self._runner is None:
+            self._runner = asyncio.Runner()
+        self._runner.run(
+            _one_pass(
+                self._root, self._cfg, self._chat_model, thread_id, prompt, self._say
+            )
+        )
+
+    def close(self) -> None:
+        runner, self._runner = self._runner, None
+        if runner is not None:
+            runner.close()
+
+    def __enter__(self) -> RunInvoker:
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self.close()
+
+
 def real_invoke(
     root: Path,
     *,
     config: Any = None,
     chat_model: Any = None,
     progress: Progress | None = None,
-) -> AgentInvoke:
+) -> RunInvoker:
     """The ``invoke(thread_id, prompt)`` of the real agent in *root*.
 
-    Each call runs one turn of the thread on its own event loop (``asyncio.run``,
-    which Ctrl+C can interrupt on Windows, unlike a loop on another thread) and
-    lets any failure out as it is, so ``run_project`` can tell a plan usage
-    limit from other errors. *chat_model* is for tests; without it the model
-    comes from the configuration.
+    Each call runs one turn of the thread on the invoker's own loop (see
+    :class:`RunInvoker`) and lets any failure out as it is, so ``run_project``
+    can tell a plan usage limit from other errors. *chat_model* is for tests;
+    without it the model comes from the configuration.
     """
     from .config import get_effective_config
 
     root = Path(root)
     cfg = autonomous_config(config if config is not None else get_effective_config())
-    say = progress or _echo
-
-    def invoke(thread_id: str, prompt: str) -> None:
-        asyncio.run(_one_pass(root, cfg, chat_model, thread_id, prompt, say))
-
-    return invoke
+    return RunInvoker(root, cfg, chat_model, progress or _echo)

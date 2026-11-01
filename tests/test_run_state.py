@@ -811,3 +811,149 @@ def test_stale_temp_files_are_removed_at_start(project):
     assert run_project(project, all_done(project)).exit == RunExit.OK
     assert not stale.exists()
     assert other.exists()
+
+
+# ------------------------------------------------------- fix round 1: the guard
+
+
+def backups(root: Path) -> list[str]:
+    return sorted(
+        p.name for p in (root / ".metasci-scribe").glob("manuscript.pass-*.bak")
+    )
+
+
+def test_each_pass_starts_with_a_backup_and_only_three_are_kept(project):
+    (project / "manuscript.md").write_text("Kept line.\n", encoding="utf-8")
+    run_project(project, Agent(project, [], text=""))  # 3 passes, nothing marked
+    assert backups(project) == [
+        "manuscript.pass-1.bak",
+        "manuscript.pass-2.bak",
+        "manuscript.pass-3.bak",
+    ]
+    run_project(project, Agent(project, [], text=""))
+    assert backups(project) == [
+        "manuscript.pass-4.bak",
+        "manuscript.pass-5.bak",
+        "manuscript.pass-6.bak",
+    ]
+    copy = project / ".metasci-scribe" / "manuscript.pass-6.bak"
+    assert copy.read_text(encoding="utf-8") == "Kept line.\n"
+
+
+def test_a_pass_that_overwrites_finished_text_fails_naming_the_backup(project):
+    (project / "manuscript.md").write_text(
+        "Finished one.\nFinished two.\n", encoding="utf-8"
+    )
+
+    def overwrite(thread_id, prompt):
+        (project / "manuscript.md").write_text("Only new text.\n", encoding="utf-8")
+        for pid in IDS:
+            mark(project, pid)
+
+    result = run_project(project, overwrite)
+    assert result.exit == RunExit.FAILED
+    assert ".metasci-scribe/manuscript.pass-1.bak" in result.message
+    assert "Finished one." in result.message
+    kept = project / ".metasci-scribe" / "manuscript.pass-1.bak"
+    assert kept.read_text(encoding="utf-8") == "Finished one.\nFinished two.\n"
+
+
+def test_loss_is_found_when_the_pass_ends_in_an_error_too(project):
+    (project / "manuscript.md").write_text("Finished one.\n", encoding="utf-8")
+
+    def overwrite_then_fail(thread_id, prompt):
+        (project / "manuscript.md").write_text("", encoding="utf-8")
+        raise PlanStop(PlanAction.STOP_USAGE, "usage limit reached")
+
+    result = run_project(project, overwrite_then_fail)
+    assert result.exit == RunExit.FAILED  # not USAGE_LIMIT: the draft is damaged
+    assert "manuscript.pass-1.bak" in result.message
+
+
+def test_adding_moving_and_blank_line_changes_are_not_a_loss(project):
+    (project / "manuscript.md").write_text("Alpha.\n\nBeta.\n", encoding="utf-8")
+
+    def tidy(thread_id, prompt):
+        (project / "manuscript.md").write_text(
+            "New first.\n\n\n  Beta.  \nAlpha.\nNew last.\n", encoding="utf-8"
+        )
+        for pid in IDS:
+            mark(project, pid)
+
+    assert run_project(project, tidy).exit == RunExit.OK
+
+
+def test_no_manuscript_means_nothing_to_back_up(project):
+    (project / "manuscript.md").unlink()
+
+    def write(thread_id, prompt):
+        (project / "manuscript.md").write_text("Fresh.\n", encoding="utf-8")
+        for pid in IDS:
+            mark(project, pid)
+
+    assert run_project(project, write).exit == RunExit.OK
+    assert backups(project) == []
+
+
+def test_a_backup_that_cannot_be_written_stops_before_the_model(project, monkeypatch):
+    (project / "manuscript.md").write_text("Finished.\n", encoding="utf-8")
+
+    def no_space(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(run_mod, "_backup_manuscript", no_space)
+    result = run_project(project, boom)
+    assert result.exit == RunExit.FAILED
+    assert "backed up" in result.message
+
+
+def test_a_mark_after_text_was_lost_is_rejected_and_the_run_fails(project):
+    def lose_then_mark(thread_id, prompt):
+        manuscript = project / "manuscript.md"
+        manuscript.write_text("R1 paragraph.\n", encoding="utf-8")
+        assert "marked done" in mark(project, "R1")
+        manuscript.write_text("A different text.\n", encoding="utf-8")  # R1 gone
+        reply = mark(project, "R2")
+        assert reply.startswith("Rejected")
+        assert RunState.load(project).paragraphs["R2"] == "pending"
+
+    result = run_project(project, lose_then_mark)
+    assert result.exit == RunExit.FAILED
+    assert "manuscript.mark.bak" in result.message
+    snapshot = project / ".metasci-scribe" / "manuscript.mark.bak"
+    assert snapshot.read_text(encoding="utf-8") == "R1 paragraph.\n"
+
+
+def test_loss_after_the_last_mark_is_found_at_the_end_of_the_pass(project):
+    def lose_after_marking(thread_id, prompt):
+        manuscript = project / "manuscript.md"
+        manuscript.write_text("R1 paragraph.\nR2 paragraph.\n", encoding="utf-8")
+        for pid in IDS:
+            mark(project, pid)
+        manuscript.write_text("R2 paragraph.\n", encoding="utf-8")
+
+    result = run_project(project, lose_after_marking)
+    assert result.exit == RunExit.FAILED
+    assert "manuscript.mark.bak" in result.message
+    assert "R1 paragraph." in result.message
+
+
+def test_marks_and_snapshots_of_an_earlier_pass_do_not_leak_into_the_next(project):
+    """A person may edit manuscript.md between runs; the next run starts clean."""
+
+    def first(thread_id, prompt):
+        (project / "manuscript.md").write_text("R1 paragraph.\n", encoding="utf-8")
+        mark(project, "R1")
+
+    run_project(project, first)
+    (project / "manuscript.md").write_text(
+        "Rewritten by the author.\n", encoding="utf-8"
+    )
+
+    def second(thread_id, prompt):
+        with open(project / "manuscript.md", "a", encoding="utf-8") as f:
+            f.write("more\n")
+        for pid in IDS:
+            mark(project, pid)
+
+    assert run_project(project, second).exit == RunExit.OK

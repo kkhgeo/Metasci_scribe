@@ -2069,6 +2069,18 @@ def run_command(
             help="The paper folder (default: the current folder)",
         ),
     ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option(
+            "--model", help="Model for this run (default: the configured one)"
+        ),
+    ] = None,
+    provider: Annotated[
+        str | None,
+        typer.Option(
+            "--provider", help="Provider for this run (default: the configured one)"
+        ),
+    ] = None,
 ):
     """Write the draft unattended, following outline.md, then stop.
 
@@ -2088,14 +2100,31 @@ def run_command(
 
     root = start_workspace_path(workdir)
     config = get_effective_config(
-        {"auto_mode": True, "auto_approve": True, "enable_ask_user": False}
+        {
+            "auto_mode": True,
+            "auto_approve": True,
+            "enable_ask_user": False,
+            "model": model,
+            "provider": provider,
+        }
     )
     apply_config_to_env(config)
     reload_env_dirs()
     ensure_dirs()
     typer.echo(f"Metasci Scribe run: {root}")
+    typer.echo(
+        f"Model: {config.model} (provider {config.provider}"
+        + (
+            ", ChatGPT plan"
+            if config.provider in (None, "openai")
+            and config.openai_auth_mode == "chatgpt_plan"
+            else ""
+        )
+        + ")"
+    )
     try:
-        result = run_project(root, real_invoke(root, config=config))
+        with real_invoke(root, config=config) as invoke:
+            result = run_project(root, invoke)
     except KeyboardInterrupt:
         typer.echo(
             "\nInterrupted. Progress is saved; run `metasci-scribe run` again "
