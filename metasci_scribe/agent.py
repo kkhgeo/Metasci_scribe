@@ -46,7 +46,10 @@ from .prompts import get_system_prompt
 logging.getLogger("deepagents.middleware.skills").setLevel(logging.ERROR)
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from langchain.agents.middleware import InterruptOnConfig
+    from langchain_core.tools import BaseTool
     from langgraph.graph.state import CompiledStateGraph
 
     from .middleware.events import MiddlewareEventSink
@@ -1235,6 +1238,8 @@ def create_cli_agent(
     on_mcp_progress=None,
     events: "MiddlewareEventSink | None" = None,
     runtime: "AsyncRuntime | None" = None,
+    extra_tools: "Sequence[BaseTool]" = (),
+    with_mcp: bool = True,
 ) -> "CompiledStateGraph":
     """Create agent with checkpointer for CLI multi-turn support.
 
@@ -1265,6 +1270,11 @@ def create_cli_agent(
             favor of the ``_ensure_chat_model()`` fallback.
         runtime: Optional application-scoped runtime for synchronous MCP tool
             discovery. Direct callers get a scoped runtime when omitted.
+        extra_tools: Tools added to the main agent only (not its sub-agents).
+            The autonomous run adds its progress tool here; a chat session
+            passes none.
+        with_mcp: When False the agent gets no MCP tools at all (none are
+            loaded or connected). The autonomous run builds without them.
     """
     from deepagents import create_deep_agent
     from deepagents.backends import CompositeBackend
@@ -1339,17 +1349,29 @@ def create_cli_agent(
         events=events,
     )
 
-    # Re-load MCP tools from current config (picks up /mcp add changes)
-    kwargs = load_mcp_and_build_kwargs(
-        be,
-        mw,
-        workspace=workspace,
-        work_dir=work_dir,
-        on_mcp_progress=on_mcp_progress,
-        cfg=cfg,
-        chat_model=chat_model,
-        runtime=runtime,
-    )
+    if with_mcp:
+        # Re-load MCP tools from current config (picks up /mcp add changes)
+        kwargs = load_mcp_and_build_kwargs(
+            be,
+            mw,
+            workspace=workspace,
+            work_dir=work_dir,
+            on_mcp_progress=on_mcp_progress,
+            cfg=cfg,
+            chat_model=chat_model,
+            runtime=runtime,
+        )
+    else:
+        kwargs = _build_base_kwargs(
+            be,
+            mw,
+            workspace=workspace,
+            work_dir=work_dir,
+            cfg=cfg,
+            chat_model=chat_model,
+        )
+    if extra_tools:
+        kwargs["tools"] = [*kwargs["tools"], *extra_tools]
 
     return create_deep_agent(
         **kwargs,

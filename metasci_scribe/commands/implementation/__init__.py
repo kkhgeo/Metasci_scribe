@@ -8,6 +8,7 @@ from . import (
     mcp,
     model,
     rubric,
+    run,
     session,
     skills,
 )
@@ -20,6 +21,7 @@ __all__ = [
     "mcp",
     "model",
     "rubric",
+    "run",
     "session",
     "skills",
 ]

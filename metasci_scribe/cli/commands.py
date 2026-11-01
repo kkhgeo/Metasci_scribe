@@ -2056,6 +2056,59 @@ def _main_callback(
         )
 
 
+# 130 is the shell's code for a run ended by Ctrl+C; 0, 2, 3 and 4 are RunExit.
+RUN_INTERRUPTED_EXIT_CODE = 130
+
+
+@app.command("run")
+def run_command(
+    workdir: Annotated[
+        str | None,
+        typer.Option(
+            "--workdir",
+            help="The paper folder (default: the current folder)",
+        ),
+    ] = None,
+):
+    """Write the draft unattended, following outline.md, then stop.
+
+    Exit codes: 0 every paragraph is marked done, 2 the run failed or could not
+    start, 3 the ChatGPT plan usage limit was reached, 4 a paragraph needs your
+    decision. Run it again to continue where it stopped.
+    """
+    import signal
+
+    from ..config import apply_config_to_env, get_effective_config
+    from ..run import run_project
+    from ..run_agent import real_invoke
+
+    if hasattr(signal, "SIGBREAK"):
+        # ``/run`` stops its child with Ctrl+Break on Windows; treat it as Ctrl+C.
+        signal.signal(signal.SIGBREAK, signal.default_int_handler)
+
+    root = start_workspace_path(workdir)
+    config = get_effective_config(
+        {"auto_mode": True, "auto_approve": True, "enable_ask_user": False}
+    )
+    apply_config_to_env(config)
+    reload_env_dirs()
+    ensure_dirs()
+    typer.echo(f"Metasci Scribe run: {root}")
+    try:
+        result = run_project(root, real_invoke(root, config=config))
+    except KeyboardInterrupt:
+        typer.echo(
+            "\nInterrupted. Progress is saved; run `metasci-scribe run` again "
+            "to resume."
+        )
+        raise typer.Exit(RUN_INTERRUPTED_EXIT_CODE) from None
+    typer.echo(result.message)
+    if result.total:
+        typer.echo(f"Paragraphs marked done: {result.done}/{result.total}")
+    if result.exit:
+        raise typer.Exit(int(result.exit))
+
+
 # Upstream's logger and its two records for a grader attempt that raised.
 _GRADER_LOGGER = "deepagents.middleware.rubric"
 _GRADER_FAILURE_RECORDS = ("grader failed", "coverage retry raised")
