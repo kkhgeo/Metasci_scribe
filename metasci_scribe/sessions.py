@@ -31,6 +31,7 @@ import asyncio
 import atexit
 import logging
 import math
+import re
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, MutableMapping
 from contextlib import asynccontextmanager
@@ -136,6 +137,15 @@ def short_thread_id(thread_id: str) -> str:
     shortened form is always a usable handle.
     """
     return thread_id[:8]
+
+
+# The threads `metasci-scribe run` keeps for itself (``run.py``).
+_RUN_THREAD_ID = re.compile(r"run-[0-9a-f]{32}")
+
+
+def is_run_thread(thread_id: str) -> bool:
+    """Whether *thread_id* belongs to the autonomous run, not to a chat."""
+    return _RUN_THREAD_ID.fullmatch(thread_id) is not None
 
 
 def generate_thread_id() -> str:

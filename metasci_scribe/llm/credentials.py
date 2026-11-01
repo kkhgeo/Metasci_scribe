@@ -64,9 +64,10 @@ def _plan_sign_in_saved() -> bool:
 def ensure_model_configured(provider: str | None) -> None:
     """Raise :class:`ModelNotConfigured` when ``provider`` cannot be used yet.
 
-    OpenAI needs a saved ChatGPT sign-in in plan mode, otherwise an API key; the
-    key is never used for the plan route.
-    Anthropic needs an API key, or a base URL for a gateway that holds it.
+    OpenAI needs a saved ChatGPT sign-in in plan mode, otherwise an API key or a
+    base URL for a server that needs none; the key is never used for the plan
+    route. Anthropic needs an API key, or a base URL for a gateway that holds
+    it. A workspace ``.env`` can set neither URL (:mod:`metasci_scribe.policy`).
     """
     if provider == "anthropic":
         if not os.environ.get("ANTHROPIC_API_KEY") and not os.environ.get(
@@ -80,5 +81,5 @@ def ensure_model_configured(provider: str | None) -> None:
         if not _plan_sign_in_saved():
             raise ModelNotConfigured("openai", plan=True)
         return
-    if not os.environ.get("OPENAI_API_KEY"):
+    if not os.environ.get("OPENAI_API_KEY") and not os.environ.get("OPENAI_BASE_URL"):
         raise ModelNotConfigured("openai")

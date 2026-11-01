@@ -20,6 +20,14 @@ def _graph_gateway(ctx: CommandContext) -> GraphGateway:
     return ctx.graph_gateway
 
 
+def _chat_threads(threads: list[dict]) -> list[dict]:
+    """*threads* without the ones `metasci-scribe run` keeps for itself: they
+    hold no conversation to go back to, and its state file names them."""
+    from ...sessions import is_run_thread
+
+    return [t for t in threads if not is_run_thread(t["thread_id"])]
+
+
 def _workspace_label(thread: dict, *, name_only: bool = False) -> str:
     """The folder a thread works in, e.g. ``projA`` or ``projA/runs/<name>``.
 
@@ -114,10 +122,12 @@ class ThreadsCommand(Command):
         from ...sessions import _format_relative_time, short_thread_id
 
         gateway = _graph_gateway(ctx)
-        threads = await gateway.list_threads(
-            limit=0,
-            include_message_count=True,
-            include_preview=True,
+        threads = _chat_threads(
+            await gateway.list_threads(
+                limit=0,
+                include_message_count=True,
+                include_preview=True,
+            )
         )
 
         if not threads:
@@ -188,10 +198,12 @@ class ResumeCommand(Command):
         gateway = _graph_gateway(ctx)
         arg = args[0] if args else ""
         if not arg:
-            threads = await gateway.list_threads(
-                limit=0,
-                include_message_count=True,
-                include_preview=True,
+            threads = _chat_threads(
+                await gateway.list_threads(
+                    limit=0,
+                    include_message_count=True,
+                    include_preview=True,
+                )
             )
             if not threads:
                 ctx.ui.append_system("No sessions to resume.", style="yellow")

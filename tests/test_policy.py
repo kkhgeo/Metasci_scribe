@@ -608,6 +608,43 @@ def test_names_windows_rewrites_on_open_are_refused_everywhere(
     assert not list(project.iterdir()), key
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="8.3 names exist on Windows")
+@pytest.mark.parametrize(
+    "rel",
+    [
+        ".env.production",
+        ".git/config",
+        ".metasci-scribe/skills/helper/SKILL.md",
+        ".vscode/settings.json",
+    ],
+)
+def test_short_names_of_protected_components_are_refused(home, project, rel):
+    """``GIT~1/config`` is ``.git/config``. The checks see the real long path, so
+    the 8.3 spelling of an existing protected component gains nothing."""
+    import ctypes
+
+    target = project / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("old", encoding="utf-8")
+    buffer = ctypes.create_unicode_buffer(32768)
+    if not ctypes.windll.kernel32.GetShortPathNameW(str(target), buffer, 32768):
+        pytest.skip("no short path for this file")
+    depth = len(Path(rel).parts)
+    short = Path(buffer.value).parts[-depth:]
+    if short == Path(rel).parts:
+        pytest.skip("8.3 names are off on this volume")
+    key = "/" + "/".join(short)
+    backend = CustomSandboxBackend(root_dir=str(project))
+
+    assert backend.write(key, "planted").error, key
+    assert backend.edit(key, "old", "planted").error, key
+    assert backend.upload_files([(key, b"planted")])[0].error, key
+    assert backend.delete(key).error, key
+    assert target.read_text(encoding="utf-8") == "old"
+    if rel == ".env.production":
+        assert backend.read(key).error, key
+
+
 def test_ordinary_names_with_dots_and_spaces_inside_still_work(home, project):
     backend = CustomSandboxBackend(root_dir=str(project))
     for key in ("/my paper.tex", "/v1.2.3/notes.md", "/.hidden/x.md", "/a. b.md"):

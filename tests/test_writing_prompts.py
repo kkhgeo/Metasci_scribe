@@ -171,11 +171,11 @@ class TestSubagents:
 
 
 class TestBuiltInSkills:
-    def test_two_skills_ship(self):
+    def test_only_skill_creator_ships(self):
         from pathlib import Path
 
         shipped = {p.name for p in Path(SKILLS_DIR).iterdir() if p.is_dir()}
-        assert shipped == {"find-skills", "skill-creator"}
+        assert shipped == {"skill-creator"}
 
 
 # -- One real turn ------------------------------------------------------------
@@ -285,7 +285,7 @@ async def test_a_turn_reads_the_project_and_writes_the_manuscript(tmp_path):
     assert ".metasci-scribe/extracted" in system
     assert "experiment" not in system.lower()
     assert "web search" not in system.lower()
-    assert _skill_names(system) == {"find-skills", "skill-creator"}
+    assert _skill_names(system) == {"skill-creator"}
 
 
 @pytest.mark.usefixtures("no_mcp")
@@ -306,7 +306,7 @@ async def test_a_project_skill_added_between_messages_is_listed_next_message(
 
     await agent.ainvoke({"messages": [("user", "one")]}, config=cfg)
     before = _skill_names(_system_text(model.seen[-1]))
-    assert before == {"find-skills", "skill-creator"}
+    assert before == {"skill-creator"}
 
     # The harness plays the user installing a skill by hand: the agent's own
     # file tools cannot write under .metasci-scribe/.
@@ -320,7 +320,7 @@ async def test_a_project_skill_added_between_messages_is_listed_next_message(
 
     await agent.ainvoke({"messages": [("user", "two")]}, config=cfg)
     after = _skill_names(_system_text(model.seen[-1]))
-    assert after == {"find-skills", "skill-creator", "journal-style"}
+    assert after == {"skill-creator", "journal-style"}
 
 
 def _tool_texts(result) -> dict[str, str]:

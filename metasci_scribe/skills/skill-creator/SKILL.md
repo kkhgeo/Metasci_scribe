@@ -366,7 +366,7 @@ python -m scripts.run_loop \
   --verbose
 ```
 
-Use the model and provider from the user's metasci-scribe configuration so the triggering test matches their actual experience. Supports all 7+ providers (Anthropic, OpenAI, Google, NVIDIA, SiliconFlow, OpenRouter, Ollama, and custom endpoints).
+Use the model and provider from the user's metasci-scribe configuration so the triggering test matches their actual experience. Both providers the app supports work: OpenAI and Anthropic.
 
 This handles the full optimization loop automatically: splits eval set 60/40 train/test, evaluates current description (3 runs per query), proposes improvements, re-evaluates, iterates up to 5 times. Returns JSON with `best_description` selected by test score.
 

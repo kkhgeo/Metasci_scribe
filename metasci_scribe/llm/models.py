@@ -196,6 +196,10 @@ def get_chat_model(
         api_key = os.environ.get("OPENAI_API_KEY", "")
         if api_key:
             kwargs["api_key"] = api_key
+        elif base_url:
+            # The client refuses to start without a key; a server behind a
+            # base URL may need none.
+            kwargs["api_key"] = "not-needed"
 
     _apply_auto_config(provider, model_id, kwargs)
 

@@ -440,14 +440,14 @@ class TestVirtualMountResolution:
         self, monkeypatch, tmp_path
     ):
         user_dir, _, builtin_dir, _ = self._setup_tiers(monkeypatch, tmp_path)
-        (builtin_dir / "find-skills").mkdir()
-        (builtin_dir / "find-skills" / "tool.py").write_text("print('builtin')")
+        (builtin_dir / "some-skill").mkdir()
+        (builtin_dir / "some-skill" / "tool.py").write_text("print('builtin')")
         result = convert_virtual_paths_in_command(
-            "python /skills/find-skills/tool.py", skills_dir=user_dir
+            "python /skills/some-skill/tool.py", skills_dir=user_dir
         )
         assert _split_cmd(result) == [
             "python",
-            str(builtin_dir / "find-skills" / "tool.py"),
+            str(builtin_dir / "some-skill" / "tool.py"),
         ]
 
     def test_skills_path_unresolvable_falls_back_to_workspace_relative(

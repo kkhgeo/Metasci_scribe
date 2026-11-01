@@ -26,6 +26,27 @@ def _ctx(**overrides):
 
 
 class TestThreadsCommand:
+    async def test_autonomous_run_threads_are_hidden(self):
+        from metasci_scribe import run
+        from metasci_scribe.commands.implementation.session import ThreadsCommand
+
+        run_id = run._reconcile(None, [], "digest").thread_id
+        ctx, ui = _ctx()
+        store = FakeThreadStore(
+            threads=[{"thread_id": run_id, "preview": "x", "message_count": 1}]
+        )
+        ctx.graph_gateway = FakeGraphGateway(thread_store=store)
+        await ThreadsCommand().execute(ctx, [])
+        assert "No saved sessions" in ui.append_system.call_args.args[0]
+        ui.mount_renderable.assert_not_called()
+
+    async def test_a_chat_named_like_a_run_stays(self):
+        from metasci_scribe.sessions import is_run_thread
+
+        assert is_run_thread("run-" + "a" * 32)
+        assert not is_run_thread("run-notes")
+        assert not is_run_thread("1a2b3c4d-0000-0000-0000-000000000000")
+
     async def test_empty_list_prints_message(self):
         from metasci_scribe.commands.implementation.session import ThreadsCommand
 

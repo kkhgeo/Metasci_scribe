@@ -78,6 +78,22 @@ class TestModelNotConfigured:
         monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:9")
         ensure_model_configured("anthropic")
 
+    def test_openai_behind_a_base_url_builds_without_a_key(self, monkeypatch):
+        from metasci_scribe.agent import _build_chat_model
+
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:9/v1")
+        cfg = SimpleNamespace(model="gpt-4o", provider="openai")
+        assert _build_chat_model(cfg) is not None
+
+    def test_a_base_url_does_not_stand_in_for_a_plan_sign_in(self, monkeypatch):
+        from metasci_scribe.llm.credentials import ensure_model_configured
+
+        monkeypatch.setenv("METASCI_SCRIBE_OPENAI_AUTH_MODE", "chatgpt_plan")
+        monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:9/v1")
+        with pytest.raises(ModelNotConfigured):
+            ensure_model_configured("openai")
+
     def test_plan_mode_without_a_sign_in_raises_it(self, monkeypatch):
         from metasci_scribe.agent import _build_chat_model
 

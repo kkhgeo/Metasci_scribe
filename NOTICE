@@ -30,8 +30,15 @@ Changes made to the original work (Apache License 2.0, section 4(b)):
     .github/assets images (EvoScientist logos, badges and benchmark figures)
     were removed, and README.md was replaced.
   * Links that point at the original project were left unchanged on purpose.
-  * Further changes are recorded in the git history of this repository. The
-    tool tools/rename_map.py performs the mechanical part of the rename.
+  * The TUI, WebUI, chat channels, service and deployment commands, self-update,
+    proactive mode, speech-to-text, ccproxy, web search and dangerous mode were
+    removed; /login, /init, /run and PDF extraction were added.
+  * Further changes are recorded in the git history of this repository.
+
+The bundled skill metasci_scribe/skills/skill-creator derives from the
+skill-creator skill by Anthropic (https://github.com/anthropics/skills),
+licensed under the Apache License, Version 2.0. Its own LICENSE.txt is kept
+beside it.
 
 Metasci Scribe is not affiliated with or endorsed by the EvoScientist project.
 The names and logos of EvoScientist are not used to promote this work.
