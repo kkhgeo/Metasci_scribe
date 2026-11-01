@@ -501,11 +501,6 @@ def _step_thinking(config: ScribeConfig) -> bool:
 
 
 _RECOMMENDED_SKILLS = [
-    # ── Official (Metasci Scribe) ──
-    {
-        "label": "metasci-scribe Skills  (optimized for Metasci Scribe — paper planning, writing, review, etc.) 👈 Recommended",
-        "source": "EvoScientist/EvoSkills@skills",
-    },
     # ── Third-party (K-Dense) ──
     {
         "label": "Scientific Skills  (143 research & experiment skills, third party by K-Dense)",

@@ -143,11 +143,12 @@ class InstallSkill(Command):
 
 
 class InstallSkills(Command):
-    """Browse and install skills."""
+    """Browse and install skills from the third-party EvoSkills pack."""
 
     name: ClassVar[str] = "/evoskills"
     description: ClassVar[str] = (
-        "Browse and install EvoSkills (optional: /evoskills <tag>)"
+        "Browse and install third-party EvoSkills, not part of Metasci Scribe "
+        "(optional: /evoskills <tag>)"
     )
     category: ClassVar[str] = "Skills"
     arguments: ClassVar[list[Argument]] = [
@@ -166,7 +167,10 @@ class InstallSkills(Command):
 
         tag = args[0] if args else ""
         ctx.ui.append_system(
-            f"Fetching skill index{' for tag: ' + tag if tag else ''}...", style="dim"
+            "Fetching the third-party EvoSkills index (EvoScientist/EvoSkills)"
+            f"{' for tag: ' + tag if tag else ''}. Metasci Scribe does not make or "
+            "review these skills.",
+            style="dim",
         )
 
         try:

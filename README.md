@@ -20,13 +20,13 @@ Status: early development (version 0.1.0.dev0). Nothing is released yet.
 ## Install
 
 ```bash
-uv tool install git+<repository URL>
+uv tool install C:\path\to\Metasci_scribe
 metasci-scribe --version
 ```
 
-`<repository URL>` is the address of this repository. To install from a copy you
-have already cloned, run `uv tool install .` inside it. To update, run the same
-command again with `--reinstall`.
+`C:\path\to\Metasci_scribe` is your local copy of this repository; the public
+URL arrives at publication. To update, run the same command again with
+`--reinstall`.
 
 ## Quick start
 

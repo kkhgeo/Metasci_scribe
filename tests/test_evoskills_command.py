@@ -140,3 +140,21 @@ class TestInstallSkills:
             await InstallSkills().execute(ctx, [])
         msgs = [c.args[0] for c in ui.append_system.call_args_list]
         assert any(m.startswith("Failed: git was not found on PATH.") for m in msgs)
+
+
+def test_the_command_says_the_pack_is_third_party():
+    from metasci_scribe.commands.implementation.skills import InstallSkills
+
+    assert "third-party" in InstallSkills.description
+    assert "not part of Metasci Scribe" in InstallSkills.description
+
+
+def test_onboarding_recommends_no_upstream_pack_under_this_name():
+    from metasci_scribe.config.onboard.steps import _RECOMMENDED_SKILLS
+
+    assert not [
+        skill
+        for skill in _RECOMMENDED_SKILLS
+        if "EvoScientist" in skill["source"] or "Metasci" in skill["label"]
+    ]
+    assert all("third party" in skill["label"] for skill in _RECOMMENDED_SKILLS)
