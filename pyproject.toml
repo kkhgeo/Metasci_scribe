@@ -31,6 +31,7 @@ dependencies = [
     "httpx>=0.28",
     "psutil>=6.0",
     "filelock>=3.16",
+    "pyjwt[crypto]>=2.10",
     "lazy-loader>=0.5",
     "tzlocal>=5.0",
     "langchain-mcp-adapters>=0.3.2",
