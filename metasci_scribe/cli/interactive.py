@@ -9,6 +9,7 @@ import threading
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import typer  # type: ignore[import-untyped]
@@ -126,6 +127,84 @@ async def _run_serialized_turn(
     """Run one session turn without overlapping another frontend source."""
     async with turn_lock:
         return await operation()
+
+
+class KnowledgeSync:
+    """A ``Knowledge/`` PDF sync running in a thread of its own.
+
+    A thread the interpreter does not wait for at exit (the loop's executor
+    would be waited for, and a large library takes minutes). ``cancel`` ends
+    the read in progress.
+    """
+
+    def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
+        self._done = loop.create_future()
+        self._loop = loop
+        self.cancel_event = threading.Event()
+
+    def _finish(self) -> None:
+        if not self._done.done():
+            self._done.set_result(None)
+
+    def finished(self) -> None:
+        """Called from the sync thread when it ends."""
+        try:
+            self._loop.call_soon_threadsafe(self._finish)
+        except RuntimeError:  # the loop is closed: the app has quit
+            pass
+
+    def done(self) -> bool:
+        return self._done.done()
+
+    async def wait(self) -> None:
+        await asyncio.shield(self._done)
+
+    def cancel(self) -> None:
+        self.cancel_event.set()
+
+
+def start_knowledge_sync(root: Path, say: Callable[[str], None]) -> KnowledgeSync:
+    """Read the text of new or changed ``Knowledge/`` PDFs in the background.
+
+    The first prompt does not wait for it. *say* gets one plain line when a
+    read starts and one for each thing the person should know at the end
+    (nothing when all was read before and all is well); it runs in the sync's
+    thread. A failure becomes one line, never an exception. Must be called
+    from the running event loop.
+    """
+    from .. import knowledge
+
+    handle = KnowledgeSync(asyncio.get_running_loop())
+
+    def tell(line: str) -> None:
+        try:
+            say(line)
+        except Exception:
+            _logger.debug("knowledge sync message failed", exc_info=True)
+
+    def progress(number: int, total: int, _pdf: Path) -> None:
+        if number == 1:
+            noun = "PDF" if total == 1 else "PDFs"
+            tell(
+                f"Knowledge: reading the text of {total} {noun} in the "
+                "background; you can start typing."
+            )
+
+    def work() -> None:
+        try:
+            report = knowledge.sync_knowledge(
+                root, progress=progress, cancel=handle.cancel_event
+            )
+            for line in knowledge.report_messages(report, root):
+                tell(line)
+        except Exception as exc:
+            _logger.warning("knowledge sync failed", exc_info=True)
+            tell(f"Knowledge: could not read the PDFs ({exc})")
+        finally:
+            handle.finished()
+
+    threading.Thread(target=work, name="knowledge-sync", daemon=True).start()
+    return handle
 
 
 # =============================================================================
@@ -1143,6 +1222,13 @@ def cmd_interactive(
 
             queue_task = asyncio.create_task(_check_notification_queue())
 
+            # PDFs in Knowledge/ are read in the background; the lines it
+            # prints land above the prompt (see ``patch_stdout`` below).
+            knowledge_sync = start_knowledge_sync(
+                state["dirs"].workspace.root,
+                lambda line: console.print(f"[yellow]{escape(line)}[/yellow]"),
+            )
+
             # Startup hint
             console.print(
                 Text(
@@ -1370,6 +1456,7 @@ def cmd_interactive(
                         else:
                             console.print(f"[red]Error: {escape(str(e))}[/red]")
             finally:
+                knowledge_sync.cancel()
                 queue_task.cancel()
                 try:
                     await queue_task
