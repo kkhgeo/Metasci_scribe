@@ -20,13 +20,11 @@ Status: early development (version 0.1.0.dev0). Nothing is released yet.
 ## Install
 
 ```bash
-uv tool install C:\path\to\Metasci_scribe
+uv tool install git+https://github.com/kkhgeo/Metasci_scribe
 metasci-scribe --version
 ```
 
-`C:\path\to\Metasci_scribe` is your local copy of this repository; the public
-URL arrives at publication. To update, run the same command again with
-`--reinstall`.
+To update, run the same install command again with `--reinstall`.
 
 ## Quick start
 
