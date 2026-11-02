@@ -18,30 +18,46 @@ def _agent_name() -> str:
 
 
 WELCOME_SLOGANS = [
-    "Ready for vibe research? What do you want cooking?",
-    "Science doesn't sleep. Neither do your sub-agents.",
-    "From hypothesis to paper — let's cook.",
-    "Your research kitchen is ready. What's on the menu?",
-    "Experiments don't run themselves. Oh wait — they do now.",
-    "Drop a question. We'll bring the citations.",
-    "Vibe first. Discovery follows.",
-    "What breakthrough are we cooking today?",
-    "Harness the vibe. Start the research.",
-    "Ideas in. Discoveries out.",
+    "Your outline, your sources, your paper.",
+    "One paragraph at a time.",
+    "Write the outline. The draft follows.",
+    "Put your PDFs in Knowledge/ and ask for a paragraph.",
+    "Stuck on a paragraph? Start there.",
+    "Start with /init. Finish with /run.",
 ]
 
-# ASCII art logo — shared by both Rich CLI banners.
+# ASCII art logo — "METASCI" over "SCRIBE", 62 columns wide so it fits an
+# 80-column terminal.
 LOGO_LINES = (
-    r" ███████╗ ██╗   ██╗  ██████╗  ███████╗  ██████╗ ██╗ ███████╗ ███╗   ██╗ ████████╗ ██╗ ███████╗ ████████╗",
-    r" ██╔════╝ ██║   ██║ ██╔═══██╗ ██╔════╝ ██╔════╝ ██║ ██╔════╝ ████╗  ██║ ╚══██╔══╝ ██║ ██╔════╝ ╚══██╔══╝",
-    r" █████╗   ██║   ██║ ██║   ██║ ███████╗ ██║      ██║ █████╗   ██╔██╗ ██║    ██║    ██║ ███████╗    ██║   ",
-    r" ██╔══╝   ╚██╗ ██╔╝ ██║   ██║ ╚════██║ ██║      ██║ ██╔══╝   ██║╚██╗██║    ██║    ██║ ╚════██║    ██║   ",
-    r" ███████╗  ╚████╔╝  ╚██████╔╝ ███████║ ╚██████╗ ██║ ███████╗ ██║ ╚████║    ██║    ██║ ███████║    ██║   ",
-    r" ╚══════╝   ╚═══╝    ╚═════╝  ╚══════╝  ╚═════╝ ╚═╝ ╚══════╝ ╚═╝  ╚═══╝    ╚═╝    ╚═╝ ╚══════╝    ╚═╝   ",
+    r" ███╗   ███╗ ███████╗ ████████╗  █████╗  ███████╗  ██████╗ ██╗",
+    r" ████╗ ████║ ██╔════╝ ╚══██╔══╝ ██╔══██╗ ██╔════╝ ██╔════╝ ██║",
+    r" ██╔████╔██║ █████╗      ██║    ███████║ ███████╗ ██║      ██║",
+    r" ██║╚██╔╝██║ ██╔══╝      ██║    ██╔══██║ ╚════██║ ██║      ██║",
+    r" ██║ ╚═╝ ██║ ███████╗    ██║    ██║  ██║ ███████║ ╚██████╗ ██║",
+    r" ╚═╝     ╚═╝ ╚══════╝    ╚═╝    ╚═╝  ╚═╝ ╚══════╝  ╚═════╝ ╚═╝",
+    r" ███████╗  ██████╗ ██████╗  ██╗ ██████╗  ███████╗",
+    r" ██╔════╝ ██╔════╝ ██╔══██╗ ██║ ██╔══██╗ ██╔════╝",
+    r" ███████╗ ██║      ██████╔╝ ██║ ██████╔╝ █████╗",
+    r" ╚════██║ ██║      ██╔══██╗ ██║ ██╔══██╗ ██╔══╝",
+    r" ███████║ ╚██████╗ ██║  ██║ ██║ ██████╔╝ ███████╗",
+    r" ╚══════╝  ╚═════╝ ╚═╝  ╚═╝ ╚═╝ ╚═════╝  ╚══════╝",
 )
 
-# Blue gradient: deep navy -> royal blue -> sky blue -> cyan
-LOGO_GRADIENT = ["#1a237e", "#1565c0", "#1e88e5", "#42a5f5", "#64b5f6", "#90caf9"]
+# Blue gradient, one colour per logo line: deep navy -> royal blue -> sky blue
+LOGO_GRADIENT = [
+    "#1a237e",
+    "#1a3a9e",
+    "#1565c0",
+    "#1976d2",
+    "#1e88e5",
+    "#2196f3",
+    "#42a5f5",
+    "#55aef7",
+    "#64b5f6",
+    "#7abff7",
+    "#90caf9",
+    "#a6d4fa",
+]
 
 
 def build_metadata(dirs: SessionDirs, model: str | None) -> dict:

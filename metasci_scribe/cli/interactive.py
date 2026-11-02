@@ -1215,8 +1215,8 @@ def cmd_interactive(
             # Startup hint
             console.print(
                 Text(
-                    "  Metasci Scribe is your research buddy.\n"
-                    "  Tell it about your taste before cooking some meal!",
+                    "  Metasci Scribe writes your paper paragraph by paragraph, from your outline and sources.\n"
+                    "  New paper? Type /init, put your PDFs in Knowledge/, then ask for a paragraph.",
                     style="yellow",
                 )
             )
