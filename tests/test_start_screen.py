@@ -82,3 +82,17 @@ def test_the_input_sits_between_two_rules():
     # The menu room moved from the input window to below the rule.
     assert session.reserve_space_for_menu == 0
     assert room.content.height().min == 8
+
+
+def test_the_status_bar_is_drawn_dark_not_reversed():
+    from prompt_toolkit.styles import default_ui_style, merge_styles
+
+    from metasci_scribe.cli.status_bar import STATUS_BAR_BG
+
+    style = merge_styles([default_ui_style(), interactive._COMPLETION_STYLE])
+    for fragment in ("class:status-bar", "class:status-bar-good", ""):
+        attrs = style.get_attrs_for_style_str(
+            f"class:bottom-toolbar class:bottom-toolbar.text {fragment}"
+        )
+        assert attrs.reverse is False
+        assert attrs.bgcolor == STATUS_BAR_BG.lstrip("#")

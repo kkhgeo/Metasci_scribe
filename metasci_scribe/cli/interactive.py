@@ -320,6 +320,10 @@ _COMPLETION_STYLE = PtStyle.from_dict(
         "status-bar-bad": f"bg:{STATUS_BAR_BG} {STATUS_BAD} bold",
         "status-bar-critical": f"bg:{STATUS_BAR_BG} {STATUS_CRITICAL} bold",
         "input-rule": "bg:default dim noreverse",
+        # prompt_toolkit draws the bottom toolbar in reverse video by default,
+        # which turned the dark bar light; fill the whole row dark instead.
+        "bottom-toolbar": f"bg:{STATUS_BAR_BG} {STATUS_TEXT} noreverse",
+        "bottom-toolbar.text": "noreverse",
     }
 )
 
