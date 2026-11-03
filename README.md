@@ -59,10 +59,15 @@ checked against (see [docs/guides](docs/guides/)), and `/skills` and
 ## Paying for the model
 
 **ChatGPT plan (`/login`).** The default route. `/login` uses OpenAI's "Sign in
-with ChatGPT" flow, and requests count against your plan. Plus and Pro are the
-plans documented so far. **This route is a preview:** OpenAI's terms for it can
-change, and the app uses only OpenAI's public API. If your account cannot use
-plan usage, `/login` says so and changes nothing.
+with ChatGPT" flow, and requests count against your plan. OpenAI's
+documentation does not list which plans qualify; OpenAI decides at sign-in.
+**This route is a preview:** OpenAI's terms for it can change, and the app uses
+only OpenAI's public API. If your account cannot use plan usage, `/login` says
+so and changes nothing.
+
+**Your responsibility.** OpenAI's usage policies apply to everything you write
+with this app, and they forbid academic dishonesty. Follow your journal's and
+your institution's rules on AI assistance, including disclosing it.
 
 **Your own API key.** The alternative. Set `OPENAI_API_KEY` or
 `ANTHROPIC_API_KEY` in your environment, or run `metasci-scribe onboard` and
