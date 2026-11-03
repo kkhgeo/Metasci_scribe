@@ -57,3 +57,28 @@ def test_the_plan_route_is_read_from_the_config(provider, auth_mode, expected):
     cfg = SimpleNamespace(provider=provider, openai_auth_mode=auth_mode)
 
     assert interactive._uses_chatgpt_plan(cfg) is expected
+
+
+def test_the_input_sits_between_two_rules():
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.input import DummyInput
+    from prompt_toolkit.layout import Window
+    from prompt_toolkit.output import DummyOutput
+    from prompt_toolkit.shortcuts import CompleteStyle
+
+    session = PromptSession(
+        input=DummyInput(),
+        output=DummyOutput(),
+        completer=interactive.SlashCommandCompleter(),
+        complete_style=CompleteStyle.COLUMN,
+        complete_while_typing=True,
+    )
+    interactive._add_input_rule(session)
+
+    main_input = session.layout.container.children[0].alternative_content
+    rule, room = main_input.content.children[-2:]
+    assert isinstance(rule.content, Window)
+    assert rule.content.char == "─"
+    # The menu room moved from the input window to below the rule.
+    assert session.reserve_space_for_menu == 0
+    assert room.content.height().min == 8

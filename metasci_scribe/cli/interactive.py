@@ -21,9 +21,15 @@ from prompt_toolkit.completion import (  # type: ignore[import-untyped]
     Completer,
     Completion,
 )
+from prompt_toolkit.filters import is_done  # type: ignore[import-untyped]
 from prompt_toolkit.formatted_text import HTML  # type: ignore[import-untyped]
 from prompt_toolkit.history import FileHistory  # type: ignore[import-untyped]
 from prompt_toolkit.key_binding import KeyBindings  # type: ignore[import-untyped]
+from prompt_toolkit.layout import (  # type: ignore[import-untyped]
+    ConditionalContainer,
+    Dimension,
+    Window,
+)
 from prompt_toolkit.patch_stdout import patch_stdout  # type: ignore[import-untyped]
 from prompt_toolkit.shortcuts import CompleteStyle  # type: ignore[import-untyped]
 from prompt_toolkit.styles import Style as PtStyle  # type: ignore[import-untyped]
@@ -313,8 +319,39 @@ _COMPLETION_STYLE = PtStyle.from_dict(
         "status-bar-warn": f"bg:{STATUS_BAR_BG} {STATUS_WARN} bold",
         "status-bar-bad": f"bg:{STATUS_BAR_BG} {STATUS_BAD} bold",
         "status-bar-critical": f"bg:{STATUS_BAR_BG} {STATUS_CRITICAL} bold",
+        "input-rule": "bg:default dim noreverse",
     }
 )
+
+
+def _add_input_rule(session: PromptSession) -> None:
+    """Draw a rule right under the input while the user types, so the input
+    sits between two lines (the one above is printed before the prompt).
+
+    prompt_toolkit keeps room for the completion menu by making the input
+    window tall, which would push the rule down. That room moves under the
+    rule instead, still inside the area the menu opens over.
+    """
+    reserve = session.reserve_space_for_menu
+    session.reserve_space_for_menu = 0
+    buffer = session.default_buffer
+
+    def _menu_room() -> Dimension:
+        if buffer.complete_while_typing() or buffer.complete_state is not None:
+            return Dimension(min=reserve)
+        return Dimension()
+
+    # layout: HSplit[ConditionalContainer(Frame, alternative=input+menus), ...]
+    main_input = session.layout.container.children[0].alternative_content
+    main_input.content.children.extend(
+        [
+            ConditionalContainer(
+                Window(char="─", height=1, style="class:input-rule"),
+                filter=~is_done,
+            ),
+            ConditionalContainer(Window(height=_menu_room), filter=~is_done),
+        ]
+    )
 
 
 class SlashCommandCompleter(Completer):
@@ -559,6 +596,7 @@ def cmd_interactive(
         multiline=True,
         key_bindings=_kb,
     )
+    _add_input_rule(session)
 
     def _print_separator():
         """Print a horizontal separator line spanning the terminal width."""
@@ -1279,7 +1317,6 @@ def cmd_interactive(
                     await _acknowledge_rubric(ready_agent, turn_thread_id)
                 await _refresh_status_snapshot(reset_streaming_text=True)
                 console.print()
-                _print_separator()
 
             # Slogan — right before user input
             console.print(
@@ -1288,9 +1325,11 @@ def cmd_interactive(
             console.print()
 
             try:
-                _print_separator()
                 while state["running"]:
                     try:
+                        # The line above the input; the one below is drawn
+                        # by ``_add_input_rule`` while typing, then printed.
+                        _print_separator()
                         # ``patch_stdout`` routes stray ``print`` /
                         # ``console.print`` calls — including the MCP
                         # progress callback firing from a worker thread —
@@ -1304,8 +1343,9 @@ def cmd_interactive(
                         user_input = user_input.strip()
 
                         if not user_input:
-                            # Erase the empty prompt line so it looks like nothing happened
-                            sys.stdout.write("\033[A\033[2K\r")
+                            # Erase the empty prompt line and the line above
+                            # it so it looks like nothing happened
+                            sys.stdout.write("\033[A\033[2K\033[A\033[2K\r")
                             sys.stdout.flush()
                             continue
 
