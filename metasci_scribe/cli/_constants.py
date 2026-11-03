@@ -26,19 +26,18 @@ WELCOME_SLOGANS = [
     "Start with /init. Finish with /run.",
 ]
 
-# ASCII art logo — "METASCI SCRIBE" on one row, six lines high, 112 columns
-# wide. A narrower terminal gets the name as plain text instead.
+# ASCII art logo — "METASCI", five lines high, 55 columns wide. A narrower
+# terminal gets the name as plain text instead.
 LOGO_LINES = (
-    r" ███╗   ███╗ ███████╗ ████████╗  █████╗  ███████╗  ██████╗ ██╗  ███████╗  ██████╗ ██████╗  ██╗ ██████╗  ███████╗",
-    r" ████╗ ████║ ██╔════╝ ╚══██╔══╝ ██╔══██╗ ██╔════╝ ██╔════╝ ██║  ██╔════╝ ██╔════╝ ██╔══██╗ ██║ ██╔══██╗ ██╔════╝",
-    r" ██╔████╔██║ █████╗      ██║    ███████║ ███████╗ ██║      ██║  ███████╗ ██║      ██████╔╝ ██║ ██████╔╝ █████╗",
-    r" ██║╚██╔╝██║ ██╔══╝      ██║    ██╔══██║ ╚════██║ ██║      ██║  ╚════██║ ██║      ██╔══██╗ ██║ ██╔══██╗ ██╔══╝",
-    r" ██║ ╚═╝ ██║ ███████╗    ██║    ██║  ██║ ███████║ ╚██████╗ ██║  ███████║ ╚██████╗ ██║  ██║ ██║ ██████╔╝ ███████╗",
-    r" ╚═╝     ╚═╝ ╚══════╝    ╚═╝    ╚═╝  ╚═╝ ╚══════╝  ╚═════╝ ╚═╝  ╚══════╝  ╚═════╝ ╚═╝  ╚═╝ ╚═╝ ╚═════╝  ╚══════╝",
+    r" ███    ███ ███████ ████████  █████  ███████  ██████ ██",
+    r" ████  ████ ██         ██    ██   ██ ██      ██      ██",
+    r" ██ ████ ██ █████      ██    ███████ ███████ ██      ██",
+    r" ██  ██  ██ ██         ██    ██   ██      ██ ██      ██",
+    r" ██      ██ ███████    ██    ██   ██ ███████  ██████ ██",
 )
 
-# Blue gradient: deep navy -> royal blue -> sky blue -> cyan
-LOGO_GRADIENT = ["#1a237e", "#1565c0", "#1e88e5", "#42a5f5", "#64b5f6", "#90caf9"]
+# Teal gradient: deep teal -> sea green -> light aqua
+LOGO_GRADIENT = ["#00796b", "#00897b", "#26a69a", "#4db6ac", "#80cbc4"]
 
 
 def build_metadata(dirs: SessionDirs, model: str | None) -> dict:

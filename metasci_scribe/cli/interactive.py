@@ -244,7 +244,7 @@ def print_banner(
             console.print(Text(line, style=f"{color} bold"))
     else:
         # The logo would wrap into noise; the name alone keeps the look.
-        console.print(Text("  Metasci Scribe", style=f"{LOGO_GRADIENT[2]} bold"))
+        console.print(Text("  Metasci", style=f"{LOGO_GRADIENT[2]} bold"))
     info = Text()
     info.append("  ", style="dim")
     parts: list[tuple[str, str]] = []
