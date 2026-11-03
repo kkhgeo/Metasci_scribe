@@ -1,4 +1,4 @@
-"""The start screen: a two-line mark with the name, the version and a tip."""
+"""The start screen: the one-row logo, the model, the folder and the key hint."""
 
 from __future__ import annotations
 
@@ -9,56 +9,39 @@ import pytest
 from rich.console import Console
 
 from metasci_scribe.cli import interactive
-from metasci_scribe.cli._constants import LOGO_LINES, STARTUP_TIPS
+from metasci_scribe.cli._constants import LOGO_GRADIENT, LOGO_LINES
 
 
-def _print_banner(monkeypatch, width: int, tip: str | None = None) -> list[str]:
+def _print_banner(monkeypatch, width: int) -> list[str]:
     out = StringIO()
     monkeypatch.setattr(
         interactive,
         "console",
         Console(file=out, width=width, color_system=None, legacy_windows=False),
     )
-    monkeypatch.setattr(interactive, "_app_version", lambda: "0.1.0.dev0")
-    interactive.print_banner(tip)
+    interactive.print_banner("/papers/my-paper", "gpt-5.5", "openai")
     return out.getvalue().splitlines()
 
 
-def test_the_banner_is_two_lines(monkeypatch):
-    lines = _print_banner(monkeypatch, 80, tip="Type /help to see every command.")
-
-    assert lines == [
-        f" {LOGO_LINES[0]}  metasci scribe 0.1.0.dev0   "
-        "/ commands · @ files · "
-        + ("Option+Enter" if interactive.sys.platform == "darwin" else "Ctrl+J")
-        + " newline",
-        f" {LOGO_LINES[1]}  Tip: Type /help to see every command.",
-    ]
+def test_the_logo_is_one_row_of_six_lines():
+    assert len(LOGO_LINES) == len(LOGO_GRADIENT) == 6
+    assert max(len(line) for line in LOGO_LINES) <= 120
 
 
-def test_a_narrow_terminal_leaves_out_the_key_hint(monkeypatch):
-    lines = _print_banner(monkeypatch, 40)
+def test_a_wide_terminal_shows_the_logo_and_the_session(monkeypatch):
+    lines = _print_banner(monkeypatch, 120)
 
-    assert len(lines) == 2
-    assert lines[0] == f" {LOGO_LINES[0]}  metasci scribe 0.1.0.dev0"
-    assert all(len(line) <= 40 for line in lines)
-
-
-def test_a_random_tip_is_shown_by_default(monkeypatch):
-    shown = _print_banner(monkeypatch, 120)[1]
-
-    assert any(
-        shown.endswith(tip.format(newline_key=key))
-        for tip in STARTUP_TIPS
-        for key in ("Ctrl+J", "Option+Enter")
-    )
+    assert lines[:6] == list(LOGO_LINES)
+    assert lines[6] == "  Model: gpt-5.5  Provider: openai"
+    assert lines[7] == "  Directory: /papers/my-paper"
+    assert "Type / for commands" in lines[8]
 
 
-@pytest.mark.parametrize("tip", STARTUP_TIPS)
-def test_every_tip_fits_an_80_column_terminal(tip):
-    line = f" {LOGO_LINES[1]}  Tip: {tip.format(newline_key='Option+Enter')}"
+def test_a_narrow_terminal_shows_the_name_instead_of_the_logo(monkeypatch):
+    lines = _print_banner(monkeypatch, 80)
 
-    assert len(line) <= 80
+    assert lines[0] == "  Metasci Scribe"
+    assert lines[1] == "  Model: gpt-5.5  Provider: openai"
 
 
 @pytest.mark.parametrize(

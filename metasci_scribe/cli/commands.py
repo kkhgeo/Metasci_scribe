@@ -1952,6 +1952,7 @@ def _main_callback(
             show_thinking=show_thinking,
             dirs=dirs,
             model=config.model,
+            provider=config.provider,
             thread_id=thread_id,
             config=config,
             async_runtime=async_runtime,

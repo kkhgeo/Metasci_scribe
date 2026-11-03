@@ -50,7 +50,7 @@ from ._agent_loader import BackgroundAgentLoader, MCPProgressTracker
 from ._constants import (
     LOGO_GRADIENT,
     LOGO_LINES,
-    STARTUP_TIPS,
+    WELCOME_SLOGANS,
     build_metadata,
 )
 from .agent import (
@@ -232,40 +232,57 @@ async def stop_knowledge_sync(handle: KnowledgeSync, seconds: float = 3.0) -> No
 # =============================================================================
 
 
-def _app_version() -> str:
-    try:
-        from importlib.metadata import version
+def print_banner(
+    workspace_dir: str | None = None,
+    model: str | None = None,
+    provider: str | None = None,
+):
+    """Print welcome banner with ASCII art logo, info line, and hint."""
+    logo_width = max(len(line) for line in LOGO_LINES)
+    if console.size.width >= logo_width:
+        for line, color in zip(LOGO_LINES, LOGO_GRADIENT, strict=False):
+            console.print(Text(line, style=f"{color} bold"))
+    else:
+        # The logo would wrap into noise; the name alone keeps the look.
+        console.print(Text("  Metasci Scribe", style=f"{LOGO_GRADIENT[2]} bold"))
+    info = Text()
+    info.append("  ", style="dim")
+    parts: list[tuple[str, str]] = []
+    if model:
+        parts.append(("Model: ", model))
+    if provider:
+        parts.append(("Provider: ", provider))
+    for i, (label, value) in enumerate(parts):
+        if i > 0:
+            info.append("  ", style="dim")
+        info.append(label, style="dim")
+        info.append(value, style="magenta")
+    # Directory line
+    import os
 
-        return version("metasci-scribe")
-    except Exception:
-        return ""
-
-
-def print_banner(tip: str | None = None) -> None:
-    """Print the two-line start screen: the mark, the name and version with a
-    short key hint, and one tip (a random one from ``STARTUP_TIPS`` by
-    default). The model and the folder are on the status bar."""
-    nl_key = "Option+Enter" if sys.platform == "darwin" else "Ctrl+J"
-    tip = (tip or random.choice(STARTUP_TIPS)).format(newline_key=nl_key)
-
-    first = Text(" ")
-    first.append(LOGO_LINES[0], style=f"{LOGO_GRADIENT[0]} bold")
-    first.append("  metasci scribe", style="bold")
-    version = _app_version()
-    if version:
-        first.append(f" {version}", style="dim")
-    keys = f"   / commands \u00b7 @ files \u00b7 {nl_key} newline"
-    if first.cell_len + len(keys) <= console.size.width:
-        first.append(keys, style="dim")
-
-    second = Text(" ")
-    second.append(LOGO_LINES[1], style=f"{LOGO_GRADIENT[1]} bold")
-    second.append("  Tip: ", style="dim")
-    second.append(tip)
-
-    # Two rows whatever the width: a long line is cut, not wrapped.
-    for line in (first, second):
-        console.print(line, no_wrap=True, overflow="ellipsis")
+    effective_dir = workspace_dir or os.getcwd()
+    home = os.path.expanduser("~")
+    dir_display = (
+        effective_dir.replace(home, "~", 1)
+        if effective_dir.startswith(home)
+        else effective_dir
+    )
+    info.append("\n  ", style="dim")
+    info.append("Directory: ", style="dim")
+    info.append(dir_display, style="magenta")
+    _nl_key = "Option+Enter" if sys.platform == "darwin" else "Ctrl+J"
+    info.append("\n  Enter ", style="#ffe082")
+    info.append("send", style="#ffe082 bold")
+    info.append(f" \u2022 {_nl_key} ", style="#ffe082")
+    info.append("newline", style="#ffe082 bold")
+    info.append(" \u2022 Type ", style="#ffe082")
+    info.append("/", style="#ffe082 bold")
+    info.append(" for commands", style="#ffe082")
+    info.append(" \u2022 ", style="#ffe082")
+    info.append("@ files", style="#ffe082 bold")
+    info.append(" \u2022 Ctrl+C ", style="#ffe082")
+    info.append("interrupt", style="#ffe082 bold")
+    console.print(info)
 
 
 def _uses_chatgpt_plan(cfg: Any) -> bool:
@@ -491,6 +508,7 @@ async def _run_rich_cli_streaming_turn(**kwargs: Any) -> str:
 def cmd_interactive(
     show_thinking: bool = True,
     model: str | None = None,
+    provider: str | None = None,
     thread_id: str | None = None,
     config=None,
     async_runtime: "AsyncRuntime | None" = None,
@@ -504,7 +522,8 @@ def cmd_interactive(
 
     Args:
         show_thinking: Whether to display thinking panels
-        model: Model name to display in the status bar
+        model: Model name to display in the banner and the status bar
+        provider: LLM provider name to display in banner
         thread_id: Optional thread ID to resume a previous session
         dirs: The session's workspace
     """
@@ -1022,7 +1041,7 @@ def cmd_interactive(
             _start_agent_load(checkpointer)
             await _refresh_status_snapshot(reset_streaming_text=True)
 
-            print_banner()
+            print_banner(str(state["dirs"].work_dir), model, provider)
             if state["resumed"]:
                 console.print(
                     f"[green]Resumed session [yellow]{state['thread_id']}[/yellow][/green]\n"
@@ -1261,6 +1280,12 @@ def cmd_interactive(
                 await _refresh_status_snapshot(reset_streaming_text=True)
                 console.print()
                 _print_separator()
+
+            # Slogan — right before user input
+            console.print(
+                Text(f"  {random.choice(WELCOME_SLOGANS)}", style="dim italic")
+            )
+            console.print()
 
             try:
                 _print_separator()
