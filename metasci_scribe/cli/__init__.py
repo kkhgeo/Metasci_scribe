@@ -12,7 +12,7 @@ from . import commands  # noqa: F401 — registers @app.command decorators
 from ._app import app
 
 __all__ = [
-    "WELCOME_SLOGANS",
+    "STARTUP_TIPS",
     "StreamState",
     "SubAgentState",
     "_build_todo_stats",
@@ -29,7 +29,7 @@ _LAZY_EXPORTS: dict[str, tuple[str, str]] = {
     "SubAgentState": ("..stream.state", "SubAgentState"),
     "_build_todo_stats": ("..stream.state", "_build_todo_stats"),
     "_parse_todo_items": ("..stream.state", "_parse_todo_items"),
-    "WELCOME_SLOGANS": ("._constants", "WELCOME_SLOGANS"),
+    "STARTUP_TIPS": ("._constants", "STARTUP_TIPS"),
     "run_streaming": (".stream_runtime", "run_streaming"),
 }
 

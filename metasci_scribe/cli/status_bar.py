@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -139,12 +140,63 @@ def status_style_name(percent_used: int) -> str:
     return "good"
 
 
-def build_context_bar(percent_used: int, width: int = 10) -> str:
-    """Build a compact visual context progress bar."""
-    safe_percent = max(0, min(100, int(percent_used)))
+def build_context_bar(percent_left: int, width: int = 10) -> str:
+    """Build a compact visual bar; the filled part is the context left."""
+    safe_percent = max(0, min(100, int(percent_left)))
     filled = round((safe_percent / 100) * width)
     body = ("█" * filled) + ("░" * max(0, width - filled))
     return f"[{body}]"
+
+
+@dataclass(frozen=True, slots=True)
+class RunProgress:
+    """Paragraph counts of the autonomous run, from ``run.json``."""
+
+    done: int
+    total: int
+    blocked: int = 0
+
+
+# run.json path -> ((mtime_ns, size), progress read at that version)
+_run_progress_cache: dict[Path, tuple[tuple[int, int], RunProgress | None]] = {}
+
+
+def read_run_progress(root: str | Path) -> RunProgress | None:
+    """Paragraph progress from ``<root>/.metasci-scribe/run.json``, or None.
+
+    The file is read again only when its modification time or size changes,
+    so the status bar can ask on every refresh. A missing, unreadable or
+    invalid file gives None, and the status bar leaves the field out.
+    """
+    from ..paths import Workspace
+
+    root = Path(root)
+    path = Workspace(root).state_dir / "run.json"
+    try:
+        stat = path.stat()
+    except OSError:
+        _run_progress_cache.pop(path, None)
+        return None
+    version = (stat.st_mtime_ns, stat.st_size)
+    cached = _run_progress_cache.get(path)
+    if cached is not None and cached[0] == version:
+        return cached[1]
+
+    progress: RunProgress | None = None
+    try:
+        from ..run import RunState
+
+        run_state = RunState.load(root)
+        if run_state is not None and run_state.paragraphs:
+            progress = RunProgress(
+                done=run_state.count("done"),
+                total=len(run_state.paragraphs),
+                blocked=run_state.count("blocked"),
+            )
+    except Exception:
+        progress = None
+    _run_progress_cache[path] = (version, progress)
+    return progress
 
 
 def _display_width(text: str) -> int:
@@ -228,35 +280,73 @@ def _memory_activity_label(
     return " ".join(parts)
 
 
-def _append_memory_indicator(
-    frags: list[tuple[str, str]],
-    *,
-    worker_status: MemoryWorkerStatusSnapshot | None,
-    linker_status: ObservationLinkerStatusSnapshot | None,
-    width: int,
-) -> None:
-    if worker_status is None and linker_status is None:
-        return
+PLAN_LABEL = "Using ChatGPT plan"
 
-    label = _memory_activity_label(
-        worker_status=worker_status,
-        linker_status=linker_status,
+_Fragments = list[tuple[str, str]]
+
+
+@dataclass(frozen=True, slots=True)
+class _Field:
+    """One status-bar field. A field with ``priority`` None is never left out;
+    one that ``joins_next`` is followed by a space instead of a separator."""
+
+    priority: int | None
+    fragments: _Fragments
+    joins_next: bool = False
+
+
+def _fragments_width(frags: _Fragments) -> int:
+    return sum(_display_width(text) for _, text in frags)
+
+
+def _join_fields(fields: list[_Field], separator: str) -> _Fragments:
+    frags: _Fragments = [("class:status-bar", " ")]
+    for i, item in enumerate(fields):
+        if i > 0:
+            gap = " " if fields[i - 1].joins_next else separator
+            frags.append(("class:status-bar-dim", gap))
+        frags.extend(item.fragments)
+    frags.append(("class:status-bar", " "))
+    return frags
+
+
+def _fit_fields(fields: list[_Field], width: int, separator: str) -> _Fragments:
+    """Join *fields* into one row of *width* columns.
+
+    While the row is too wide, the field with the lowest priority is left out.
+    The last optional field and the fields without a priority stay, trimmed if
+    they must.
+    """
+    fields = list(fields)
+    while _fragments_width(_join_fields(fields, separator)) > width:
+        optional = [item for item in fields if item.priority is not None]
+        if len(optional) <= 1:
+            break
+        fields.remove(min(optional, key=lambda item: item.priority or 0))
+
+    frags = _join_fields(fields, separator)
+    if _fragments_width(frags) <= width:
+        return frags
+    # Still too wide: trim the optional text and keep the required fields whole.
+    required = [item for item in fields if item.priority is None]
+    rest = "".join(
+        text
+        for item in fields
+        if item.priority is not None
+        for _, text in item.fragments
     )
-    if not label:
-        return
-
-    tail: list[tuple[str, str]] = []
-    if frags and frags[-1] == ("class:status-bar", " "):
-        tail.append(frags.pop())
-
-    separator = " │ " if width >= 76 else " · "
-    frags.extend(
-        [
-            ("class:status-bar-dim", separator),
-            ("class:status-bar-warn", label),
-        ]
-    )
-    frags.extend(tail)
+    kept = _join_fields(required, separator)[:-1] if required else []
+    room = width - _fragments_width(kept) - (_display_width(separator) if kept else 0)
+    if not kept:
+        return [("class:status-bar", trim_status_text(f" {rest}", width))]
+    if not rest or room < 4:
+        plain = "".join(text for _, text in kept)
+        return [("class:status-bar-strong", trim_status_text(plain, width))]
+    return [
+        *kept,
+        ("class:status-bar-dim", separator),
+        ("class:status-bar", trim_status_text(rest, room)),
+    ]
 
 
 def build_status_fragments(
@@ -265,77 +355,68 @@ def build_status_fragments(
     width: int,
     *,
     rubric_badge: str | None = None,
+    folder: str | None = None,
+    on_plan: bool = False,
+    run_progress: RunProgress | None = None,
 ) -> list[tuple[str, str]]:
     """Build prompt_toolkit formatted-text fragments for the status bar.
 
-    ``rubric_badge`` (``on`` / ``next`` / ``on+next``, or ``goal: <status>``)
-    says which acceptance checklists the thread holds; shown on wide bars only.
+    The fields: the paper *folder* name, the model, ``Using ChatGPT plan``
+    while *on_plan*, the paragraph progress of the autonomous run, the context
+    left, the tokens in use, the session time, ``rubric_badge`` (``on`` /
+    ``next`` / ``on+next``, or ``goal: <status>``) and memory activity. When
+    the row is too narrow, the least important fields go first. The plan label
+    is never left out: it says how requests are being paid for.
     """
-    now = datetime.now()
-    duration_label = format_duration_compact(started_at, now=now)
-    percent = snapshot.context_percent
-    percent_label = f"{percent}%"
-    if width < 52:
-        frags = [
-            ("class:status-bar-strong", snapshot.model_short),
-            ("class:status-bar-dim", " · "),
-            ("class:status-bar-dim", duration_label),
-            ("class:status-bar", " "),
-        ]
-    elif width < 76:
-        frags = [
-            ("class:status-bar-strong", snapshot.model_short),
-            ("class:status-bar-dim", " · "),
-            (f"class:status-bar-{status_style_name(percent)}", percent_label),
-            ("class:status-bar-dim", " · "),
-            ("class:status-bar-dim", duration_label),
-            ("class:status-bar", " "),
-        ]
-    else:
-        context_label = (
-            f"{format_token_count_compact(snapshot.context_tokens)}/"
-            f"{format_token_count_compact(snapshot.context_window)}"
-        )
-        bucket = status_style_name(percent)
-        frags = [
-            ("class:status-bar-strong", snapshot.model_short),
-            ("class:status-bar-dim", " │ "),
-            ("class:status-bar-dim", context_label),
-            ("class:status-bar-dim", " │ "),
-            (f"class:status-bar-{bucket}", build_context_bar(percent)),
-            ("class:status-bar-dim", " "),
-            (f"class:status-bar-{bucket}", percent_label),
-            ("class:status-bar-dim", " │ "),
-            ("class:status-bar-dim", duration_label),
-            ("class:status-bar", " "),
-        ]
+    percent_used = snapshot.context_percent
+    percent_left = 100 - max(0, min(100, percent_used))
+    bucket = f"class:status-bar-{status_style_name(percent_used)}"
+    left_label = f"{percent_left}% left"
 
+    tokens_label = (
+        f"{format_token_count_compact(snapshot.context_tokens)}/"
+        f"{format_token_count_compact(snapshot.context_window)}"
+    )
+    duration_label = format_duration_compact(started_at, now=datetime.now())
+
+    # Priority: higher stays longer. None is never left out.
+    fields: list[_Field] = []
+    if folder:
+        fields.append(_Field(4, [("class:status-bar", folder)]))
+    fields.append(_Field(7, [("class:status-bar-strong", snapshot.model_short)]))
+    if on_plan:
+        fields.append(_Field(None, [("class:status-bar-good", PLAN_LABEL)]))
+    if run_progress is not None:
+        progress: _Fragments = [
+            ("class:status-bar", f"{run_progress.done}/{run_progress.total} done")
+        ]
+        if run_progress.blocked:
+            progress.append(
+                ("class:status-bar-warn", f", {run_progress.blocked} blocked")
+            )
+        fields.append(_Field(5, progress))
+    fields.append(
+        _Field(3, [(bucket, build_context_bar(percent_left))], joins_next=True)
+    )
+    fields.append(_Field(6, [(bucket, left_label)]))
+    fields.append(_Field(1, [("class:status-bar-dim", tokens_label)]))
+    fields.append(_Field(2, [("class:status-bar-dim", duration_label)]))
     if rubric_badge and width >= 76:
-        frags.extend(
-            [
-                ("class:status-bar-dim", "│ "),
-                (
-                    "class:status-bar-strong",
-                    rubric_badge
-                    if rubric_badge.startswith("goal: ")
-                    else f"rubric: {rubric_badge}",
-                ),
-                ("class:status-bar", " "),
-            ]
+        badge = (
+            rubric_badge
+            if rubric_badge.startswith("goal: ")
+            else f"rubric: {rubric_badge}"
         )
-
-    _append_memory_indicator(
-        frags,
+        fields.append(_Field(3, [("class:status-bar-strong", badge)]))
+    memory_label = _memory_activity_label(
         worker_status=get_memory_worker_status(),
         linker_status=get_observation_linker_status(),
-        width=width,
     )
+    if memory_label:
+        fields.append(_Field(3, [("class:status-bar-warn", memory_label)]))
 
-    total_width = sum(_display_width(text) for _, text in frags)
-    if total_width > width:
-        plain_text = "".join(text for _, text in frags)
-        return [("class:status-bar", trim_status_text(plain_text, width))]
-    return frags
+    separator = " │ " if width >= 76 else " · "
+    return _fit_fields(fields, width, separator)
 
 
 def build_status_text(
@@ -344,6 +425,9 @@ def build_status_text(
     width: int,
     *,
     rubric_badge: str | None = None,
+    folder: str | None = None,
+    on_plan: bool = False,
+    run_progress: RunProgress | None = None,
 ):
     """Build a Rich Text object for the persistent status bar."""
     from rich.text import Text
@@ -359,7 +443,13 @@ def build_status_text(
     }
     text = Text(no_wrap=True, overflow="crop")
     for style, content in build_status_fragments(
-        snapshot, started_at, width, rubric_badge=rubric_badge
+        snapshot,
+        started_at,
+        width,
+        rubric_badge=rubric_badge,
+        folder=folder,
+        on_plan=on_plan,
+        run_progress=run_progress,
     ):
         rich_style = rich_styles.get(
             style.removeprefix("class:"),

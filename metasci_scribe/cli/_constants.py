@@ -17,47 +17,26 @@ def _agent_name() -> str:
     return AGENT_NAME
 
 
-WELCOME_SLOGANS = [
-    "Your outline, your sources, your paper.",
-    "One paragraph at a time.",
-    "Write the outline. The draft follows.",
-    "Put your PDFs in Knowledge/ and ask for a paragraph.",
-    "Stuck on a paragraph? Start there.",
-    "Start with /init. Finish with /run.",
+# One is shown under the name at start-up. ``{newline_key}`` is the key that
+# inserts a line break on this platform. Each fits an 80-column row after the
+# mark and "Tip: ".
+STARTUP_TIPS = [
+    "Type /init to set up this folder for a new paper.",
+    "Type /run to write the whole draft from outline.md, unattended.",
+    "Type /rubric to set criteria the agent's work is checked against.",
+    "Type @ and a file name, like @outline.md, to add the file.",
+    "Press {newline_key} for a new line; Enter sends the message.",
+    "Type /help to see every command.",
 ]
 
-# ASCII art logo — "METASCI" over "SCRIBE", 62 columns wide so it fits an
-# 80-column terminal.
+# The start-screen mark: a small "M", two lines high.
 LOGO_LINES = (
-    r" ███╗   ███╗ ███████╗ ████████╗  █████╗  ███████╗  ██████╗ ██╗",
-    r" ████╗ ████║ ██╔════╝ ╚══██╔══╝ ██╔══██╗ ██╔════╝ ██╔════╝ ██║",
-    r" ██╔████╔██║ █████╗      ██║    ███████║ ███████╗ ██║      ██║",
-    r" ██║╚██╔╝██║ ██╔══╝      ██║    ██╔══██║ ╚════██║ ██║      ██║",
-    r" ██║ ╚═╝ ██║ ███████╗    ██║    ██║  ██║ ███████║ ╚██████╗ ██║",
-    r" ╚═╝     ╚═╝ ╚══════╝    ╚═╝    ╚═╝  ╚═╝ ╚══════╝  ╚═════╝ ╚═╝",
-    r" ███████╗  ██████╗ ██████╗  ██╗ ██████╗  ███████╗",
-    r" ██╔════╝ ██╔════╝ ██╔══██╗ ██║ ██╔══██╗ ██╔════╝",
-    r" ███████╗ ██║      ██████╔╝ ██║ ██████╔╝ █████╗",
-    r" ╚════██║ ██║      ██╔══██╗ ██║ ██╔══██╗ ██╔══╝",
-    r" ███████║ ╚██████╗ ██║  ██║ ██║ ██████╔╝ ███████╗",
-    r" ╚══════╝  ╚═════╝ ╚═╝  ╚═╝ ╚═╝ ╚═════╝  ╚══════╝",
+    "█▀▄▀█",
+    "█ ▀ █",
 )
 
-# Blue gradient, one colour per logo line: deep navy -> royal blue -> sky blue
-LOGO_GRADIENT = [
-    "#1a237e",
-    "#1a3a9e",
-    "#1565c0",
-    "#1976d2",
-    "#1e88e5",
-    "#2196f3",
-    "#42a5f5",
-    "#55aef7",
-    "#64b5f6",
-    "#7abff7",
-    "#90caf9",
-    "#a6d4fa",
-]
+# One colour per mark line: royal blue over sky blue.
+LOGO_GRADIENT = ["#1e88e5", "#64b5f6"]
 
 
 def build_metadata(dirs: SessionDirs, model: str | None) -> dict:

@@ -50,7 +50,7 @@ from ._agent_loader import BackgroundAgentLoader, MCPProgressTracker
 from ._constants import (
     LOGO_GRADIENT,
     LOGO_LINES,
-    WELCOME_SLOGANS,
+    STARTUP_TIPS,
     build_metadata,
 )
 from .agent import (
@@ -76,6 +76,7 @@ from .status_bar import (
     build_status_text,
     make_empty_status_snapshot,
     make_usage_status_snapshot,
+    read_run_progress,
 )
 from .stream_runtime import (
     StreamCancellationTimeout,
@@ -231,54 +232,48 @@ async def stop_knowledge_sync(handle: KnowledgeSync, seconds: float = 3.0) -> No
 # =============================================================================
 
 
-def print_banner(
-    thread_id: str,
-    workspace_dir: str | None = None,
-    memory_dir: str | None = None,
-    model: str | None = None,
-    provider: str | None = None,
-):
-    """Print welcome banner with ASCII art logo, info line, and hint."""
-    for line, color in zip(LOGO_LINES, LOGO_GRADIENT, strict=False):
-        console.print(Text(line, style=f"{color} bold"))
-    info = Text()
-    info.append("  ", style="dim")
-    parts: list[tuple[str, str]] = []
-    if model:
-        parts.append(("Model: ", model))
-    if provider:
-        parts.append(("Provider: ", provider))
-    for i, (label, value) in enumerate(parts):
-        if i > 0:
-            info.append("  ", style="dim")
-        info.append(label, style="dim")
-        info.append(value, style="magenta")
-    # Directory line
-    import os
+def _app_version() -> str:
+    try:
+        from importlib.metadata import version
 
-    effective_dir = workspace_dir or os.getcwd()
-    home = os.path.expanduser("~")
-    dir_display = (
-        effective_dir.replace(home, "~", 1)
-        if effective_dir.startswith(home)
-        else effective_dir
+        return version("metasci-scribe")
+    except Exception:
+        return ""
+
+
+def print_banner(tip: str | None = None) -> None:
+    """Print the two-line start screen: the mark, the name and version with a
+    short key hint, and one tip (a random one from ``STARTUP_TIPS`` by
+    default). The model and the folder are on the status bar."""
+    nl_key = "Option+Enter" if sys.platform == "darwin" else "Ctrl+J"
+    tip = (tip or random.choice(STARTUP_TIPS)).format(newline_key=nl_key)
+
+    first = Text(" ")
+    first.append(LOGO_LINES[0], style=f"{LOGO_GRADIENT[0]} bold")
+    first.append("  metasci scribe", style="bold")
+    version = _app_version()
+    if version:
+        first.append(f" {version}", style="dim")
+    keys = f"   / commands \u00b7 @ files \u00b7 {nl_key} newline"
+    if first.cell_len + len(keys) <= console.size.width:
+        first.append(keys, style="dim")
+
+    second = Text(" ")
+    second.append(LOGO_LINES[1], style=f"{LOGO_GRADIENT[1]} bold")
+    second.append("  Tip: ", style="dim")
+    second.append(tip)
+
+    # Two rows whatever the width: a long line is cut, not wrapped.
+    for line in (first, second):
+        console.print(line, no_wrap=True, overflow="ellipsis")
+
+
+def _uses_chatgpt_plan(cfg: Any) -> bool:
+    """Whether requests go to the signed-in ChatGPT plan, not an API key."""
+    return (
+        getattr(cfg, "provider", None) in (None, "openai")
+        and getattr(cfg, "openai_auth_mode", None) == "chatgpt_plan"
     )
-    info.append("\n  ", style="dim")
-    info.append("Directory: ", style="dim")
-    info.append(dir_display, style="magenta")
-    _nl_key = "Option+Enter" if sys.platform == "darwin" else "Ctrl+J"
-    info.append("\n  Enter ", style="#ffe082")
-    info.append("send", style="#ffe082 bold")
-    info.append(f" \u2022 {_nl_key} ", style="#ffe082")
-    info.append("newline", style="#ffe082 bold")
-    info.append(" \u2022 Type ", style="#ffe082")
-    info.append("/", style="#ffe082 bold")
-    info.append(" for commands", style="#ffe082")
-    info.append(" \u2022 ", style="#ffe082")
-    info.append("@ files", style="#ffe082 bold")
-    info.append(" \u2022 Ctrl+C ", style="#ffe082")
-    info.append("interrupt", style="#ffe082 bold")
-    console.print(info)
 
 
 # =============================================================================
@@ -496,7 +491,6 @@ async def _run_rich_cli_streaming_turn(**kwargs: Any) -> str:
 def cmd_interactive(
     show_thinking: bool = True,
     model: str | None = None,
-    provider: str | None = None,
     thread_id: str | None = None,
     config=None,
     async_runtime: "AsyncRuntime | None" = None,
@@ -510,8 +504,7 @@ def cmd_interactive(
 
     Args:
         show_thinking: Whether to display thinking panels
-        model: Model name to display in banner
-        provider: LLM provider name to display in banner
+        model: Model name to display in the status bar
         thread_id: Optional thread ID to resume a previous session
         dirs: The session's workspace
     """
@@ -522,8 +515,6 @@ def cmd_interactive(
     warn_server_backend_hitl_caveats(gateway_backend, surface_label="interactive CLI")
 
     from .. import paths
-
-    memory_dir = str(paths.MEMORIES_DIR)
 
     paths.DATA_DIR.mkdir(parents=True, exist_ok=True)
     history_file = str(paths.DATA_DIR / "history")
@@ -636,7 +627,18 @@ def cmd_interactive(
         "status_last_input_tokens": None,
         # Status-bar badge per thread: which acceptance checklists it holds.
         "rubric_badges": {},
+        # Refreshed after every slash command (/login, /logout, /model).
+        "on_plan": _uses_chatgpt_plan(config),
     }
+
+    def _status_fields() -> dict[str, Any]:
+        """Status-bar fields that come from the paper folder and the config."""
+        root = state["dirs"].workspace.root
+        return {
+            "folder": Path(root).name,
+            "on_plan": state["on_plan"],
+            "run_progress": read_run_progress(root),
+        }
 
     def _on_status_after_compact(input_tokens: int) -> None:
         """Mirror inline /compact post-update: refresh both fields so the
@@ -774,6 +776,7 @@ def cmd_interactive(
             state["status_started_at"],
             width,
             rubric_badge=state["rubric_badges"].get(state["thread_id"]),
+            **_status_fields(),
         )
         if agent_loader.is_pending:
             # Per-server ✓/✗ lines are printed above the prompt by
@@ -801,6 +804,7 @@ def cmd_interactive(
             state["status_started_at"],
             console.size.width,
             rubric_badge=state["rubric_badges"].get(state["thread_id"]),
+            **_status_fields(),
         )
 
     async def _handle_stream_status_event(event_type: str, stream_state) -> None:
@@ -1018,27 +1022,12 @@ def cmd_interactive(
             _start_agent_load(checkpointer)
             await _refresh_status_snapshot(reset_streaming_text=True)
 
-            # Print banner
+            print_banner()
             if state["resumed"]:
-                print_banner(
-                    state["thread_id"],
-                    str(state["dirs"].work_dir),
-                    memory_dir,
-                    model,
-                    provider,
-                )
                 console.print(
                     f"[green]Resumed session [yellow]{state['thread_id']}[/yellow][/green]\n"
                 )
                 await _render_history(state["thread_id"])
-            else:
-                print_banner(
-                    state["thread_id"],
-                    str(state["dirs"].work_dir),
-                    memory_dir,
-                    model,
-                    provider,
-                )
 
             # ---- Notification queue processing ----
 
@@ -1212,15 +1201,6 @@ def cmd_interactive(
                 lambda line: console.print(f"[yellow]{escape(line)}[/yellow]"),
             )
 
-            # Startup hint
-            console.print(
-                Text(
-                    "  Metasci Scribe writes your paper paragraph by paragraph, from your outline and sources.\n"
-                    "  New paper? Type /init, put your PDFs in Knowledge/, then ask for a paragraph.",
-                    style="yellow",
-                )
-            )
-
             async def _run_prompt_turn(
                 message_to_send: str, *, goal_request: dict[str, Any] | None = None
             ) -> None:
@@ -1282,12 +1262,6 @@ def cmd_interactive(
                 console.print()
                 _print_separator()
 
-            # Slogan — right before user input
-            console.print(
-                Text(f"  {random.choice(WELCOME_SLOGANS)}", style="dim italic")
-            )
-            console.print()
-
             try:
                 _print_separator()
                 while state["running"]:
@@ -1348,9 +1322,10 @@ def cmd_interactive(
                                 ctx.agent is not None
                                 and ctx.agent is not _agent_for_ctx
                             )
-                            if agent_swapped:
-                                from ..agent import _ensure_config
+                            from ..agent import _ensure_config
 
+                            state["on_plan"] = _uses_chatgpt_plan(_ensure_config())
+                            if agent_swapped:
                                 agent_loader.adopt(ctx.agent)
                                 cfg = _ensure_config()
                                 model = cfg.model
