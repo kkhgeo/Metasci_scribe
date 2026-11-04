@@ -36,6 +36,7 @@ OUTLINE = """\
 """
 
 REASONING = "PRIVATE-REASONING-TEXT"
+DRAFT = "Manuscript/Results.md"
 
 
 def call(name: str, call_id: str, **args) -> dict:
@@ -91,7 +92,8 @@ def paper(tmp_path: Path) -> Path:
     root.mkdir()
     (root / "program.md").write_text("# Program\n", encoding="utf-8")
     (root / "outline.md").write_text(OUTLINE, encoding="utf-8")
-    (root / "manuscript.md").write_text("", encoding="utf-8")
+    (root / "Manuscript").mkdir()
+    (root / DRAFT).write_text("", encoding="utf-8")
     return root
 
 
@@ -139,7 +141,7 @@ def cli_with():
 
 
 def manuscript(root: Path, text: str = "Draft.\n") -> None:
-    (root / "manuscript.md").write_text(text, encoding="utf-8")
+    (root / DRAFT).write_text(text, encoding="utf-8")
 
 
 # ------------------------------------------------------------ the CLI, exit codes
@@ -249,7 +251,7 @@ def test_resume_after_usage_limit_in_a_second_invocation(paper, model, cli):
 def test_ctrl_c_exits_130_and_says_run_resumes(paper, monkeypatch, cli):
     import metasci_scribe.run as run_mod
 
-    def interrupted(root, invoke):
+    def interrupted(root, invoke, section=None):
         raise KeyboardInterrupt
 
     monkeypatch.setattr(run_mod, "run_project", interrupted)
@@ -591,7 +593,7 @@ async def test_run_uses_the_model_the_chat_switched_to_and_says_so(
     stub("lines", "0")
     stub_argv = run_cmd._child_argv
 
-    def argv(root, model=None, provider=None):
+    def argv(root, model=None, provider=None, section=None):
         seen.update(model=model, provider=provider)
         return stub_argv(root)
 
@@ -759,7 +761,7 @@ def test_the_autonomous_agent_cannot_delete(paper, model, cli):
         AIMessage(
             "",
             tool_calls=[
-                call("delete", "d1", file_path="/manuscript.md"),
+                call("delete", "d1", file_path="/Manuscript/Results.md"),
                 call("delete", "d2", file_path="/Knowledge"),
             ],
         ),
@@ -770,7 +772,7 @@ def test_the_autonomous_agent_cannot_delete(paper, model, cli):
     assert result.exit_code == 0, result.output
     assert "delete" in model.offered[0]  # the tool exists; it refuses
     assert source.read_text(encoding="utf-8") == "evidence"
-    assert (paper / "manuscript.md").read_text(encoding="utf-8") == "Draft.\n"
+    assert (paper / DRAFT).read_text(encoding="utf-8") == "Draft.\n"
     replies = [str(m.content) for m in model.seen[1] if m.type == "tool"]
     assert replies
     assert all("approval" in r.lower() or "refus" in r.lower() for r in replies)
@@ -953,3 +955,31 @@ def test_two_passes_share_one_event_loop_and_one_http_client(paper, monkeypatch,
     assert server.requests == 4
     assert RunState.load(paper).paragraphs == {"R1": "done", "R2": "done"}
     assert "Event loop is closed" not in result.output
+
+
+# ------------------------------------------------------------- one section
+
+
+def test_run_with_a_section_writes_only_it(paper, model, cli_with):
+    two = OUTLINE.replace(
+        "## Results", "## Introduction\n\n### I1 · ① Background\n\n## Results"
+    )
+    (paper / "outline.md").write_text(two, encoding="utf-8")
+    manuscript(paper)
+    model.replies = [write_para("R1", "1"), write_para("R2", "2")]
+    result = cli_with(paper, "--section", "Results")
+    assert result.exit_code == 0, result.output
+    assert "(section Results)" in result.output
+    assert "Paragraphs marked done: 2/2" in result.output
+    assert RunState.load(paper).paragraphs["I1"] == "pending"
+
+
+def test_slash_run_passes_the_section_and_suggests_the_outlines_sections(paper):
+    from metasci_scribe.commands.implementation.run import RunCommand, _child_argv
+
+    argv = _child_argv(paper, section="Materials and Methods")
+    assert argv[-2:] == ["--section", "Materials and Methods"]
+    names = [
+        n for n, _ in RunCommand().get_completions(["re"], workspace=Workspace(paper))
+    ]
+    assert names == ["Results"]

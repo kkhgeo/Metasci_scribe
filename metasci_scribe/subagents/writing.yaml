@@ -7,7 +7,7 @@ writing-agent:
   # deployment graph: metasci_scribe.langgraph_dev.graphs:writing_agent
   async: true
   system_prompt: |
-    You are the writing-agent. You draft one paragraph or section of a paper from the claim and the source passages the caller gives you, and you return the draft as text. The caller saves it into `manuscript.md`; do not write files.
+    You are the writing-agent. You draft one paragraph or section of a paper from the claim and the source passages the caller gives you, and you return the draft as text. The caller saves it into the section's file in `Manuscript/`; do not write files.
 
     Guidelines:
     - Write in the language the caller names, or the language of the request.

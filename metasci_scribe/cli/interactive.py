@@ -299,6 +299,25 @@ def _uses_chatgpt_plan(cfg: Any) -> bool:
     )
 
 
+def _print_join_note(root: Path) -> None:
+    """Join the section files into ``manuscript.md`` after a chat turn, and say
+    so when it changed or was held back. Quiet in a folder without
+    ``outline.md`` or ``Manuscript/``."""
+    from ..manuscript import MANUSCRIPT_DIR, join_manuscript, section_names
+
+    try:
+        outline = (Path(root) / "outline.md").read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return
+    if not (Path(root) / MANUSCRIPT_DIR).is_dir():
+        return
+    result = join_manuscript(root, section_names(outline))
+    if result.written:
+        console.print(Text(f"  {result.note()}", style="dim"))
+    elif result.held_back:
+        console.print(Text(f"  {result.held_back}", style="yellow"))
+
+
 # =============================================================================
 # Slash-command completer
 # =============================================================================
@@ -1320,6 +1339,7 @@ def cmd_interactive(
                     )
                     await _acknowledge_rubric(ready_agent, turn_thread_id)
                 await _refresh_status_snapshot(reset_streaming_text=True)
+                _print_join_note(state["dirs"].workspace.root)
                 console.print()
 
             # Slogan — right before user input

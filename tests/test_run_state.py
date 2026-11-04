@@ -27,6 +27,7 @@ from metasci_scribe.run import (
     parse_paragraphs,
     run_project,
 )
+from metasci_scribe.sessions import is_run_thread
 
 OUTLINE = """\
 # Outline
@@ -58,12 +59,17 @@ OUTLINE = """\
 
 IDS = ["I1", "R1", "R2", "D1"]
 
+# The section file the fakes write. Any one serves: the guard and the checks
+# read all of Manuscript/.
+DRAFT = "Manuscript/Results.md"
+
 
 @pytest.fixture
 def project(tmp_path: Path) -> Path:
     (tmp_path / "program.md").write_text("# Program\n", encoding="utf-8")
     (tmp_path / "outline.md").write_text(OUTLINE, encoding="utf-8")
-    (tmp_path / "manuscript.md").write_text("", encoding="utf-8")
+    (tmp_path / "Manuscript").mkdir()
+    (tmp_path / DRAFT).write_text("", encoding="utf-8")
     return tmp_path
 
 
@@ -105,7 +111,7 @@ class Agent:
         for pid, status, reason in step:
             mark(self.root, pid, status, reason)
         if step and self.text:
-            with open(self.root / "manuscript.md", "a", encoding="utf-8") as f:
+            with open(self.root / DRAFT, "a", encoding="utf-8") as f:
                 f.write(self.text)
 
 
@@ -477,26 +483,26 @@ def test_evidence_needed_counted_not_failure(project):
 def test_all_done_but_manuscript_empty_is_a_failure(project):
     result = run_project(project, all_done(project, text=""))
     assert result.exit == RunExit.FAILED
-    assert "manuscript.md" in result.message
+    assert "Manuscript/" in result.message
     assert (result.done, result.total) == (4, 4)
 
 
 def test_all_done_but_manuscript_missing_is_a_failure(project):
-    (project / "manuscript.md").unlink()
+    (project / DRAFT).unlink()
     result = run_project(project, all_done(project, text=""))
     assert result.exit == RunExit.FAILED
 
 
 def test_manuscript_that_is_a_folder_is_read_as_empty(project):
-    (project / "manuscript.md").unlink()
-    (project / "manuscript.md").mkdir()
+    (project / DRAFT).unlink()
+    (project / DRAFT).mkdir()
     result = run_project(project, all_done(project, text=""))
     assert result.exit == RunExit.FAILED
 
 
 def test_manuscript_with_bad_bytes_is_still_readable(project):
     agent = all_done(project, text="")
-    (project / "manuscript.md").write_bytes("가나다 [evidence needed]".encode("cp949"))
+    (project / DRAFT).write_bytes("가나다 [evidence needed]".encode("cp949"))
     result = run_project(project, agent)
     assert result.exit == RunExit.OK
     assert result.evidence_needed == 1
@@ -756,7 +762,7 @@ def test_first_prompt_after_outline_change_says_done_paragraphs_are_in_the_manus
     agent = Agent(project, [[("R3", "done", ""), ("D1", "done", "")]])
     run_project(project, agent)
     prompt = agent.calls[0][1]
-    assert "manuscript.md already holds" in prompt
+    assert "The section files already hold" in prompt
     assert "I1, R1" in prompt
     assert "Keep them" in prompt
 
@@ -817,64 +823,60 @@ def test_stale_temp_files_are_removed_at_start(project):
 
 
 def backups(root: Path) -> list[str]:
-    return sorted(
-        p.name for p in (root / ".metasci-scribe").glob("manuscript.pass-*.bak")
-    )
+    return sorted(p.name for p in (root / ".metasci-scribe").glob("manuscript.pass-*"))
 
 
 def test_each_pass_starts_with_a_backup_and_only_three_are_kept(project):
-    (project / "manuscript.md").write_text("Kept line.\n", encoding="utf-8")
+    (project / DRAFT).write_text("Kept line.\n", encoding="utf-8")
     run_project(project, Agent(project, [], text=""))  # 3 passes, nothing marked
     assert backups(project) == [
-        "manuscript.pass-1.bak",
-        "manuscript.pass-2.bak",
-        "manuscript.pass-3.bak",
+        "manuscript.pass-1",
+        "manuscript.pass-2",
+        "manuscript.pass-3",
     ]
     run_project(project, Agent(project, [], text=""))
     assert backups(project) == [
-        "manuscript.pass-4.bak",
-        "manuscript.pass-5.bak",
-        "manuscript.pass-6.bak",
+        "manuscript.pass-4",
+        "manuscript.pass-5",
+        "manuscript.pass-6",
     ]
-    copy = project / ".metasci-scribe" / "manuscript.pass-6.bak"
+    copy = project / ".metasci-scribe" / "manuscript.pass-6" / "Results.md"
     assert copy.read_text(encoding="utf-8") == "Kept line.\n"
 
 
 def test_a_pass_that_overwrites_finished_text_fails_naming_the_backup(project):
-    (project / "manuscript.md").write_text(
-        "Finished one.\nFinished two.\n", encoding="utf-8"
-    )
+    (project / DRAFT).write_text("Finished one.\nFinished two.\n", encoding="utf-8")
 
     def overwrite(thread_id, prompt):
-        (project / "manuscript.md").write_text("Only new text.\n", encoding="utf-8")
+        (project / DRAFT).write_text("Only new text.\n", encoding="utf-8")
         for pid in IDS:
             mark(project, pid)
 
     result = run_project(project, overwrite)
     assert result.exit == RunExit.FAILED
-    assert ".metasci-scribe/manuscript.pass-1.bak" in result.message
+    assert ".metasci-scribe/manuscript.pass-1/" in result.message
     assert "Finished one." in result.message
-    kept = project / ".metasci-scribe" / "manuscript.pass-1.bak"
+    kept = project / ".metasci-scribe" / "manuscript.pass-1" / "Results.md"
     assert kept.read_text(encoding="utf-8") == "Finished one.\nFinished two.\n"
 
 
 def test_loss_is_found_when_the_pass_ends_in_an_error_too(project):
-    (project / "manuscript.md").write_text("Finished one.\n", encoding="utf-8")
+    (project / DRAFT).write_text("Finished one.\n", encoding="utf-8")
 
     def overwrite_then_fail(thread_id, prompt):
-        (project / "manuscript.md").write_text("", encoding="utf-8")
+        (project / DRAFT).write_text("", encoding="utf-8")
         raise PlanStop(PlanAction.STOP_USAGE, "usage limit reached")
 
     result = run_project(project, overwrite_then_fail)
     assert result.exit == RunExit.FAILED  # not USAGE_LIMIT: the draft is damaged
-    assert "manuscript.pass-1.bak" in result.message
+    assert "manuscript.pass-1" in result.message
 
 
 def test_adding_moving_and_blank_line_changes_are_not_a_loss(project):
-    (project / "manuscript.md").write_text("Alpha.\n\nBeta.\n", encoding="utf-8")
+    (project / DRAFT).write_text("Alpha.\n\nBeta.\n", encoding="utf-8")
 
     def tidy(thread_id, prompt):
-        (project / "manuscript.md").write_text(
+        (project / DRAFT).write_text(
             "New first.\n\n\n  Beta.  \nAlpha.\nNew last.\n", encoding="utf-8"
         )
         for pid in IDS:
@@ -884,10 +886,10 @@ def test_adding_moving_and_blank_line_changes_are_not_a_loss(project):
 
 
 def test_no_manuscript_means_nothing_to_back_up(project):
-    (project / "manuscript.md").unlink()
+    (project / DRAFT).unlink()
 
     def write(thread_id, prompt):
-        (project / "manuscript.md").write_text("Fresh.\n", encoding="utf-8")
+        (project / DRAFT).write_text("Fresh.\n", encoding="utf-8")
         for pid in IDS:
             mark(project, pid)
 
@@ -896,7 +898,7 @@ def test_no_manuscript_means_nothing_to_back_up(project):
 
 
 def test_a_backup_that_cannot_be_written_stops_before_the_model(project, monkeypatch):
-    (project / "manuscript.md").write_text("Finished.\n", encoding="utf-8")
+    (project / DRAFT).write_text("Finished.\n", encoding="utf-8")
 
     def no_space(*args, **kwargs):
         raise OSError("disk full")
@@ -909,7 +911,7 @@ def test_a_backup_that_cannot_be_written_stops_before_the_model(project, monkeyp
 
 def test_a_mark_after_text_was_lost_is_rejected_and_the_run_fails(project):
     def lose_then_mark(thread_id, prompt):
-        manuscript = project / "manuscript.md"
+        manuscript = project / DRAFT
         manuscript.write_text("R1 paragraph.\n", encoding="utf-8")
         assert "marked done" in mark(project, "R1")
         manuscript.write_text("A different text.\n", encoding="utf-8")  # R1 gone
@@ -919,14 +921,14 @@ def test_a_mark_after_text_was_lost_is_rejected_and_the_run_fails(project):
 
     result = run_project(project, lose_then_mark)
     assert result.exit == RunExit.FAILED
-    assert "manuscript.mark.bak" in result.message
-    snapshot = project / ".metasci-scribe" / "manuscript.mark.bak"
+    assert "manuscript.mark" in result.message
+    snapshot = project / ".metasci-scribe" / "manuscript.mark" / "Results.md"
     assert snapshot.read_text(encoding="utf-8") == "R1 paragraph.\n"
 
 
 def test_loss_after_the_last_mark_is_found_at_the_end_of_the_pass(project):
     def lose_after_marking(thread_id, prompt):
-        manuscript = project / "manuscript.md"
+        manuscript = project / DRAFT
         manuscript.write_text("R1 paragraph.\nR2 paragraph.\n", encoding="utf-8")
         for pid in IDS:
             mark(project, pid)
@@ -934,26 +936,123 @@ def test_loss_after_the_last_mark_is_found_at_the_end_of_the_pass(project):
 
     result = run_project(project, lose_after_marking)
     assert result.exit == RunExit.FAILED
-    assert "manuscript.mark.bak" in result.message
+    assert "manuscript.mark" in result.message
     assert "R1 paragraph." in result.message
 
 
 def test_marks_and_snapshots_of_an_earlier_pass_do_not_leak_into_the_next(project):
-    """A person may edit manuscript.md between runs; the next run starts clean."""
+    """A person may edit the section files between runs; the next run starts clean."""
 
     def first(thread_id, prompt):
-        (project / "manuscript.md").write_text("R1 paragraph.\n", encoding="utf-8")
+        (project / DRAFT).write_text("R1 paragraph.\n", encoding="utf-8")
         mark(project, "R1")
 
     run_project(project, first)
-    (project / "manuscript.md").write_text(
-        "Rewritten by the author.\n", encoding="utf-8"
-    )
+    (project / DRAFT).write_text("Rewritten by the author.\n", encoding="utf-8")
 
     def second(thread_id, prompt):
-        with open(project / "manuscript.md", "a", encoding="utf-8") as f:
+        with open(project / DRAFT, "a", encoding="utf-8") as f:
             f.write("more\n")
         for pid in IDS:
             mark(project, pid)
 
     assert run_project(project, second).exit == RunExit.OK
+
+
+# ----------------------------------------------------- section files and runs
+
+
+def test_the_prompt_names_each_paragraphs_section_file(project):
+    agent = all_done(project)
+    run_project(project, agent)
+    prompt = agent.calls[0][1]
+    assert "- R1  Results: First result -> Manuscript/Results.md" in prompt
+    assert "- I1  Introduction: Background -> Manuscript/Introduction.md" in prompt
+    assert "Never edit manuscript.md" in prompt
+
+
+def test_a_run_joins_the_section_files_into_manuscript_md(project):
+    def write(thread_id, prompt):
+        (project / "Manuscript" / "Introduction.md").write_text(
+            "I1.\n", encoding="utf-8"
+        )
+        (project / DRAFT).write_text("R1.\n\nR2.\n", encoding="utf-8")
+        for pid in IDS:
+            mark(project, pid)
+
+    result = run_project(project, write)
+    assert result.exit == RunExit.OK
+    assert (project / "manuscript.md").read_text(encoding="utf-8") == (
+        "## Introduction\n\nI1.\n\n## Results\n\nR1.\n\nR2.\n"
+    )
+    assert "manuscript.md was updated" in result.message
+
+
+def test_a_section_run_writes_only_that_section(project):
+    agent = Agent(project, [[("R1", "done", ""), ("R2", "done", "")]])
+    result = run_project(project, agent, section="results")
+    assert result.exit == RunExit.OK
+    assert todo_ids(agent.calls[0][1]) == ["R1", "R2"]
+    assert "Edit only Manuscript/Results.md." in agent.calls[0][1]
+    assert (result.done, result.total) == (2, 2)
+    assert "2 of 2 paragraphs of Results done" in result.message
+    saved = RunState.load(project).paragraphs
+    assert saved == {"I1": "pending", "R1": "done", "R2": "done", "D1": "pending"}
+
+
+def test_a_section_run_has_its_own_thread_and_a_whole_run_keeps_its_own(project):
+    section = Agent(project, [[("R1", "done", ""), ("R2", "done", "")]])
+    run_project(project, section, section="Results")
+    whole = Agent(project, [[("I1", "done", ""), ("D1", "done", "")]])
+    run_project(project, whole)
+    state = RunState.load(project)
+    assert whole.calls[0][0] == state.thread_id
+    assert section.calls[0][0] != state.thread_id
+    assert is_run_thread(section.calls[0][0])  # hidden from /threads like the rest
+    assert todo_ids(whole.calls[0][1]) == ["I1", "D1"]
+
+
+def test_an_unknown_section_is_refused_before_the_model(project):
+    result = run_project(project, boom, section="Methods")
+    assert result.exit == RunExit.FAILED
+    assert "Introduction, Results, Discussion" in result.message
+
+
+def test_open_marks_in_other_sections_do_not_stop_a_section_run(project):
+    marked = OUTLINE.replace("### D1 · ① Meaning", "### D1 · ① ◇ Meaning")
+    (project / "outline.md").write_text(marked, encoding="utf-8")
+    assert run_project(project, boom).exit == RunExit.NEEDS_DECISION
+    agent = Agent(project, [[("R1", "done", ""), ("R2", "done", "")]])
+    assert run_project(project, agent, section="Results").exit == RunExit.OK
+    assert (
+        run_project(project, boom, section="Discussion").exit == RunExit.NEEDS_DECISION
+    )
+
+
+def test_open_marks_about_the_whole_paper_stop_a_section_run(project):
+    marked = OUTLINE.replace("핵심 메시지: Plants grow.", "핵심 메시지: ◇")
+    (project / "outline.md").write_text(marked, encoding="utf-8")
+    result = run_project(project, boom, section="Results")
+    assert result.exit == RunExit.NEEDS_DECISION
+
+
+def test_two_sections_that_share_a_file_are_refused(project):
+    clash = OUTLINE.replace("## Discussion", "## Results.")  # same file name
+    (project / "outline.md").write_text(clash, encoding="utf-8")
+    result = run_project(project, boom)
+    assert result.exit == RunExit.FAILED
+    assert "share the file" in result.message
+
+
+def test_text_moved_between_section_files_is_not_a_loss(project):
+    (project / DRAFT).write_text("Alpha.\n", encoding="utf-8")
+
+    def move(thread_id, prompt):
+        (project / DRAFT).write_text("", encoding="utf-8")
+        (project / "Manuscript" / "Discussion.md").write_text(
+            "Alpha.\n", encoding="utf-8"
+        )
+        for pid in IDS:
+            mark(project, pid)
+
+    assert run_project(project, move).exit == RunExit.OK

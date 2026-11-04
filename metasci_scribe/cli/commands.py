@@ -1984,10 +1984,20 @@ def run_command(
             "--provider", help="Provider for this run (default: the configured one)"
         ),
     ] = None,
+    section: Annotated[
+        str | None,
+        typer.Option(
+            "--section",
+            help="Write only this section of outline.md, for example Results",
+        ),
+    ] = None,
 ):
     """Write the draft unattended, following outline.md, then stop.
 
-    Exit codes: 0 every paragraph is marked done, 2 the run failed or could not
+    Each section goes to its own file in Manuscript/, and manuscript.md is
+    joined from them. With --section, only that section is written.
+
+    Exit codes: 0 every paragraph (of the section) is marked done, 2 the run failed or could not
     start, 3 the ChatGPT plan usage limit was reached, 4 a paragraph needs your
     decision. Run it again to continue where it stopped.
     """
@@ -2014,7 +2024,9 @@ def run_command(
     apply_config_to_env(config)
     reload_env_dirs()
     ensure_dirs()
-    typer.echo(f"Metasci Scribe run: {root}")
+    typer.echo(
+        f"Metasci Scribe run: {root}" + (f" (section {section})" if section else "")
+    )
     typer.echo(
         f"Model: {config.model} (provider {config.provider}"
         + (
@@ -2027,7 +2039,7 @@ def run_command(
     )
     try:
         with real_invoke(root, config=config) as invoke:
-            result = run_project(root, invoke)
+            result = run_project(root, invoke, section=section)
     except KeyboardInterrupt:
         typer.echo(
             "\nInterrupted. Progress is saved; run `metasci-scribe run` again "

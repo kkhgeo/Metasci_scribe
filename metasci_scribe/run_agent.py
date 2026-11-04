@@ -11,7 +11,7 @@ What the autonomous agent is, and is not:
 * No shell. A run with no human gate gets no ``execute`` and no
   ``run_in_background`` (``ShellGateMiddleware``), and no skill installs.
 * No recursive ``delete``: with the interrupt off nothing else would stop an
-  injected agent from removing ``Knowledge/`` or ``manuscript.md``.
+  injected agent from removing ``Knowledge/`` or ``Manuscript/``.
 * No MCP tools at all, and no async sub-agents or ``langgraph dev`` server.
 * ``mark_paragraph`` is added to the main agent only (not to a sub-agent, and
   never to a chat session).

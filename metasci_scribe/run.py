@@ -5,12 +5,19 @@ it reports progress through the ``mark_paragraph`` tool, which checks the
 paragraph ID against the state the harness wrote, and the harness decides what
 the run is worth (design section 6):
 
-* complete means every paragraph of ``outline.md`` is ``done`` and
-  ``manuscript.md`` holds text, not that the model said it was finished;
+* complete means every paragraph of ``outline.md`` is ``done`` and the
+  section files under ``Manuscript/`` hold text, not that the model said it
+  was finished;
 * a ``blocked`` paragraph stops the run for a human decision;
 * running again continues in the same thread while ``outline.md`` is unchanged
   (comments and blank lines do not count), and starts a new thread, keeping
-  the ``done`` paragraphs, when it changed.
+  the ``done`` paragraphs, when it changed;
+* a run can be limited to one section of the outline; it then writes only
+  that section's paragraphs, in a thread of its own.
+
+The model writes each paragraph into its section's file,
+``Manuscript/<Section>.md``. At the end of every run the harness joins those
+files into ``manuscript.md`` (:func:`metasci_scribe.manuscript.join_manuscript`).
 
 ``run_project`` is the whole body of a run. The real agent is passed in as
 ``invoke`` (task 14 wires it); everything here works with a fake.
@@ -52,6 +59,16 @@ from .auth.chatgpt_plan import ChatGPTAuthError
 from .knowledge import LOCK_WAIT_SECONDS, report_messages, sync_knowledge
 from .llm.credentials import ModelNotConfigured
 from .llm.errors import PlanAction, PlanStop, _redact_api_keys
+from .manuscript import (
+    MANUSCRIPT_DIR,
+    SECTION_HEADING,
+    copy_section_files,
+    join_manuscript,
+    read_section_texts,
+    same_section,
+    section_file_name,
+    section_names,
+)
 from .paths import Workspace
 from .project import NetworkPathError, require_local_path
 
@@ -83,7 +100,7 @@ _HEADING = re.compile(
     r"(?:(?P<num>[①-⑳㉑-㊿]|\d+)(?![^\s]))?[ \t]*(?P<title>.*)$"
 )
 _ID_LIKE = re.compile(r"^###[ \t]+[A-Za-z]+\d+(?![A-Za-z0-9])")
-_SECTION = re.compile(r"^##[ \t]+(?P<name>\S.*?)[ \t]*#*[ \t]*$")
+_SECTION = SECTION_HEADING
 _EVIDENCE = re.compile(r"\[evidence needed\]", re.IGNORECASE)
 _MARKER = "◇"
 
@@ -174,13 +191,24 @@ def parse_paragraphs(text: str) -> list[Paragraph]:
     return paragraphs
 
 
-def open_markers(text: str) -> list[int]:
+def open_markers(text: str, section: str | None = None) -> list[int]:
     """1-based numbers of the lines that hold an open-question mark (◇).
 
     Marks inside comments do not count: the template explains the mark there.
+    With *section*, only the lines before the first section (they concern the
+    whole paper) and that section's own lines count.
     """
     lines = _mask_comments(_normalize_newlines(text)).split("\n")
-    return [n for n, line in enumerate(lines, start=1) if _MARKER in line]
+    marks: list[int] = []
+    current: str | None = None
+    for n, line in enumerate(lines, start=1):
+        if m := _SECTION.match(line):
+            current = m.group("name")
+        if _MARKER not in line:
+            continue
+        if section is None or current is None or same_section(current, section):
+            marks.append(n)
+    return marks
 
 
 def outline_digest(text: str) -> str:
@@ -327,22 +355,21 @@ _MARK_LOCK = threading.Lock()
 # ------------------------------------------------------- the manuscript guard
 #
 # ``write_file`` replaces a whole file, and only the prompt tells the model to
-# keep the paragraphs already finished. So the harness keeps copies and checks
-# that no line of the text it started a pass with, or had at the last
-# ``done`` mark, has disappeared. Lines are compared stripped and as a set: a
-# moved paragraph is fine, a missing one is not.
+# keep the paragraphs already finished. So the harness keeps copies of the
+# section files and checks that no line of the text it started a pass with, or
+# had at the last ``done`` mark, has disappeared from them. Lines are compared
+# stripped and as a set over all section files: a paragraph moved, even to
+# another section, is fine, a missing one is not.
 
 _BACKUPS_KEPT = 3
-_BACKUP_NAME = re.compile(r"^manuscript\.pass-(\d+)\.bak$")
-MARK_SNAPSHOT = "manuscript.mark.bak"  # as of the last paragraph marked done
+_BACKUP_NAME = re.compile(r"^manuscript\.pass-(\d+)$")
+MARK_SNAPSHOT = "manuscript.mark"  # folder, as of the last paragraph marked done
 LOST_MARKER = "manuscript.lost"  # written by the tool when it sees a loss
 
 
-def _read_text(path: Path) -> str:
-    try:
-        return path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return ""
+def _all_text(folder: Path) -> str:
+    """The text of every section file in *folder*, one after the other."""
+    return "\n".join(read_section_texts(folder).values())
 
 
 def _missing_lines(before: str, after: str) -> list[str]:
@@ -360,59 +387,58 @@ def _missing_lines(before: str, after: str) -> list[str]:
 
 
 def _backup_manuscript(root: Path, state_dir: Path) -> tuple[Path | None, str]:
-    """Copy ``manuscript.md`` to ``manuscript.pass-N.bak`` (N counts up across
-    runs), keep the newest ``_BACKUPS_KEPT``, and return the copy and its text.
+    """Copy the section files to the folder ``manuscript.pass-N`` (N counts up
+    across runs), keep the newest ``_BACKUPS_KEPT``, and return the copy and
+    its text.
 
-    No manuscript, nothing to lose: ``(None, "")``. Raises ``OSError``.
+    No section file, nothing to lose: ``(None, "")``. Raises ``OSError``.
     """
-    try:
-        data = (root / "manuscript.md").read_bytes()
-    except FileNotFoundError:
+    if not read_section_texts(root / MANUSCRIPT_DIR):
         return None, ""
+    before = _all_text(root / MANUSCRIPT_DIR)
     numbers = {
         int(m.group(1)): f
         for f in state_dir.iterdir()
-        if (m := _BACKUP_NAME.match(f.name))
+        if (m := _BACKUP_NAME.match(f.name)) and f.is_dir()
     }
-    target = state_dir / f"manuscript.pass-{max(numbers, default=0) + 1}.bak"
-    target.write_bytes(data)
+    target = state_dir / f"manuscript.pass-{max(numbers, default=0) + 1}"
+    copy_section_files(root, target)
     numbers[int(_BACKUP_NAME.match(target.name).group(1))] = target
     for number in sorted(numbers)[:-_BACKUPS_KEPT]:
-        with contextlib.suppress(OSError):
-            numbers[number].unlink()
-    return target, data.decode("utf-8", errors="replace")
+        shutil.rmtree(numbers[number], ignore_errors=True)
+    return target, before
 
 
 def _clear_marks(state_dir: Path) -> None:
-    for name in (MARK_SNAPSHOT, LOST_MARKER):
-        with contextlib.suppress(OSError):
-            (state_dir / name).unlink()
+    shutil.rmtree(state_dir / MARK_SNAPSHOT, ignore_errors=True)
+    with contextlib.suppress(OSError):
+        (state_dir / LOST_MARKER).unlink()
 
 
 def _lost_since(
     root: Path, state_dir: Path, before: str, backup: Path | None
 ) -> tuple[list[str], Path | None]:
-    """Lines lost from ``manuscript.md`` during a pass, and the copy that still
+    """Lines lost from the section files during a pass, and the copy that still
     has them. Empty list: nothing was lost."""
-    after = _read_text(root / "manuscript.md")
+    after = _all_text(root / MANUSCRIPT_DIR)
     snapshot = state_dir / MARK_SNAPSHOT
     if (state_dir / LOST_MARKER).exists():
         # The tool saw it mid-pass; what is missing now is not the point.
-        return _missing_lines(_read_text(snapshot), after) or ["(text)"], snapshot
+        return _missing_lines(_all_text(snapshot), after) or ["(text)"], snapshot
     if missing := _missing_lines(before, after):
         return missing, backup
-    if missing := _missing_lines(_read_text(snapshot), after):
+    if missing := _missing_lines(_all_text(snapshot), after):
         return missing, snapshot
     return [], None
 
 
 def _mark_lost_text(root: Path, state_dir: Path) -> bool:
-    """Whether ``manuscript.md`` lacks text it had at the previous ``done``
-    mark. Leaves a marker for the harness when it does."""
+    """Whether the section files lack text they had at the previous ``done``
+    mark. Leaves a marker for the harness when they do."""
     snapshot = state_dir / MARK_SNAPSHOT
-    if not snapshot.exists():
+    if not snapshot.is_dir():
         return False
-    if not _missing_lines(_read_text(snapshot), _read_text(root / "manuscript.md")):
+    if not _missing_lines(_all_text(snapshot), _all_text(root / MANUSCRIPT_DIR)):
         return False
     with contextlib.suppress(OSError):
         (state_dir / LOST_MARKER).write_text(MARK_SNAPSHOT, encoding="utf-8")
@@ -421,7 +447,7 @@ def _mark_lost_text(root: Path, state_dir: Path) -> bool:
 
 def _take_mark_snapshot(root: Path, state_dir: Path) -> None:
     with contextlib.suppress(OSError):
-        shutil.copyfile(root / "manuscript.md", state_dir / MARK_SNAPSHOT)
+        copy_section_files(root, state_dir / MARK_SNAPSHOT)
 
 
 def make_mark_paragraph_tool(root: Path) -> BaseTool:
@@ -440,14 +466,14 @@ def make_mark_paragraph_tool(root: Path) -> BaseTool:
     ) -> str:
         """Record the state of one outline paragraph in this run.
 
-        Call it with "done" right after the paragraph is written into
-        manuscript.md. Call it with "blocked" and a reason when the sources do
-        not support the paragraph's claim or the outline would have to change;
-        then stop working.
+        Call it with "done" right after the paragraph is written into its
+        section's file under Manuscript/. Call it with "blocked" and a reason
+        when the sources do not support the paragraph's claim or the outline
+        would have to change; then stop working.
 
         Args:
             paragraph_id: The ID from outline.md, for example "R1".
-            status: "done" when the paragraph is in manuscript.md, "blocked" when you cannot write it.
+            status: "done" when the paragraph is in its section file, "blocked" when you cannot write it.
             reason: Required with "blocked": one sentence on what is missing or must be decided.
         """
         pid = _clean(paragraph_id)
@@ -470,8 +496,8 @@ def make_mark_paragraph_tool(root: Path) -> BaseTool:
             state_dir = Workspace(root).state_dir
             if _mark_lost_text(root, state_dir):
                 return (
-                    "Rejected: manuscript.md lost text that was there at the last "
-                    "mark. The run will stop; do not rewrite finished paragraphs."
+                    "Rejected: the files in Manuscript/ lost text that was there at "
+                    "the last mark. The run will stop; do not rewrite finished paragraphs."
                 )
             if state.paragraphs[pid] == status and (
                 status == DONE or state.reasons.get(pid) == why
@@ -522,7 +548,9 @@ _FIRST_PROMPT = """\
 You are running unattended. Nobody can answer questions, so decide and keep going.
 
 Write the manuscript draft following outline.md, paragraph by paragraph, in the
-outline's order, and save it in manuscript.md. Read program.md and outline.md first.
+outline's order. Each section of the outline has its own file under Manuscript/;
+save each paragraph in the file named after it below. Read program.md and
+outline.md first.
 
 Paragraphs still to write, in order:
 {todo}
@@ -530,47 +558,58 @@ Paragraphs still to write, in order:
 {kept}Rules:
 - Use only this project's own material (Knowledge/, .metasci-scribe/extracted/, Figures/, Tables/). Never invent a number or a citation.
 - Where the material gives no evidence, write [evidence needed] in the text and keep going. This is not a failure.
-- After each paragraph is in manuscript.md, call mark_paragraph(paragraph_id, "done").
+- A section file holds that section's paragraphs only, in outline order, with no section heading; create it if it does not exist.
+- After each paragraph is in its file, call mark_paragraph(paragraph_id, "done").
 - If the material does not support a paragraph's claim, or the outline would have to change, call mark_paragraph(paragraph_id, "blocked", reason) with one sentence of reason, then stop. Do not edit outline.md.
-- Edit manuscript.md only. Never write under .metasci-scribe/.
+- Edit only {files}. Never edit manuscript.md (the app joins it from Manuscript/), and never write under .metasci-scribe/.
 """
 
 _NEXT_PROMPT = """\
 You stopped, but these paragraphs are not marked done yet:
 {todo}
 
-Continue with them under the same rules. Write each one into manuscript.md, then
-call mark_paragraph(paragraph_id, "done"). If a paragraph cannot be written from
+Continue with them under the same rules. Write each one into the file named after
+it, then call mark_paragraph(paragraph_id, "done"). If a paragraph cannot be written from
 the project's material, call mark_paragraph(paragraph_id, "blocked", reason) and stop.
 """
 
 
 _KEPT = """\
-manuscript.md already holds these finished paragraphs: {ids}.
+The section files already hold these finished paragraphs: {ids}.
 Keep them exactly as they are; do not rewrite or reorder them. Add each pending
 paragraph where the outline puts it.
 
 """
 
 
-def _prompt(first: bool, state: RunState, titles: dict[str, Paragraph]) -> str:
+def _file_of(p: Paragraph) -> str:
+    return f"{MANUSCRIPT_DIR}/{section_file_name(p.section or MANUSCRIPT_DIR)}"
+
+
+def _prompt(
+    first: bool, state: RunState, titles: dict[str, Paragraph], targets: list[str]
+) -> str:
     todo = "\n".join(
         f"- {i}  {titles[i].section}: {titles[i].title}".rstrip(": ")
-        for i, s in state.paragraphs.items()
-        if s == PENDING and i in titles
+        + f" -> {_file_of(titles[i])}"
+        for i in targets
+        if state.paragraphs.get(i) == PENDING
     )
     if not first:
         return _NEXT_PROMPT.format(todo=todo)
-    done = [i for i, s in state.paragraphs.items() if s == DONE]
+    done = [i for i in targets if state.paragraphs.get(i) == DONE]
     kept = _KEPT.format(ids=", ".join(done)) if done else ""
-    return _FIRST_PROMPT.format(todo=todo, kept=kept)
+    files = sorted({_file_of(titles[i]) for i in targets})
+    return _FIRST_PROMPT.format(todo=todo, kept=kept, files=", ".join(files))
 
 
-def _read_manuscript(root: Path) -> str:
-    try:
-        return (root / "manuscript.md").read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return ""
+def _targets_text(root: Path, titles: dict[str, Paragraph], targets: list[str]) -> str:
+    """The text of the section files this run writes."""
+    texts = []
+    for name in sorted({_file_of(titles[i]) for i in targets}):
+        with contextlib.suppress(OSError):
+            texts.append((root / name).read_text(encoding="utf-8", errors="replace"))
+    return "\n".join(texts)
 
 
 def _clean(text: str) -> str:
@@ -600,7 +639,17 @@ def _plan_stop_message(exc: PlanStop, progress: str) -> str:
     return f"{text} {progress} Run again to continue."
 
 
-def run_project(root: Path, invoke: AgentInvoke) -> RunResult:
+def _section_thread(thread_id: str, section: str) -> str:
+    """The thread of a run limited to *section*: derived from the outline's
+    thread, so it changes with the outline, and shaped like a run thread
+    (``run-<32 hex>``) so chat lists keep hiding it."""
+    key = f"{thread_id}/{' '.join(section.split()).casefold()}"
+    return f"run-{uuid.uuid5(uuid.NAMESPACE_URL, key).hex}"
+
+
+def run_project(
+    root: Path, invoke: AgentInvoke, section: str | None = None
+) -> RunResult:
     """Run the paper in *root* to the end, or to the first thing that needs a person.
 
     Checks first, without any model cost: a local folder, ``program.md`` and
@@ -610,16 +659,29 @@ def run_project(root: Path, invoke: AgentInvoke) -> RunResult:
     to ``MAX_PASSES`` times while paragraphs are pending. See the module doc
     for interrupts. Never raises for the run's own failures; they come back as
     a ``RunResult`` with a message for the author.
+
+    With *section* (an outline section name, case and spacing aside), only
+    that section's paragraphs are written and counted, and open question
+    marks elsewhere in the outline do not stop the run. Every result that got
+    as far as the state ends with the section files joined into
+    ``manuscript.md``.
     """
     root = Path(root)
+    targets: list[str] = []
+    sections: list[str] = []
 
     def result(
         code: RunExit, message: str, state: RunState | None = None, notes=()
     ) -> RunResult:
-        done, total = (state.count(DONE), len(state.paragraphs)) if state else (0, 0)
-        evidence = len(_EVIDENCE.findall(_read_manuscript(root))) if state else 0
-        text = "\n".join([message, *notes])
-        return RunResult(code, done, total, evidence, text)
+        done = total = evidence = 0
+        lines = [message, *notes]
+        if state:
+            done = sum(1 for i in targets if state.paragraphs.get(i) == DONE)
+            total = len(targets)
+            evidence = len(_EVIDENCE.findall(_targets_text(root, titles, targets)))
+            if note := join_manuscript(root, sections).note():
+                lines.append(note)
+        return RunResult(code, done, total, evidence, "\n".join(lines))
 
     # -- checks that cost nothing --------------------------------------------
     try:
@@ -643,7 +705,6 @@ def run_project(root: Path, invoke: AgentInvoke) -> RunResult:
         return result(RunExit.FAILED, f"outline.md cannot be read: {exc}")
     try:
         paragraphs = parse_paragraphs(outline)
-        marks = open_markers(outline)
     except OutlineError as exc:
         return result(RunExit.FAILED, f"outline.md, {exc}")
     if not paragraphs:
@@ -652,6 +713,36 @@ def run_project(root: Path, invoke: AgentInvoke) -> RunResult:
             "outline.md has no paragraph headings such as '### R1 · ①'. "
             "Draw the map in a chat session first.",
         )
+    sections[:] = section_names(outline)
+    by_file: dict[str, str] = {}
+    for name in sections:
+        clash = by_file.setdefault(section_file_name(name).casefold(), name)
+        if clash != name:
+            return result(
+                RunExit.FAILED,
+                f"outline.md, the sections {clash!r} and {name!r} would share the file "
+                f"{MANUSCRIPT_DIR}/{section_file_name(name)}. Rename one of them.",
+            )
+    if section is not None:
+        match = next((s for s in sections if same_section(s, section)), None)
+        if match is None:
+            return result(
+                RunExit.FAILED,
+                f"outline.md has no section {_short(section)!r}. Its sections: "
+                + (", ".join(sections) or "none")
+                + ".",
+            )
+        targets[:] = [p.id for p in paragraphs if same_section(p.section, match)]
+        if not targets:
+            return result(
+                RunExit.FAILED,
+                f"The section {match!r} of outline.md has no paragraph headings "
+                "such as '### R1 · ①'.",
+            )
+        section = match
+    else:
+        targets[:] = [p.id for p in paragraphs]
+    marks = open_markers(outline, section)
     if marks:
         shown = ", ".join(str(n) for n in marks[:10]) + (
             " ..." if len(marks) > 10 else ""
@@ -686,7 +777,9 @@ def run_project(root: Path, invoke: AgentInvoke) -> RunResult:
                 RunExit.FAILED,
                 f"{exc}. Fix or delete .metasci-scribe/run.json; delete it to start the run over.",
             )
-        return _run_locked(root, invoke, paragraphs, titles, digest, saved, result)
+        return _run_locked(
+            root, invoke, paragraphs, titles, digest, saved, result, targets, section
+        )
     finally:
         lock.release()
 
@@ -699,7 +792,9 @@ def _remove_stale_temps(state_dir: Path) -> None:
             stale.unlink()
 
 
-def _run_locked(root, invoke, paragraphs, titles, digest, saved, result) -> RunResult:
+def _run_locked(
+    root, invoke, paragraphs, titles, digest, saved, result, targets, section
+) -> RunResult:
     # -- Knowledge -------------------------------------------------------------
     try:
         report = sync_knowledge(root, wait=LOCK_WAIT_SECONDS)
@@ -722,11 +817,22 @@ def _run_locked(root, invoke, paragraphs, titles, digest, saved, result) -> RunR
         return result(
             RunExit.FAILED, f".metasci-scribe/run.json cannot be written: {exc}"
         )
+    thread_id = (
+        state.thread_id
+        if section is None
+        else _section_thread(state.thread_id, section)
+    )
+
+    def count(status: str) -> int:
+        return sum(1 for i in targets if state.paragraphs.get(i) == status)
+
+    def progress() -> str:
+        return f"{count(DONE)}/{len(targets)} paragraphs marked done"
 
     # -- the passes ------------------------------------------------------------
     state_dir = Workspace(root).state_dir
     for attempt in range(MAX_PASSES):
-        if state.count(PENDING) == 0:
+        if count(PENDING) == 0:
             break
         _clear_marks(state_dir)
         try:
@@ -734,13 +840,13 @@ def _run_locked(root, invoke, paragraphs, titles, digest, saved, result) -> RunR
         except OSError as exc:
             return result(
                 RunExit.FAILED,
-                f"manuscript.md could not be backed up before the pass: {_short(exc)}",
+                f"{MANUSCRIPT_DIR}/ could not be backed up before the pass: {_short(exc)}",
                 state,
                 notes,
             )
         error: Exception | None = None
         try:
-            invoke(state.thread_id, _prompt(attempt == 0, state, titles))
+            invoke(thread_id, _prompt(attempt == 0, state, titles, targets))
         except Exception as exc:  # PlanStop and the rest: handled below
             error = exc
         if error is not None:
@@ -749,26 +855,27 @@ def _run_locked(root, invoke, paragraphs, titles, digest, saved, result) -> RunR
         if lost:
             return result(RunExit.FAILED, _loss_message(root, lost, copy), state, notes)
         if error is not None:
-            return _error_result(error, state, result, notes)
+            return _error_result(error, state, result, notes, progress())
         try:
             state = _reload(root, state)
         except RunStateError as exc:
             return result(
                 RunExit.FAILED, f"{exc}. Delete it to start over.", None, notes
             )
-        if state.count(BLOCKED):
+        if count(BLOCKED):
             break
 
     # -- the verdict -----------------------------------------------------------
-    total = len(state.paragraphs)
-    blocked = [i for i, s in state.paragraphs.items() if s == BLOCKED]
-    pending = [i for i, s in state.paragraphs.items() if s == PENDING]
+    total = len(targets)
+    scope = "" if section is None else f" of {section}"
+    blocked = [i for i in targets if state.paragraphs.get(i) == BLOCKED]
+    pending = [i for i in targets if state.paragraphs.get(i) == PENDING]
     if blocked:
         lines = [f"- {i}: {_short(state.reasons.get(i, ''))}" for i in blocked]
         return result(
             RunExit.NEEDS_DECISION,
             f"{len(blocked)} paragraph(s) need your decision "
-            f"({state.count(DONE)}/{total} marked done):\n"
+            f"({count(DONE)}/{total}{scope} marked done):\n"
             + "\n".join(lines)
             + "\nResolve them (the sources, program.md, or the outline in a chat session), "
             "then run again.",
@@ -782,20 +889,22 @@ def _run_locked(root, invoke, paragraphs, titles, digest, saved, result) -> RunR
         return result(
             RunExit.FAILED,
             f"The agent did not finish after {MAX_PASSES} passes "
-            f"({state.count(DONE)}/{total} marked done). Still pending: {shown}. "
+            f"({count(DONE)}/{total}{scope} marked done). Still pending: {shown}. "
             "Run again to continue.",
             state,
             notes,
         )
-    if not _read_manuscript(root).strip():
+    written = _targets_text(root, titles, targets)
+    if not written.strip():
         return result(
             RunExit.FAILED,
-            f"All {total} paragraphs are marked done but manuscript.md is empty or missing. "
+            f"All {total} paragraphs{scope} are marked done but their files in "
+            f"{MANUSCRIPT_DIR}/ are empty or missing. "
             "Delete .metasci-scribe/run.json to start the run over.",
             state,
             notes,
         )
-    evidence = len(_EVIDENCE.findall(_read_manuscript(root)))
+    evidence = len(_EVIDENCE.findall(written))
     tail = (
         f" {evidence} place(s) are marked [evidence needed]; check them."
         if evidence
@@ -803,9 +912,10 @@ def _run_locked(root, invoke, paragraphs, titles, digest, saved, result) -> RunR
     )
     return result(
         RunExit.OK,
-        f"The agent marked {total} of {total} paragraphs done.{tail}\n"
-        "Nobody has checked the draft yet: read manuscript.md, and check its "
-        "claims and citations against your sources, before you use it.",
+        f"The agent marked {total} of {total} paragraphs{scope} done.{tail}\n"
+        f"Nobody has checked the draft yet: read it in {MANUSCRIPT_DIR}/ or "
+        "manuscript.md, and check its claims and citations against your sources, "
+        "before you use it.",
         state,
         notes,
     )
@@ -815,46 +925,47 @@ def _loss_message(root: Path, lost: list[str], copy: Path | None) -> str:
     shown = "; ".join(f"“{_short(line)[:80]}”" for line in lost[:3])
     more = f" and {len(lost) - 3} more" if len(lost) > 3 else ""
     where = (
-        f"The last good copy is {copy.relative_to(root).as_posix()}"
+        f"The last good copy is in {copy.relative_to(root).as_posix()}/"
         if copy is not None
         else "No copy was kept"
     )
     return (
-        f"manuscript.md lost {len(lost)} line(s) of finished text during the "
-        f"pass ({shown}{more}). {where}. Copy it over manuscript.md, check the "
-        "draft, and run again. The paragraphs marked done in this pass cannot "
-        "be trusted."
+        f"The files in {MANUSCRIPT_DIR}/ lost {len(lost)} line(s) of finished text "
+        f"during the pass ({shown}{more}). {where}. Copy its files over those in "
+        f"{MANUSCRIPT_DIR}/, check the draft, and run again. The paragraphs marked "
+        "done in this pass cannot be trusted."
     )
 
 
-def _error_result(exc: Exception, state: RunState, result, notes) -> RunResult:
+def _error_result(
+    exc: Exception, state: RunState, result, notes, progress: str
+) -> RunResult:
     """The result for an error out of ``invoke``. Only the type is shown for
     anything but a plan stop, so nothing secret in an error text can leak."""
-    progress = f"Progress is saved ({state.count(DONE)}/{len(state.paragraphs)} paragraphs marked done)."
+    saved = f"Progress is saved ({progress})."
     if isinstance(exc, PlanStop):
         if exc.action is PlanAction.STOP_USAGE:
             return result(
                 RunExit.USAGE_LIMIT,
                 "The ChatGPT plan usage limit was reached. "
-                f"{progress} Check your plan's usage in ChatGPT settings, "
+                f"{saved} Check your plan's usage in ChatGPT settings, "
                 "and run again when it allows more use; the run continues where it stopped.",
                 state,
                 notes,
             )
-        return result(RunExit.FAILED, _plan_stop_message(exc, progress), state, notes)
+        return result(RunExit.FAILED, _plan_stop_message(exc, saved), state, notes)
     if isinstance(exc, ChatGPTAuthError | ModelNotConfigured):
         return result(
             RunExit.FAILED,
             f"The model is not available ({type(exc).__name__}). Run /login, then run again. "
-            f"Progress is saved ({state.count(DONE)}/{len(state.paragraphs)} marked done).",
+            f"{saved}",
             state,
             notes,
         )
     return result(
         RunExit.FAILED,
         f"The agent stopped with an unexpected error ({type(exc).__name__}). "
-        f"Progress is saved ({state.count(DONE)}/{len(state.paragraphs)} marked done); "
-        "run again to continue.",
+        f"{saved[:-1]}; run again to continue.",
         state,
         notes,
     )

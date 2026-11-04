@@ -137,7 +137,7 @@ class TestSubagents:
         assert "outline" in specs["planner-agent"]["system_prompt"].lower()
         assert "Knowledge/" in specs["research-agent"]["system_prompt"]
         assert ".metasci-scribe/extracted" in specs["research-agent"]["system_prompt"]
-        assert "manuscript.md" in specs["writing-agent"]["system_prompt"]
+        assert "Manuscript/" in specs["writing-agent"]["system_prompt"]
 
     def test_research_has_no_web_search(self):
         spec = _subagent_specs()["research-agent"]
@@ -260,7 +260,12 @@ async def test_a_turn_reads_the_project_and_writes_the_manuscript(tmp_path):
             AIMessage(
                 "",
                 tool_calls=[
-                    _call("w1", "write_file", file_path="/manuscript.md", content=draft)
+                    _call(
+                        "w1",
+                        "write_file",
+                        file_path="/Manuscript/Results.md",
+                        content=draft,
+                    )
                 ],
             ),
             AIMessage("Drafted R1."),
@@ -270,7 +275,8 @@ async def test_a_turn_reads_the_project_and_writes_the_manuscript(tmp_path):
     result = await agent.ainvoke({"messages": [("user", "Draft R1.")]}, config=_cfg())
 
     assert not result.get("__interrupt__")
-    assert (tmp_path / "manuscript.md").read_text(encoding="utf-8") == draft
+    written = tmp_path / "Manuscript" / "Results.md"
+    assert written.read_text(encoding="utf-8") == draft
     assert (tmp_path / "outline.md").exists()
     tool_text = {
         m.tool_call_id: str(m.content) for m in result["messages"] if m.type == "tool"

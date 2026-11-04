@@ -42,9 +42,16 @@ Then, inside the app:
 | Step | What you type | What happens |
 |---|---|---|
 | 1 | `/login` | Opens your browser. Choose **Continue with ChatGPT** and sign in. Needed once. |
-| 2 | `/init` | Creates `program.md`, `outline.md`, `manuscript.md` and the folders `Knowledge/`, `Figures/` and `Tables/` here. Files that already exist are never overwritten. |
+| 2 | `/init` | Creates `program.md`, `outline.md`, the folder `Manuscript/` with an empty file for each section of the outline (`Introduction.md`, `Results.md`, `Discussion.md`), and the folders `Knowledge/`, `Figures/` and `Tables/` here. Files that already exist are never overwritten. |
 | 3 | (chat) | Put your PDFs in `Knowledge/`. Fill in `program.md` and `outline.md` yourself or ask the agent to help; it reads and writes the files in the folder. Ask it to write a paragraph from the outline. |
-| 4 | `/run` | Writes the whole draft unattended, following `outline.md`, into `manuscript.md`. The same as running `metasci-scribe run` in a terminal. |
+| 4 | `/run` | Writes the whole draft unattended, following `outline.md`. `/run Results` writes only that section. The same as running `metasci-scribe run` (or `metasci-scribe run --section Results`) in a terminal. |
+
+**Where the text goes.** Each `##` section of `outline.md` has its own file in
+`Manuscript/`, named after the section, and the agent writes each paragraph
+into its section's file. Edit those files. `manuscript.md` is the whole draft
+in outline order: the app joins it from `Manuscript/` after every chat reply and
+every run. Do not edit `manuscript.md`; if it has text the app did not write,
+the app leaves it alone and says so, and deleting it lets the app join it again.
 
 To come back to a paper later, open a terminal in the same folder and run
 `metasci-scribe` again. `/threads` and `/resume` bring back an earlier

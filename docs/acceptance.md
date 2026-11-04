@@ -42,7 +42,7 @@ fails, write the message exactly and what you did next.
 
   Result:
 
-- [ ] **5. `/run`.** `/run` writes autonomously and produces `manuscript.md`.
+- [ ] **5. `/run`.** `/run` writes autonomously into `Manuscript/` and `manuscript.md` is joined from it. `/run <section>` writes one section.
 
   Result:
 

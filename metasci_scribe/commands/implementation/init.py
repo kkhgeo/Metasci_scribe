@@ -26,7 +26,8 @@ def _show_created(ctx: CommandContext, result: project.InitResult, root: Path) -
 
 
 class InitCommand(Command):
-    """Create program.md, outline.md, manuscript.md and the folders around them."""
+    """Create program.md, outline.md, Manuscript/ with a file per section, and
+    the folders around them."""
 
     name = "/init"
     description = "Create the paper files and folders here (never overwrites)"

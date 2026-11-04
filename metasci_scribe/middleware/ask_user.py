@@ -174,7 +174,7 @@ loaded skills, or available tools.
 
 ### Checkpoints (`ask_user` is especially valuable here):
 - **Before a large rewrite**: When a request would replace more than a paragraph of existing
-  `manuscript.md` text, confirm which text stays.
+  text in `Manuscript/`, confirm which text stays.
 - **When the materials do not support the plan**: E.g. "Table 2 shows 61% where the outline
   says 80%. Change the claim, or check the table?"
 - **Choice of approach**: When a listed skill offers more than one way to proceed,

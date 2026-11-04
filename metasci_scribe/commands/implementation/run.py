@@ -48,7 +48,10 @@ _active = False
 
 
 def _child_argv(
-    root: Path, model: str | None = None, provider: str | None = None
+    root: Path,
+    model: str | None = None,
+    provider: str | None = None,
+    section: str | None = None,
 ) -> list[str]:
     """The command that runs the paper in *root*, with no need for PATH.
 
@@ -57,6 +60,7 @@ def _child_argv(
     output whatever the Windows code page is. (They are flags, not ``PYTHON*``
     variables: ``-I`` makes the child ignore those.) *model* and *provider* are
     the chat's live choice, so the run uses the model the session shows.
+    *section* limits the run to one section of the outline.
     """
     argv = [sys.executable, "-I", "-X", "utf8", "-u", "-m", "metasci_scribe", "run"]
     argv += ["--workdir", str(root)]
@@ -64,6 +68,8 @@ def _child_argv(
         argv += ["--model", model]
     if provider:
         argv += ["--provider", provider]
+    if section:
+        argv += ["--section", section]
     return argv
 
 
@@ -185,12 +191,31 @@ async def _finish(proc: subprocess.Popen, reader: asyncio.Future) -> int:
 
 
 class RunCommand(Command):
-    """Write the draft unattended: ``metasci-scribe run`` in this folder."""
+    """Write the draft unattended: ``metasci-scribe run`` in this folder.
+    ``/run Results`` writes only that section of the outline."""
 
     name = "/run"
     description = (
-        "Write the draft unattended in a separate process (resumes where it stopped)"
+        "Write the draft unattended in a separate process (resumes where it "
+        "stopped); /run <section> writes one section"
     )
+
+    def get_completions(self, tokens, *, workspace=None):
+        """The outline's sections, for ``/run <section>``."""
+        if workspace is None or len(tokens) > 1:
+            return []
+        from ...manuscript import section_names
+
+        try:
+            outline = (workspace.root / "outline.md").read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            return []
+        prefix = tokens[0].casefold() if tokens else ""
+        return [
+            (name, "write only this section")
+            for name in section_names(outline)
+            if name.casefold().startswith(prefix) and name.casefold() != prefix
+        ]
 
     async def execute(self, ctx: CommandContext, args: list[str]) -> None:
         global _active
@@ -204,15 +229,17 @@ class RunCommand(Command):
         root = ctx.workspace.root
         _active = True
         try:
-            await self._run(ctx, root)
+            await self._run(ctx, root, " ".join(args).strip() or None)
         finally:
             _active = False
 
-    async def _run(self, ctx: CommandContext, root: Path) -> None:
+    async def _run(
+        self, ctx: CommandContext, root: Path, section: str | None = None
+    ) -> None:
         model, provider, auth_mode = _live_settings(ctx)
         try:
             proc = subprocess.Popen(
-                _child_argv(root, model, provider),
+                _child_argv(root, model, provider, section),
                 cwd=root,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
@@ -223,8 +250,9 @@ class RunCommand(Command):
         except OSError as exc:
             ctx.ui.append_system(f"✗ Could not start the run: {exc}", style="red")
             return
+        where = f"{root}, section {section}," if section else str(root)
         ctx.ui.append_system(
-            f"Run started in {root} with {_describe(model, provider, auth_mode)}. "
+            f"Run started in {where} with {_describe(model, provider, auth_mode)}. "
             "Your chat is not part of it. Ctrl+C stops it; /run again continues.",
             style="cyan",
         )

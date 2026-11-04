@@ -23,11 +23,15 @@ from metasci_scribe.project import (
 LAYOUT = [
     "program.md",
     "outline.md",
-    "manuscript.md",
     "Knowledge",
     "Figures",
     "Tables",
+    "Manuscript",
     ".metasci-scribe",
+    # One empty file per section of the template outline.
+    "Manuscript/Introduction.md",
+    "Manuscript/Results.md",
+    "Manuscript/Discussion.md",
 ]
 
 
@@ -58,9 +62,9 @@ def test_init_creates_layout(tmp_path, local_data_dir):
     r = init_project(tmp_path)
     for n in LAYOUT:
         assert (tmp_path / n).exists()
-    for d in ("Knowledge", "Figures", "Tables", ".metasci-scribe"):
+    for d in ("Knowledge", "Figures", "Tables", "Manuscript", ".metasci-scribe"):
         assert (tmp_path / d).is_dir()
-    assert [p.name for p in r.created] == LAYOUT
+    assert [p.relative_to(tmp_path).as_posix() for p in r.created] == LAYOUT
     assert r.skipped == []
 
 
@@ -86,13 +90,14 @@ def test_init_is_idempotent(tmp_path, local_data_dir):
     before = {p: p.read_bytes() for p in (tmp_path / n for n in LAYOUT) if p.is_file()}
     second = init_project(tmp_path)
     assert second.created == []
-    assert second.skipped == first.created
+    # Section files come only with a new outline, so they are not listed again.
+    assert second.skipped == [p for p in first.created if p.parent == tmp_path]
     assert {p: p.read_bytes() for p in before} == before
 
 
 def test_init_does_not_follow_a_dangling_link(tmp_path, local_data_dir):
     target = tmp_path / "elsewhere.md"
-    link = tmp_path / "manuscript.md"
+    link = tmp_path / "program.md"
     try:
         link.symlink_to(target)
     except OSError:
@@ -103,7 +108,9 @@ def test_init_does_not_follow_a_dangling_link(tmp_path, local_data_dir):
     assert not target.exists()
 
 
-@pytest.mark.parametrize("name", ["Knowledge", "Figures", "Tables", ".metasci-scribe"])
+@pytest.mark.parametrize(
+    "name", ["Knowledge", "Figures", "Tables", "Manuscript", ".metasci-scribe"]
+)
 def test_a_file_in_place_of_a_folder_is_a_problem(tmp_path, local_data_dir, name):
     (tmp_path / name).write_text("oops", encoding="utf-8")
     r = init_project(tmp_path)
@@ -241,10 +248,18 @@ def test_outline_comment_does_not_carry_the_open_marker(tmp_path, local_data_dir
     assert all(not re.match(r"#{1,6} ", ln) for c in comments for ln in c.splitlines())
 
 
-def test_manuscript_starts_empty_and_files_use_lf(tmp_path, local_data_dir):
+def test_section_files_start_empty_and_files_use_lf(tmp_path, local_data_dir):
     init_project(tmp_path)
-    assert (tmp_path / "manuscript.md").read_bytes() == b""
+    assert (tmp_path / "Manuscript" / "Results.md").read_bytes() == b""
+    assert not (tmp_path / "manuscript.md").exists()  # the app joins it later
     assert b"\r\n" not in (tmp_path / "outline.md").read_bytes()
+
+
+def test_an_outline_already_there_gets_no_section_files(tmp_path, local_data_dir):
+    (tmp_path / "outline.md").write_text("## Methods\n", encoding="utf-8")
+    init_project(tmp_path)
+    assert (tmp_path / "Manuscript").is_dir()
+    assert list((tmp_path / "Manuscript").iterdir()) == []
 
 
 # ---------------------------------------------------------- the guards

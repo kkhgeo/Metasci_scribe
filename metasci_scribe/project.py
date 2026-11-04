@@ -1,9 +1,10 @@
 """The paper folder: what ``/init`` creates, and the network-path check.
 
 A paper folder holds ``program.md`` (settings), ``outline.md`` (the map),
-``manuscript.md``, ``Knowledge/``, ``Figures/``, ``Tables/`` and the app's own
-``.metasci-scribe/``. ``init_project`` creates what is missing and never
-touches what exists.
+``Manuscript/`` (one file per outline section), ``Knowledge/``, ``Figures/``,
+``Tables/`` and the app's own ``.metasci-scribe/``. ``manuscript.md``, the
+joined draft, is written by the app later (:mod:`metasci_scribe.manuscript`).
+``init_project`` creates what is missing and never touches what exists.
 
 Network folders are not supported: ``Path.resolve()`` turns a mapped drive
 such as ``Z:`` into a UNC path, which Windows path handling and the shell
@@ -22,6 +23,7 @@ from importlib import resources
 from pathlib import Path, PurePath, PureWindowsPath
 
 from . import paths
+from .manuscript import MANUSCRIPT_DIR, section_file_name, section_names
 
 # GetDriveTypeW return values (winbase.h).
 DRIVE_NO_ROOT_DIR = 1
@@ -211,7 +213,7 @@ def problem_reason(path: Path) -> str:
     return "is not a regular file (a broken link?)"
 
 
-_FOLDERS = ("Knowledge", "Figures", "Tables", STATE_DIR_NAME)
+_FOLDERS = ("Knowledge", "Figures", "Tables", MANUSCRIPT_DIR, STATE_DIR_NAME)
 
 
 def init_project(root: Path) -> InitResult:
@@ -231,10 +233,10 @@ def init_project(root: Path) -> InitResult:
         raise NotADirectoryError(f"{root} is not a folder")
 
     result = InitResult()
+    outline = _template("outline.md")
     files = {
         "program.md": _template("program.md"),
-        "outline.md": _template("outline.md"),
-        "manuscript.md": "",
+        "outline.md": outline,
     }
     target = root
     try:
@@ -255,6 +257,16 @@ def init_project(root: Path) -> InitResult:
                 result.skipped.append(target)
             else:
                 result.problems.append(target)
+        # An empty file per section, only for the outline made just now: an
+        # outline the author already had may name other sections.
+        if (
+            root / "outline.md" in result.created
+            and root / MANUSCRIPT_DIR in result.created
+        ):
+            for section in section_names(outline):
+                target = root / MANUSCRIPT_DIR / section_file_name(section)
+                if _write_new(target, ""):
+                    result.created.append(target)
     except OSError as exc:
         raise InitError(f"Could not create {target}: {exc}", result) from exc
     return result
