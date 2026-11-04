@@ -17,7 +17,7 @@ Fill this in by hand. The person who tests signs in to ChatGPT in the browser.
 | Python, uv, Git versions | |
 | Install command used | |
 | App version (`metasci-scribe --version`) | |
-| Paper folder (local disk) | |
+| Paper folder (local disk or drive letter) | |
 | ChatGPT plan | |
 
 ## Completion criteria

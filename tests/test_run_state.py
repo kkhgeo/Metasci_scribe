@@ -245,16 +245,15 @@ def test_outline_that_is_not_utf8_fails_cleanly(project):
     assert "UTF-8" in result.message
 
 
-def test_network_folder_is_refused(project, monkeypatch):
+def test_network_share_without_a_drive_letter_is_refused(project, monkeypatch):
+    from metasci_scribe import drive_paths
     from metasci_scribe import project as project_mod
 
-    monkeypatch.setattr(
-        project_mod, "_drive_type", lambda root: project_mod.DRIVE_REMOTE
-    )
+    monkeypatch.setattr(drive_paths, "_roots", [])
     monkeypatch.setattr(project_mod, "_IS_WINDOWS", True)
-    result = run_project(Path("Z:/papers/mine"), boom)
+    result = run_project(Path("//host/share/papers/mine"), boom)
     assert result.exit == RunExit.FAILED
-    assert "network" in result.message.lower()
+    assert "drive letter" in result.message
 
 
 def test_folder_holding_the_data_dir_is_refused(project, monkeypatch):

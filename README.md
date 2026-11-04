@@ -28,8 +28,8 @@ To update, run the same install command again with `--reinstall`.
 
 ## Quick start
 
-Make a folder for the paper, **on a local disk** (for example
-`C:\papers\my-paper`), and start the app in it:
+Make a folder for the paper (for example `C:\papers\my-paper`, or a folder
+on a network drive with a letter such as `Z:`), and start the app in it:
 
 ```bash
 mkdir my-paper
@@ -110,8 +110,11 @@ failed or could not start, 3 plan usage limit, 4 a paragraph needs your decision
 - **PDFs are extracted as text.** The text of every PDF in `Knowledge/` is made
   available to the agent. A scanned PDF has no text layer and gives nothing; run
   OCR on it with another tool first.
-- **Paper folders must be on a local disk.** A network drive, a mapped drive
-  letter such as `Z:` or a `\\server\share` path is refused with a message.
+- **A network folder needs a drive letter.** A folder on a mapped network
+  drive such as `Z:` (RaiDrive, a mapped Windows share) works, more slowly than
+  a local disk. A `\\server\share` path with no drive letter is refused with a
+  message: map the share to a letter first. Do not open the same paper folder
+  from two computers at once.
 - **Memory and scheduled features are off.** The app does not learn between
   papers and does not run anything on a schedule. With memory off the agent
   has no path to the memory folder.

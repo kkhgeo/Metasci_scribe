@@ -9,6 +9,11 @@ from __future__ import annotations
 
 from importlib import import_module
 
+from . import drive_paths
+
+# Before anything resolves a path: a mapped network drive keeps its letter.
+drive_paths.install()
+
 _EXPORTS: dict[str, tuple[str, str]] = {
     # Agent graph (lazy to avoid expensive initialization at import time)
     "scribe_agent": (".agent", "scribe_agent"),

@@ -43,18 +43,6 @@ def local_data_dir(monkeypatch, tmp_path_factory):
     return data
 
 
-def _fake_drive_type(monkeypatch, kinds: dict[str, int]):
-    calls: list[str] = []
-
-    def fake(root: str) -> int:
-        calls.append(root)
-        return kinds.get(root[:1].upper(), project.DRIVE_NO_ROOT_DIR)
-
-    monkeypatch.setattr(project, "_drive_type", fake)
-    monkeypatch.setattr(project, "_IS_WINDOWS", True)
-    return calls
-
-
 # ------------------------------------------------------------ the layout
 
 
@@ -295,38 +283,35 @@ def test_posix_path_is_never_network(monkeypatch):
     assert not is_network_path(Path("/mnt/z/paper"))
 
 
-def test_remote_drive_is_network(monkeypatch):
-    calls = _fake_drive_type(monkeypatch, {"Z": project.DRIVE_REMOTE})
-    assert is_network_path(r"Z:\papers\a")
-    assert is_network_path(PureWindowsPath("z:/papers/a"))
-    assert calls[0] == "Z:\\"
+def _map_drive(monkeypatch, root: str, drive: str) -> None:
+    from metasci_scribe import drive_paths
+
+    monkeypatch.setattr(drive_paths, "_roots", [(root, drive)])
+    monkeypatch.setattr(project, "_IS_WINDOWS", True)
 
 
-def test_extended_prefix_on_a_remote_drive_is_network(monkeypatch):
-    _fake_drive_type(monkeypatch, {"Z": project.DRIVE_REMOTE})
-    assert is_network_path("\\\\?\\Z:\\papers")
-
-
-def test_fixed_removable_and_missing_drives_are_not_network(monkeypatch):
-    _fake_drive_type(
-        monkeypatch, {"C": project.DRIVE_FIXED, "E": project.DRIVE_REMOVABLE}
-    )
+def test_a_drive_letter_is_never_a_network_path(monkeypatch):
+    """A mapped network drive works: its letter is kept when paths resolve."""
+    _map_drive(monkeypatch, r"\\host\share", "Z:")
+    assert not is_network_path(r"Z:\papers\a")
+    assert not is_network_path(PureWindowsPath("z:/papers/a"))
+    assert not is_network_path("\\\\?\\Z:\\papers")
     assert not is_network_path(r"C:\papers")
-    assert not is_network_path(r"E:\papers")
-    assert not is_network_path(r"Q:\papers")  # no such drive
-    assert not is_network_path("\\\\?\\C:\\papers")
+
+
+def test_a_share_a_drive_letter_maps_is_not_a_network_path(monkeypatch):
+    _map_drive(monkeypatch, r"\\host\share", "Z:")
+    assert not is_network_path(r"\\host\share\papers")
+    assert not is_network_path(r"\\HOST\Share")
+    assert not is_network_path("\\\\?\\UNC\\host\\share\\papers")
+    assert is_network_path(r"\\host\other\papers")
+    assert is_network_path(r"\\host\shared\papers")  # not under \\host\share
 
 
 def test_relative_path_is_judged_by_where_it_lands(monkeypatch):
-    _fake_drive_type(monkeypatch, {"Z": project.DRIVE_REMOTE})
-    monkeypatch.setattr(project.os.path, "abspath", lambda p: "Z:\\cwd\\paper")
+    _map_drive(monkeypatch, r"\\host\share", "Z:")
+    monkeypatch.setattr(project.os.path, "abspath", lambda p: r"\\host\other\paper")
     assert is_network_path("paper")
-
-
-@pytest.mark.skipif(project.os.name != "nt", reason="Windows API")
-def test_drive_type_asks_windows_for_a_local_drive():
-    system_drive = project.os.environ.get("SystemDrive", "C:")
-    assert project._drive_type(system_drive + "\\") == project.DRIVE_FIXED
 
 
 def test_init_refuses_network_path(monkeypatch, tmp_path, local_data_dir):
@@ -443,7 +428,7 @@ async def test_init_command_lists_problems(tmp_path, local_data_dir):
 
 
 def test_stored_network_folder_is_refused_by_its_raw_spelling(monkeypatch):
-    _fake_drive_type(monkeypatch, {"C": project.DRIVE_FIXED})
+    _map_drive(monkeypatch, r"\\elsewhere\share", "Z:")
     with pytest.raises(NetworkPathError) as err:
         project.require_local_stored("//host/share/paper", None)
     assert "//host/share/paper" in str(err.value)

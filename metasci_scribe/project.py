@@ -6,9 +6,11 @@ A paper folder holds ``program.md`` (settings), ``outline.md`` (the map),
 joined draft, is written by the app later (:mod:`metasci_scribe.manuscript`).
 ``init_project`` creates what is missing and never touches what exists.
 
-Network folders are not supported: ``Path.resolve()`` turns a mapped drive
-such as ``Z:`` into a UNC path, which Windows path handling and the shell
-cannot all deal with. ``is_network_path`` finds both spellings so the app can
+A network drive with a letter (``Z:``) works like a local one:
+:mod:`metasci_scribe.drive_paths` keeps the letter when a path is resolved. A
+share reached only by its UNC name (``\\\\host\\share``) does not:
+``cmd.exe`` cannot use it as a working folder, and some drive tools publish a
+UNC name Windows cannot open. ``is_network_path`` finds those so the app can
 stop with a clear message instead of failing later with strange path errors.
 """
 
@@ -23,13 +25,8 @@ from importlib import resources
 from pathlib import Path, PurePath, PureWindowsPath
 
 from . import paths
+from .drive_paths import drive_letter_path
 from .manuscript import MANUSCRIPT_DIR, section_file_name, section_names
-
-# GetDriveTypeW return values (winbase.h).
-DRIVE_NO_ROOT_DIR = 1
-DRIVE_REMOVABLE = 2
-DRIVE_FIXED = 3
-DRIVE_REMOTE = 4
 
 _IS_WINDOWS = os.name == "nt"
 _DRIVE = re.compile(r"([A-Za-z]):")
@@ -37,14 +34,14 @@ _DRIVE = re.compile(r"([A-Za-z]):")
 STATE_DIR_NAME = ".metasci-scribe"
 
 NETWORK_PATH_MESSAGE = (
-    "{path} is on a network drive or share, which Metasci Scribe does not "
-    "support. Copy the paper folder to a local disk (for example C:\\papers) "
-    "and open it there."
+    "{path} is a network share without a drive letter, which Metasci Scribe "
+    "does not support. Map the share to a drive letter (for example Z:) and "
+    "open the folder through it, or copy the folder to a local disk."
 )
 
 
 class NetworkPathError(RuntimeError):
-    """The folder is on a network drive or share."""
+    """The folder is a network share reached without a drive letter."""
 
 
 @dataclass
@@ -72,43 +69,32 @@ class InitError(RuntimeError):
         self.result = result
 
 
-def _drive_type(root: str) -> int:
-    """``GetDriveTypeW`` for a drive root such as ``Z:\\`` (Windows only)."""
-    import ctypes
-
-    return int(ctypes.windll.kernel32.GetDriveTypeW(root))  # type: ignore[attr-defined]
-
-
 def is_network_path(path: str | os.PathLike[str] | PurePath) -> bool:
-    """Whether *path* is a UNC path or lies on a mapped network drive.
+    """Whether *path* is a network share reached without a drive letter.
 
-    ``\\\\host\\share\\...``, ``//host/share/...`` and ``\\\\?\\UNC\\...`` are
-    network paths. A drive letter is asked from Windows (``DRIVE_REMOTE``). A
-    relative path counts by where it lands from the current folder. Other
-    platforms always answer False. The path need not exist.
+    ``\\\\host\\share\\...``, ``//host/share/...`` and ``\\\\?\\UNC\\...`` are,
+    unless a mapped drive letter covers the share. A path with a drive letter
+    never is, network drive or not. A relative path counts by where it lands
+    from the current folder. Other platforms always answer False. The path need
+    not exist.
     """
     if not (_IS_WINDOWS or isinstance(path, PureWindowsPath)):
         return False
     text = str(path).replace("/", "\\")
     low = text.lower()
-    if low.startswith("\\\\?\\unc\\"):
-        return True
+    if low.startswith("\\\\?\\unc\\") or (
+        text.startswith("\\\\") and not low.startswith(("\\\\?\\", "\\\\.\\"))
+    ):
+        return not _IS_WINDOWS or drive_letter_path(text) == text
     if low.startswith(("\\\\?\\", "\\\\.\\")):
         text = text[4:]
-    elif text.startswith("\\\\"):
-        return True
-    match = _DRIVE.match(text)
-    if match is None:
-        if not _IS_WINDOWS or PureWindowsPath(text).is_absolute():
-            return False
-        # No drive: relative to the current folder, which may be a network one.
-        landed = os.path.abspath(text)
-        if landed.replace("/", "\\") == text:
-            return False
-        return is_network_path(landed)
-    if not _IS_WINDOWS:
+    if _DRIVE.match(text) or not _IS_WINDOWS or PureWindowsPath(text).is_absolute():
         return False
-    return _drive_type(match.group(1).upper() + ":\\") == DRIVE_REMOTE
+    # No drive: relative to the current folder, which may be a network one.
+    landed = os.path.abspath(text)
+    if landed.replace("/", "\\") == text:
+        return False
+    return is_network_path(landed)
 
 
 def require_local_path(path: str | os.PathLike[str] | PurePath) -> None:
