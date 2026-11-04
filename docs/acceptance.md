@@ -10,14 +10,14 @@ Fill this in by hand. The person who tests signs in to ChatGPT in the browser.
 
 | Item | Value |
 |---|---|
-| Date | |
-| Tester | |
-| Windows version | |
-| Windows user | clean user profile: yes / no |
-| Python, uv, Git versions | |
-| Install command used | |
-| App version (`metasci-scribe --version`) | |
-| Paper folder (local disk or drive letter) | |
+| Date | 2026-11-05 (steps 1-3) |
+| Tester | kkhgeo |
+| Windows version | Windows 11 Pro 23H2 (10.0.22631.7652) |
+| Windows user | clean user profile: no (the development PC) |
+| Python, uv, Git versions | app's Python 3.12.13 (installed by uv), uv 0.12.1, Git 2.49.0 |
+| Install command used | `uv tool install --reinstall git+https://github.com/kkhgeo/Metasci_scribe` |
+| App version (`metasci-scribe --version`) | 0.1.0.dev0, commit ddfa98b |
+| Paper folder (local disk or drive letter) | `Z:\KKH_Research\KKH_ECO_2026\ECO_ISLAND\Final_draft` (RaiDrive network drive) |
 | ChatGPT plan | |
 
 ## Completion criteria
@@ -25,17 +25,22 @@ Fill this in by hand. The person who tests signs in to ChatGPT in the browser.
 Mark each line `[x]` when it passes and write what you saw under it. If a step
 fails, write the message exactly and what you did next.
 
-- [ ] **1. Install and start.** The app is installed and starts.
+- [x] **1. Install and start.** The app is installed and starts.
 
-  Result:
+  Result: installed from GitHub with the command above; the start screen
+  (METASCI logo, model, folder, status bar) appears.
 
-- [ ] **2. `/login`.** `/login` connects to ChatGPT.
+- [x] **2. `/login`.** `/login` connects to ChatGPT.
 
-  Result:
+  Result: the browser opened, the tester chose Continue with ChatGPT and signed
+  in; the app reported the sign-in.
 
-- [ ] **3. `/init`.** `/init` creates the paper folder layout.
+- [x] **3. `/init`.** `/init` creates the paper folder layout.
 
-  Result:
+  Result: on the Z: drive, `program.md`, `outline.md`, `Knowledge/`,
+  `Figures/`, `Tables/`, `.metasci-scribe/` and `Manuscript/` with
+  `Introduction.md`, `Results.md` and `Discussion.md` were created. Before
+  ddfa98b the app refused network drives; see the "Problems found" table.
 
 - [ ] **4. Chat editing.** In chat, `outline.md` is edited and a paragraph is
   written. The agent reads and writes the files.
@@ -76,4 +81,5 @@ this record is late against the rule above.
 
 | Step | What happened | Fix or decision |
 |---|---|---|
-| | | |
+| 3 | The tester's papers live on the Z: drive (RaiDrive), and the app refused network folders. | Supported: Z: resolves to an unopenable UNC name, so the app keeps the drive letter (`drive_paths.py`, ddfa98b). |
+| 3 | The tester asked for the manuscript per section. | `Manuscript/<Section>.md` per outline section, joined into `manuscript.md`; `/run <section>` (b2a4de4). |
