@@ -58,6 +58,14 @@ To come back to a paper later, open a terminal in the same folder and run
 conversation (the threads an autonomous run keeps for itself are not listed),
 and `/run` continues a draft where it stopped.
 
+**Drawing the outline.** `/run` writes from `outline.md`, so draw it first:
+type `/scribe-mapping` and what you want, for example `/scribe-mapping Results
+단락 구성 잡아줘`. The agent reads your materials, shows the structure as a
+diagram and tables, settles the open choices (`◇`) with you, and saves the agreed
+map into `outline.md` in the form `/run` reads. A section with a `◇` left is not
+written by `/run`. Skills that ship with the app are named `scribe-…`, apart from
+any skill of the same purpose you have installed elsewhere.
+
 Other commands: `/help` lists them all. `/model` switches the model, `/logout`
 signs out, `/rubric` and `/goal` set acceptance criteria that the agent's work is
 checked against (see [docs/guides](docs/guides/)), and `/skills` and

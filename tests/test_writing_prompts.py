@@ -170,12 +170,36 @@ class TestSubagents:
         assert "JSON" not in text
 
 
+BUILT_IN = {"skill-creator", "scribe-mapping"}
+
+
 class TestBuiltInSkills:
-    def test_only_skill_creator_ships(self):
+    def test_the_shipped_skills(self):
         from pathlib import Path
 
         shipped = {p.name for p in Path(SKILLS_DIR).iterdir() if p.is_dir()}
-        assert shipped == {"skill-creator"}
+        assert shipped == BUILT_IN
+
+    def test_app_skills_are_named_apart_from_the_authors_own(self):
+        """Ported skills carry a scribe- prefix, so neither the agent nor the
+        author mixes them up with a same-named skill installed elsewhere."""
+        assert all(n.startswith("scribe-") for n in BUILT_IN - {"skill-creator"})
+
+    def test_the_mapping_skill_saves_the_outline_run_reads(self):
+        from pathlib import Path
+
+        from metasci_scribe.run import open_markers, parse_paragraphs
+
+        text = (
+            Path(SKILLS_DIR) / "scribe-mapping" / "references" / "map-format.md"
+        ).read_text(encoding="utf-8")
+        example = text.split("````markdown\n", 1)[1].split("````", 1)[0]
+        paragraphs = parse_paragraphs(example)
+        assert [(p.id, p.section) for p in paragraphs] == [
+            ("D1", "Discussion"),
+            ("D2", "Discussion"),
+        ]
+        assert len(open_markers(example)) == 1  # the open choice it shows
 
 
 # -- One real turn ------------------------------------------------------------
@@ -291,7 +315,7 @@ async def test_a_turn_reads_the_project_and_writes_the_manuscript(tmp_path):
     assert ".metasci-scribe/extracted" in system
     assert "experiment" not in system.lower()
     assert "web search" not in system.lower()
-    assert _skill_names(system) == {"skill-creator"}
+    assert _skill_names(system) == BUILT_IN
 
 
 @pytest.mark.usefixtures("no_mcp")
@@ -312,7 +336,7 @@ async def test_a_project_skill_added_between_messages_is_listed_next_message(
 
     await agent.ainvoke({"messages": [("user", "one")]}, config=cfg)
     before = _skill_names(_system_text(model.seen[-1]))
-    assert before == {"skill-creator"}
+    assert before == BUILT_IN
 
     # The harness plays the user installing a skill by hand: the agent's own
     # file tools cannot write under .metasci-scribe/.
@@ -326,7 +350,7 @@ async def test_a_project_skill_added_between_messages_is_listed_next_message(
 
     await agent.ainvoke({"messages": [("user", "two")]}, config=cfg)
     after = _skill_names(_system_text(model.seen[-1]))
-    assert after == {"skill-creator", "journal-style"}
+    assert after == BUILT_IN | {"journal-style"}
 
 
 def _tool_texts(result) -> dict[str, str]:
