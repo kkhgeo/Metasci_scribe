@@ -57,6 +57,7 @@ DEFAULT_ALWAYS_INCLUDE_TOOLS: frozenset[str] = frozenset(
         "ask_user",
         "update_goal",
         "code_interpreter",
+        "show_outline_map",
         # Files and shell
         "ls",
         "read_file",

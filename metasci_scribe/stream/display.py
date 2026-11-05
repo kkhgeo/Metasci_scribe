@@ -32,6 +32,7 @@ from ..runtime import AsyncRuntime, RuntimeHandle
 from .console import console
 from .diff_format import build_edit_diff
 from .formatter import ToolResultFormatter
+from .markdown_tables import install as _install_grid_tables
 from .state import (
     StreamState,
     SubAgentState,
@@ -51,6 +52,9 @@ if TYPE_CHECKING:
 
     from ..backends import ParkedCloseReason
     from .interaction import ApprovalOutcome
+
+# Every Markdown answer draws its tables with a line between rows.
+_install_grid_tables()
 
 # ---------------------------------------------------------------------------
 # Shared globals

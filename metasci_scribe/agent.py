@@ -581,6 +581,16 @@ def _maybe_swap_async_subagents(
     return out
 
 
+def _chat_only_tools(cfg, workspace: Workspace) -> list:
+    """Tools for a conversation with the author, left out of unattended runs:
+    ``show_outline_map`` opens a page in the author's browser."""
+    if getattr(cfg, "auto_mode", False):
+        return []
+    from .tools import make_outline_map_tool
+
+    return [make_outline_map_tool(workspace.root)]
+
+
 def _build_base_kwargs(
     base_backend,
     base_middleware,
@@ -597,7 +607,11 @@ def _build_base_kwargs(
     cfg = cfg if cfg is not None else _ensure_config()
     work_dir = work_dir if work_dir is not None else workspace.root
     tool_registry = {"think_tool": think_tool}
-    base_tools = [think_tool, make_skill_manager_tool(workspace, work_dir=work_dir)]
+    base_tools = [
+        think_tool,
+        make_skill_manager_tool(workspace, work_dir=work_dir),
+        *_chat_only_tools(cfg, workspace),
+    ]
 
     subs = load_subagents(
         SUBAGENTS_CONFIG,
@@ -671,7 +685,11 @@ def load_mcp_and_build_kwargs(
         )
 
     tool_registry = {"think_tool": think_tool}
-    base_tools = [think_tool, make_skill_manager_tool(workspace, work_dir=work_dir)]
+    base_tools = [
+        think_tool,
+        make_skill_manager_tool(workspace, work_dir=work_dir),
+        *_chat_only_tools(cfg, workspace),
+    ]
 
     # Fresh tool registry — start from base tools + MCP tools
     registry = dict(tool_registry)
