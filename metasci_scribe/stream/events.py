@@ -539,6 +539,9 @@ class _V3EventProcessor:
         self._selector = _ToolSelectionSuppressor(emitter, events or NO_OP_SINK)
         self._records: dict[tuple[str, ...], _CallRecord] = {}
         self._namespace: tuple[str, ...] = ()
+        # Whitespace-only text chunks waiting for the text they precede, per
+        # subagent instance ("" is the root answer).
+        self._pending_space: dict[str, str] = {}
 
     @staticmethod
     def _tool_scope(
@@ -577,6 +580,7 @@ class _V3EventProcessor:
                 0, len(self.full_response) - record.full_response_len
             )
             self.full_response = self.full_response[: record.full_response_len]
+            self._pending_space.pop("", None)
             if record.selector_snapshot is not None:
                 self._selector.restore(record.selector_snapshot)
             self._process_value_message_snapshots = self._value_recovery
@@ -1289,8 +1293,17 @@ class _V3EventProcessor:
         if not text:
             return []
         cleaned = _strip_legacy_thinking_tags(text)
-        if not cleaned or cleaned.isspace():
+        if not cleaned:
             return []
+        key = subagent.instance_id if subagent is not None else ""
+        if cleaned.isspace():
+            # Held, not dropped: OpenAI models stream line breaks and spaces as
+            # chunks of their own, and losing them ran Markdown tables, lists
+            # and paragraphs into one line. Whitespace that no text follows
+            # is still never emitted.
+            self._pending_space[key] = self._pending_space.get(key, "") + cleaned
+            return []
+        cleaned = self._pending_space.pop(key, "") + cleaned
         suppressed, events, emit_text = self._selector.process_text(cleaned)
         if suppressed:
             return events

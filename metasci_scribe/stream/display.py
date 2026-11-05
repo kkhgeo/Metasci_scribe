@@ -495,7 +495,7 @@ def _render_subagent_section(sa: "SubAgentState", compact: bool = False) -> list
         sa: Sub-agent state to render
         compact: If True, render minimal 1-line summary (completed sub-agents)
 
-    Header uses "Cooking with {name}" style matching task tool format.
+    Header uses "Asking {name}" style matching task tool format.
     Active sub-agents show bordered tool list; completed ones collapse to 1 line.
     """
     elements = []
@@ -515,7 +515,7 @@ def _render_subagent_section(sa: "SubAgentState", compact: bool = False) -> list
             pending.append(tc)
 
     # Build display name
-    display_name = f"Cooking with {sa.name}"
+    display_name = f"Asking {sa.name}"
     if sa.description:
         desc = sa.description.split("\n")[0].strip()
         desc = desc[:50] + "\u2026" if len(desc) > 50 else desc
@@ -1574,15 +1574,6 @@ def _resolve_ask_user_prompt(
         return {"answers": [], "status": "answered"}
 
     total = len(questions)
-    console.print()
-    console.print(
-        Panel(
-            Text("Quick check-in from metasci_scribe", style="bold"),
-            border_style="cyan",
-            padding=(0, 1),
-        )
-    )
-    console.print()
 
     answers: list[str] = []
     try:
@@ -1591,13 +1582,24 @@ def _resolve_ask_user_prompt(
             q_type = q.get("type", "text")
             required = q.get("required", True)
             optional_suffix = " (optional)" if not required else ""
-            # The prompt is redrawn in place and silently cut when it is
-            # taller than the terminal, so a long question is printed above
-            # it and only its last line stays in the prompt.
-            body, _, last_line = str(q_text).rstrip().rpartition("\n")
-            if body:
-                console.print(Text(body))
-            prompt_text = f"({i + 1}/{total}) {last_line}{optional_suffix}"
+            # The whole question goes in a box above the prompt, rendered as
+            # Markdown. The prompt itself stays one short line: questionary
+            # redraws it in place and cuts it silently when it is taller than
+            # the terminal.
+            title = "Metasci Scribe asks" + (f" ({i + 1}/{total})" if total > 1 else "")
+            console.print()
+            console.print(
+                Panel(
+                    Markdown(str(q_text).strip()),
+                    title=Text(title, style="bold"),
+                    title_align="left",
+                    border_style="cyan",
+                    padding=(0, 1),
+                )
+            )
+            prompt_text = (
+                "Choose one" if q_type == "multiple_choice" else "Your answer"
+            ) + optional_suffix
 
             def _make_validator(is_required: bool):
                 def _validate(v: str) -> bool | str:

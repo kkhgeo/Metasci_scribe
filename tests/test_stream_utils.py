@@ -236,12 +236,12 @@ class TestFormatToolCompact:
         result = format_tool_compact(
             "task", {"subagent_type": "research-agent", "description": "Find papers"}
         )
-        assert "Cooking with research-agent" in result
+        assert "Asking research-agent" in result
         assert "Find papers" in result
 
     def test_task_with_type_only(self):
         result = format_tool_compact("task", {"subagent_type": "code-agent"})
-        assert result == "Cooking with code-agent"
+        assert result == "Asking code-agent"
 
     def test_task_with_desc_only(self):
         result = format_tool_compact("task", {"description": "do stuff"})

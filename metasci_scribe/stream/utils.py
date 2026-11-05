@@ -209,7 +209,7 @@ def format_tool_compact(name: str, args: dict | None) -> str:
     if name_lower == "read_todos":
         return "read_todos()"
 
-    # Sub-agent delegation — display as "Cooking with {agent}" instead of "task()"
+    # Sub-agent delegation — display as "Asking {agent}" instead of "task()"
     if name_lower == "task":
         sa_type = args.get("subagent_type", "").strip()
         task_desc = args.get("description", args.get("task", "")).strip()
@@ -218,8 +218,8 @@ def format_tool_compact(name: str, args: dict | None) -> str:
             if task_desc:
                 if len(task_desc) > 50:
                     task_desc = task_desc[:47] + "\u2026"
-                return f"Cooking with {sa_type} — {task_desc}"
-            return f"Cooking with {sa_type}"
+                return f"Asking {sa_type} — {task_desc}"
+            return f"Asking {sa_type}"
 
     # Web search
     if name_lower == "internet_search":

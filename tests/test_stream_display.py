@@ -420,10 +420,10 @@ def test_streaming_display_preserves_task_narration_while_subagent_runs():
     rendered = _render_text(renderable)
 
     assert "I'll ask a specialist to inspect this." in rendered
-    assert "Cooking with code-agent" in rendered
+    assert "Asking code-agent" in rendered
     assert "execute(rg -n TODO .)" in rendered
     assert rendered.index("I'll ask a specialist to inspect this.") < rendered.index(
-        "Cooking with code-agent"
+        "Asking code-agent"
     )
 
 
@@ -479,9 +479,9 @@ def test_streaming_display_orders_final_task_narration_by_tool_index():
     rendered = _render_text(renderable)
 
     assert rendered.index("I'll ask a specialist to inspect this.") < rendered.index(
-        "Cooking with code-agent"
+        "Asking code-agent"
     )
-    assert rendered.index("Cooking with code-agent") < rendered.index(
+    assert rendered.index("Asking code-agent") < rendered.index(
         "Now I will run the result locally."
     )
     assert rendered.index("Now I will run the result locally.") < rendered.index(

@@ -270,8 +270,9 @@ class TestTallQuestion:
                 data, question_runner=lambda _question: "CIFAR-10"
             )
         assert result == {"answers": ["CIFAR-10"], "status": "answered"}
-        assert prompts == ["(1/1) Pick a dataset"]
-        assert "Pick a dataset" not in out.getvalue().split("Quick check-in")[-1]
+        # The question is in the box above; the prompt line stays short.
+        assert prompts == ["Your answer"]
+        assert "Pick a dataset" in out.getvalue()
 
     def test_a_long_question_is_printed_above_a_one_line_prompt(self):
         from metasci_scribe.stream import display as display_mod
@@ -304,10 +305,11 @@ class TestTallQuestion:
                 data, question_runner=lambda _question: "Accept"
             )
         assert result == {"answers": ["Accept"], "status": "answered"}
-        assert prompts == ["(1/1) Accept them, or type what to change."]
+        assert prompts == ["Choose one"]
         printed = out.getvalue()
         assert "Proposed acceptance criteria for the goal:" in printed
-        assert "- b" in printed
+        assert "Accept them, or type what to change." in printed
+        assert "• b" in printed  # rendered as Markdown inside the box
 
 
 class TestEventsArriveWhileWorkGoesOn:
