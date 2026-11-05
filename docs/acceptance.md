@@ -10,7 +10,7 @@ Fill this in by hand. The person who tests signs in to ChatGPT in the browser.
 
 | Item | Value |
 |---|---|
-| Date | 2026-11-05 (steps 1-3) |
+| Date | 2026-11-05 (steps 1-4) |
 | Tester | kkhgeo |
 | Windows version | Windows 11 Pro 23H2 (10.0.22631.7652) |
 | Windows user | clean user profile: no (the development PC) |
@@ -42,10 +42,13 @@ fails, write the message exactly and what you did next.
   `Introduction.md`, `Results.md` and `Discussion.md` were created. Before
   ddfa98b the app refused network drives; see the "Problems found" table.
 
-- [ ] **4. Chat editing.** In chat, `outline.md` is edited and a paragraph is
+- [x] **4. Chat editing.** In chat, `outline.md` is edited and a paragraph is
   written. The agent reads and writes the files.
 
-  Result:
+  Result: on the Z: drive, `/scribe-mapping` drew the outline, the map opened
+  in the browser, the agreed outline was saved into `outline.md`, and a
+  paragraph was written in chat into its section file in `Manuscript/`.
+  Checked by the tester with commit 47587b0.
 
 - [ ] **5. `/run`.** `/run` writes autonomously into `Manuscript/` and `manuscript.md` is joined from it. `/run <section>` writes one section.
 
