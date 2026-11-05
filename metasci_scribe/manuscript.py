@@ -44,6 +44,8 @@ _JOINED_STAMP = "manuscript.joined.sha256"
 # A section heading of outline.md: ``## Results``.
 SECTION_HEADING = re.compile(r"^##[ \t]+(?P<name>\S.*?)[ \t]*#*[ \t]*$")
 
+# A line naming the outline paragraph that follows it in a section file.
+PARAGRAPH_ANCHOR = re.compile(r"^[ \t]*<!--[ \t]*(?P<id>[A-Za-z]+\d+)[ \t]*-->[ \t]*$")
 _COMMENT = re.compile(r"<!--.*?(?:-->|\Z)", re.DOTALL)
 _BAD_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _RESERVED = {"CON", "PRN", "AUX", "NUL"} | {
@@ -146,8 +148,11 @@ class JoinResult:
 
 def _body(text: str, section: str) -> str:
     """The section file's text without a first heading that repeats the
-    section name, since the join adds its own."""
-    lines = text.strip().split("\n")
+    section name, since the join adds its own, and without the paragraph
+    anchors (``<!-- R3 -->``) the run keeps in the section files."""
+    lines = [
+        line for line in text.strip().split("\n") if not PARAGRAPH_ANCHOR.match(line)
+    ]
     if lines and (m := re.match(r"^#{1,6}[ \t]+(.*?)[ \t]*#*[ \t]*$", lines[0])):
         if same_section(m.group(1), section):
             lines = lines[1:]

@@ -122,8 +122,10 @@ def cli():
 
     runner = CliRunner()
 
+    # These tests are about the run in one go; the paragraph review has its
+    # own (test_run_review.py).
     def run(root: Path):
-        return runner.invoke(app, ["run", "--workdir", str(root)])
+        return runner.invoke(app, ["run", "--workdir", str(root), "--quick"])
 
     return run
 
@@ -135,7 +137,7 @@ def cli_with():
     runner = CliRunner()
 
     def run(root: Path, *options: str):
-        return runner.invoke(app, ["run", "--workdir", str(root), *options])
+        return runner.invoke(app, ["run", "--workdir", str(root), "--quick", *options])
 
     return run
 
@@ -251,7 +253,7 @@ def test_resume_after_usage_limit_in_a_second_invocation(paper, model, cli):
 def test_ctrl_c_exits_130_and_says_run_resumes(paper, monkeypatch, cli):
     import metasci_scribe.run as run_mod
 
-    def interrupted(root, invoke, section=None):
+    def interrupted(root, invoke, section=None, **_):
         raise KeyboardInterrupt
 
     monkeypatch.setattr(run_mod, "run_project", interrupted)
@@ -593,7 +595,7 @@ async def test_run_uses_the_model_the_chat_switched_to_and_says_so(
     stub("lines", "0")
     stub_argv = run_cmd._child_argv
 
-    def argv(root, model=None, provider=None, section=None):
+    def argv(root, model=None, provider=None, section=None, quick=False):
         seen.update(model=model, provider=provider)
         return stub_argv(root)
 
@@ -983,3 +985,40 @@ def test_slash_run_passes_the_section_and_suggests_the_outlines_sections(paper):
         n for n, _ in RunCommand().get_completions(["re"], workspace=Workspace(paper))
     ]
     assert names == ["Results"]
+
+
+def test_slash_run_quick_skips_the_paragraph_reviews(paper):
+    from metasci_scribe.commands.implementation.run import _child_argv
+
+    assert "--quick" not in _child_argv(paper, section="Results")
+    argv = _child_argv(paper, section="Results", quick=True)
+    assert argv[-3:] == ["--section", "Results", "--quick"]
+
+
+def test_the_run_command_reviews_each_paragraph_unless_quick(paper, monkeypatch):
+    from typer.testing import CliRunner
+
+    from metasci_scribe import run as run_mod
+    from metasci_scribe.cli.commands import app
+
+    seen: list[bool] = []
+
+    def fake_run(root, invoke, section=None, *, review=False, say=None):
+        seen.append(review)
+        return run_mod.RunResult(run_mod.RunExit.OK, 1, 1, 0, "ok")
+
+    class Invoker:
+        def __enter__(self):
+            return lambda *a: None
+
+        def __exit__(self, *a):
+            return None
+
+    monkeypatch.setattr(run_mod, "run_project", fake_run)
+    monkeypatch.setattr(
+        "metasci_scribe.run_agent.real_invoke", lambda *a, **k: Invoker()
+    )
+    runner = CliRunner()
+    runner.invoke(app, ["run", "--workdir", str(paper)])
+    runner.invoke(app, ["run", "--workdir", str(paper), "--quick"])
+    assert seen == [True, False]

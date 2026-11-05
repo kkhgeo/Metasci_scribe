@@ -52,6 +52,7 @@ def _child_argv(
     model: str | None = None,
     provider: str | None = None,
     section: str | None = None,
+    quick: bool = False,
 ) -> list[str]:
     """The command that runs the paper in *root*, with no need for PATH.
 
@@ -60,7 +61,8 @@ def _child_argv(
     output whatever the Windows code page is. (They are flags, not ``PYTHON*``
     variables: ``-I`` makes the child ignore those.) *model* and *provider* are
     the chat's live choice, so the run uses the model the session shows.
-    *section* limits the run to one section of the outline.
+    *section* limits the run to one section of the outline. *quick* writes
+    it in one go, without the review of each paragraph.
     """
     argv = [sys.executable, "-I", "-X", "utf8", "-u", "-m", "metasci_scribe", "run"]
     argv += ["--workdir", str(root)]
@@ -70,6 +72,8 @@ def _child_argv(
         argv += ["--provider", provider]
     if section:
         argv += ["--section", section]
+    if quick:
+        argv.append("--quick")
     return argv
 
 
@@ -192,12 +196,14 @@ async def _finish(proc: subprocess.Popen, reader: asyncio.Future) -> int:
 
 class RunCommand(Command):
     """Write the draft unattended: ``metasci-scribe run`` in this folder.
-    ``/run Results`` writes only that section of the outline."""
+    ``/run Results`` writes only that section of the outline; ``--quick``
+    anywhere skips the review of each paragraph."""
 
     name = "/run"
     description = (
-        "Write the draft unattended in a separate process (resumes where it "
-        "stopped); /run <section> writes one section"
+        "Write the draft unattended, each paragraph written, reviewed and "
+        "rewritten (resumes where it stopped); /run <section> writes one "
+        "section, --quick skips the reviews"
     )
 
     def get_completions(self, tokens, *, workspace=None):
@@ -229,17 +235,23 @@ class RunCommand(Command):
         root = ctx.workspace.root
         _active = True
         try:
-            await self._run(ctx, root, " ".join(args).strip() or None)
+            quick = "--quick" in args
+            words = [a for a in args if a != "--quick"]
+            await self._run(ctx, root, " ".join(words).strip() or None, quick)
         finally:
             _active = False
 
     async def _run(
-        self, ctx: CommandContext, root: Path, section: str | None = None
+        self,
+        ctx: CommandContext,
+        root: Path,
+        section: str | None = None,
+        quick: bool = False,
     ) -> None:
         model, provider, auth_mode = _live_settings(ctx)
         try:
             proc = subprocess.Popen(
-                _child_argv(root, model, provider, section),
+                _child_argv(root, model, provider, section, quick),
                 cwd=root,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
@@ -251,6 +263,8 @@ class RunCommand(Command):
             ctx.ui.append_system(f"✗ Could not start the run: {exc}", style="red")
             return
         where = f"{root}, section {section}," if section else str(root)
+        if quick:
+            where += " without paragraph reviews,"
         ctx.ui.append_system(
             f"Run started in {where} with {_describe(model, provider, auth_mode)}. "
             "Your chat is not part of it. Ctrl+C stops it; /run again continues.",

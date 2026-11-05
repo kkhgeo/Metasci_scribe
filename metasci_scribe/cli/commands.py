@@ -1991,11 +1991,22 @@ def run_command(
             help="Write only this section of outline.md, for example Results",
         ),
     ] = None,
+    quick: Annotated[
+        bool,
+        typer.Option(
+            "--quick",
+            help="Write all paragraphs in one go, without the review of each paragraph",
+        ),
+    ] = False,
 ):
     """Write the draft unattended, following outline.md, then stop.
 
     Each section goes to its own file in Manuscript/, and manuscript.md is
     joined from them. With --section, only that section is written.
+
+    Each paragraph is written, reviewed in a separate turn (the report goes to
+    Reviews/), and rewritten when the review finds a 치명 or 주요 problem.
+    --quick writes them all in one go instead, without reviews.
 
     Exit codes: 0 every paragraph (of the section) is marked done, 2 the run failed or could not
     start, 3 the ChatGPT plan usage limit was reached, 4 a paragraph needs your
@@ -2039,7 +2050,9 @@ def run_command(
     )
     try:
         with real_invoke(root, config=config) as invoke:
-            result = run_project(root, invoke, section=section)
+            result = run_project(
+                root, invoke, section=section, review=not quick, say=typer.echo
+            )
     except KeyboardInterrupt:
         typer.echo(
             "\nInterrupted. Progress is saved; run `metasci-scribe run` again "

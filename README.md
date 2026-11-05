@@ -44,7 +44,7 @@ Then, inside the app:
 | 1 | `/login` | Opens your browser. Choose **Continue with ChatGPT** and sign in. Needed once. |
 | 2 | `/init` | Creates `program.md`, `outline.md`, the folder `Manuscript/` with an empty file for each section of the outline (`Introduction.md`, `Results.md`, `Discussion.md`), and the folders `Knowledge/`, `Figures/` and `Tables/` here. Files that already exist are never overwritten. |
 | 3 | (chat) | Put your PDFs in `Knowledge/`. Fill in `program.md` and `outline.md` yourself or ask the agent to help; it reads and writes the files in the folder. Ask it to write a paragraph from the outline. |
-| 4 | `/run` | Writes the whole draft unattended, following `outline.md`. `/run Results` writes only that section. The same as running `metasci-scribe run` (or `metasci-scribe run --section Results`) in a terminal. |
+| 4 | `/run` | Writes the whole draft unattended, following `outline.md`, one paragraph at a time: each is written, reviewed, and rewritten when the review finds a serious problem (see below). `/run Results` writes only that section; `/run --quick` writes everything in one go without the reviews. The same as running `metasci-scribe run` (`--section Results`, `--quick`) in a terminal. |
 
 **Where the text goes.** Each `##` section of `outline.md` has its own file in
 `Manuscript/`, named after the section, and the agent writes each paragraph
@@ -52,6 +52,32 @@ into its section's file. Edit those files. `manuscript.md` is the whole draft
 in outline order: the app joins it from `Manuscript/` after every chat reply and
 every run. Do not edit `manuscript.md`; if it has text the app did not write,
 the app leaves it alone and says so, and deleting it lets the app join it again.
+
+**How `/run` writes a paragraph.** Each outline paragraph gets three turns
+of its own, each in a fresh context:
+
+1. **Write** with `scribe-writing` (English) or `scribe-writing-korean`
+   (Korean): the paragraph goes into its section file, under a line such as
+   `<!-- R3 -->` that the app uses to find it (the joined `manuscript.md`
+   leaves these lines out).
+2. **Review** with `scribe-review`, in a context that did not write it. The
+   report goes to `Reviews/<Section>/<ID>/r1/review.md`, next to the exact
+   text reviewed (`draft.txt`). Findings are 치명, 주요 or 경미.
+3. **Rewrite** with `scribe-rewriting` or `scribe-rewriting-korean`, only when
+   the review found a 치명 or 주요 problem. The revision is written to
+   `revised.txt` in the same folder; the app checks that numbers, citations
+   and quotations survived and only then puts it in the section file. A
+   refused revision leaves the written paragraph and says so.
+
+The language comes from `language:` in `program.md`, or from the outline's
+text. This takes about three times the model use of `/run --quick`. Reviews
+are the agent's own; they are no check by a person.
+
+The five skills these turns use (`scribe-writing`, `scribe-writing-korean`,
+`scribe-review`, `scribe-rewriting`, `scribe-rewriting-korean`) **do not ship
+with the app**: they are personal skills. Put them in `~/.metasci-scribe/skills/`
+(all papers) or in the paper's `.metasci-scribe/skills/`. Without them `/run`
+stops and names what is missing; `/run --quick` works without them.
 
 To come back to a paper later, open a terminal in the same folder and run
 `metasci-scribe` again. `/threads` and `/resume` bring back an earlier
@@ -65,8 +91,13 @@ diagram and tables, opens the same map as a page in your browser, settles the
 open choices (`◇`) with you, and saves the agreed map into `outline.md` in the
 form `/run` reads. A section with a `◇` left is not written by `/run`. `/map`
 opens the saved `outline.md` as a page at any time; the page is written to
-`.metasci-scribe/view/outline.html` and changes no file of the paper. Skills that ship with the app are named `scribe-…`, apart from
-any skill of the same purpose you have installed elsewhere.
+`.metasci-scribe/view/outline.html` and changes no file of the paper.
+
+**Skills in chat.** Type `/` and a skill's name, for example
+`/scribe-review R3` or `/scribe-rewriting-korean R3 다시 써줘`. In chat a
+rewrite replaces the paragraph only after you agree. The app's own skills are
+named `scribe-…`, apart from any skill of the same purpose you have installed
+elsewhere.
 
 Other commands: `/help` lists them all. `/model` switches the model, `/logout`
 signs out, `/rubric` and `/goal` set acceptance criteria that the agent's work is

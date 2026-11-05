@@ -54,7 +54,7 @@ from typing import Literal
 from filelock import FileLock, Timeout
 from langchain_core.tools import BaseTool, tool
 
-from . import paths
+from . import paths, run_stages
 from .auth.chatgpt_plan import ChatGPTAuthError
 from .knowledge import LOCK_WAIT_SECONDS, report_messages, sync_knowledge
 from .llm.credentials import ModelNotConfigured
@@ -91,6 +91,8 @@ __all__ = [
 MAX_PASSES = 3  # model calls per run, the first included
 PENDING, DONE, BLOCKED = "pending", "done", "blocked"
 _STATUSES = (PENDING, DONE, BLOCKED)
+REVIEWED, FINAL = "reviewed", "final"  # stages of a done paragraph (paragraph review)
+_STAGES = (REVIEWED, FINAL)
 _MAX_REASON = 500
 _MAX_ERROR_TEXT = 300
 _SHOWN_IDS = 12
@@ -101,7 +103,7 @@ _HEADING = re.compile(
 )
 _ID_LIKE = re.compile(r"^###[ \t]+[A-Za-z]+\d+(?![A-Za-z0-9])")
 _SECTION = SECTION_HEADING
-_EVIDENCE = re.compile(r"\[evidence needed\]", re.IGNORECASE)
+_EVIDENCE = re.compile(r"\[(?:evidence needed|근거 필요)\]", re.IGNORECASE)
 _MARKER = "◇"
 
 
@@ -275,12 +277,15 @@ def _replace(tmp: str, target: Path) -> None:
 @dataclass
 class RunState:
     """Where a run stands. ``paragraphs`` maps ID to pending, done or blocked, in
-    outline order; ``reasons`` holds why a paragraph is blocked."""
+    outline order; ``reasons`` holds why a paragraph is blocked. ``stages``
+    holds how far a written (done) paragraph went through the paragraph
+    review: ``reviewed`` (a rewrite may follow) or ``final``."""
 
     thread_id: str
     outline_digest: str
     paragraphs: dict[str, str]
     reasons: dict[str, str] = field(default_factory=dict)
+    stages: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def load(cls, root: Path) -> RunState | None:
@@ -302,6 +307,7 @@ class RunState:
             digest = data["outline_digest"]
             paragraphs = data["paragraphs"]
             reasons = data.get("reasons", {})
+            stages = data.get("stages", {})
         except (ValueError, KeyError, TypeError, AttributeError) as exc:
             raise RunStateError(
                 f"{path} is not a run state ({type(exc).__name__})"
@@ -318,9 +324,11 @@ class RunState:
             or not all(
                 isinstance(k, str) and isinstance(v, str) for k, v in reasons.items()
             )
+            or not isinstance(stages, dict)
+            or not all(isinstance(k, str) and v in _STAGES for k, v in stages.items())
         ):
             raise RunStateError(f"{path} is not a valid run state")
-        return cls(thread_id, digest, dict(paragraphs), dict(reasons))
+        return cls(thread_id, digest, dict(paragraphs), dict(reasons), dict(stages))
 
     def save(self, root: Path) -> None:
         """Write the state whole, or leave the old file as it was.
@@ -337,6 +345,7 @@ class RunState:
                 "outline_digest": self.outline_digest,
                 "paragraphs": self.paragraphs,
                 "reasons": self.reasons,
+                "stages": self.stages,
             },
             ensure_ascii=False,
             indent=2,
@@ -373,7 +382,8 @@ def _reconcile(
         saved.thread_id if saved.outline_digest == digest else f"run-{uuid.uuid4().hex}"
     )
     statuses = {i: (DONE if saved.paragraphs.get(i) == DONE else PENDING) for i in ids}
-    return RunState(thread_id, digest, statuses, {})
+    stages = {i: s for i, s in saved.stages.items() if statuses.get(i) == DONE}
+    return RunState(thread_id, digest, statuses, {}, stages)
 
 
 # --------------------------------------------------------------- mark_paragraph
@@ -694,7 +704,12 @@ def _section_thread(thread_id: str, section: str) -> str:
 
 
 def run_project(
-    root: Path, invoke: AgentInvoke, section: str | None = None
+    root: Path,
+    invoke: AgentInvoke,
+    section: str | None = None,
+    *,
+    review: bool = False,
+    say: Callable[[str], None] | None = None,
 ) -> RunResult:
     """Run the paper in *root* to the end, or to the first thing that needs a person.
 
@@ -711,6 +726,11 @@ def run_project(
     marks elsewhere in the outline do not stop the run. Every result that got
     as far as the state ends with the section files joined into
     ``manuscript.md``.
+
+    With *review*, the paragraphs go one at a time through write, review and
+    rewrite turns (see "paragraph review" below and ``run_stages``), and
+    *say* gets a line as each turn ends. Without it, one thread writes them
+    all in up to ``MAX_PASSES`` passes.
     """
     root = Path(root)
     targets: list[str] = []
@@ -817,7 +837,17 @@ def run_project(
                 f"{exc}. Fix or delete .metasci-scribe/run.json; delete it to start the run over.",
             )
         return _run_locked(
-            root, invoke, paragraphs, titles, digest, saved, result, targets, section
+            root,
+            invoke,
+            paragraphs,
+            titles,
+            digest,
+            saved,
+            result,
+            targets,
+            section,
+            review=review,
+            say=say or (lambda _text: None),
         )
     finally:
         lock.release()
@@ -832,7 +862,18 @@ def _remove_stale_temps(state_dir: Path) -> None:
 
 
 def _run_locked(
-    root, invoke, paragraphs, titles, digest, saved, result, targets, section
+    root,
+    invoke,
+    paragraphs,
+    titles,
+    digest,
+    saved,
+    result,
+    targets,
+    section,
+    *,
+    review=False,
+    say=lambda _text: None,
 ) -> RunResult:
     # -- Knowledge -------------------------------------------------------------
     try:
@@ -870,7 +911,35 @@ def _run_locked(
 
     # -- the passes ------------------------------------------------------------
     state_dir = Workspace(root).state_dir
-    for attempt in range(MAX_PASSES):
+    pipeline: _Pipeline | None = None
+    if review:
+        language = _language(root, targets, titles)
+        if missing := run_stages.missing_skills(root, language):
+            return result(
+                RunExit.FAILED,
+                "The review of each paragraph needs the skills "
+                + ", ".join(missing)
+                + ", which do not ship with the app. Put them in "
+                f"{_paths_display(paths.GLOBAL_SKILLS_DIR)} (or this paper's "
+                ".metasci-scribe/skills), or run /run --quick to write without "
+                "reviews.",
+                state,
+                notes,
+            )
+        pipeline = _Pipeline(
+            root,
+            invoke,
+            state.thread_id,
+            titles,
+            language,
+            say,
+            notes,  # the same list: the turns' notes join the run's
+        )
+        stop = _review_paragraphs(root, pipeline, state, targets, result, notes)
+        if isinstance(stop, RunResult):
+            return stop
+        state = stop
+    for attempt in range(MAX_PASSES if pipeline is None else 0):
         if count(PENDING) == 0:
             break
         _clear_marks(state_dir)
@@ -949,15 +1018,475 @@ def _run_locked(
         if evidence
         else ""
     )
+    checked = (
+        "Each paragraph was reviewed by the agent in a separate turn; the reports "
+        f"are in {run_stages.REVIEWS_DIR}/. That is no check by a person: read the "
+        f"draft in {MANUSCRIPT_DIR}/ or manuscript.md, and check its claims and "
+        "citations against your sources, before you use it."
+        if review
+        else f"Nobody has checked the draft yet: read it in {MANUSCRIPT_DIR}/ or "
+        "manuscript.md, and check its claims and citations against your sources, "
+        "before you use it."
+    )
     return result(
         RunExit.OK,
         f"The agent marked {total} of {total} paragraphs{scope} done.{tail}\n"
-        f"Nobody has checked the draft yet: read it in {MANUSCRIPT_DIR}/ or "
-        "manuscript.md, and check its claims and citations against your sources, "
-        "before you use it.",
+        + checked,
         state,
         notes,
     )
+
+
+# ---------------------------------------------------------- paragraph review
+#
+# With ``review=True`` a run takes one outline paragraph at a time through
+# three turns, each in a fresh thread (see :mod:`metasci_scribe.run_stages`):
+# the writing skill writes it, the review skill reviews it in a context that
+# did not write it, and the rewriting skill revises it when the review found a
+# 치명 or 주요 problem. Only the write turn edits a section file; the harness
+# copies the paragraph out for the review and puts the revision in place.
+
+_WRITE_ONE_PROMPT = """\
+You are running unattended. Nobody can answer questions, so decide and keep going.
+
+Write ONE paragraph of the manuscript and give it your full effort:
+{pid}  {section}: {title} -> {file}
+
+Follow the skill {skill}: read /skills/{skill}/SKILL.md first and take this one
+paragraph through its whole process (sources, claims and evidence, drafting,
+revision, verification), as its section on the unattended run says. Read
+program.md, outline.md (this paragraph's entry and the ones around it) and the
+paragraphs already in {file} for context.
+
+Rules:
+- Use only this project's own material (Knowledge/, .metasci-scribe/extracted/, Figures/, Tables/). Never invent a number or a citation.
+- Where the material gives no evidence, write {marker} in the text and keep going. This is not a failure.
+- Put the paragraph into {file} at its outline position as one block of text with no blank line inside, with the line <!-- {pid} --> right above it. Keep every other paragraph in the file exactly as it is. Create the file if it does not exist.
+- Then call mark_paragraph("{pid}", "done"). If the material does not support the paragraph's claim, or the outline would have to change, call mark_paragraph("{pid}", "blocked", reason) with one sentence of reason, then stop. Do not edit outline.md.
+- Edit only {file}. Never edit manuscript.md, and never write under .metasci-scribe/ or {reviews}/.
+"""
+
+_WRITE_ONE_AGAIN = """\
+{pid} is not marked done yet. Finish it under the same rules: put it into {file}
+with the line <!-- {pid} --> above it, then call mark_paragraph("{pid}", "done"),
+or mark it blocked with a reason and stop.
+"""
+
+_REVIEW_PROMPT = """\
+You are running unattended. Nobody can answer questions, so decide and keep going.
+
+Review ONE paragraph of the manuscript: {pid}  {section}: {title} (in {file}).
+Follow the skill scribe-review: read /skills/scribe-review/SKILL.md first; its
+section on the unattended run applies. You did not write this paragraph.
+
+The exact text under review is in {round}/draft.txt. The app wrote it; do not
+change it.{previous} Read the paragraph's outline entry, program.md, the
+paragraphs around it in {file}, the figures and tables it names, and the
+extracted sources in .metasci-scribe/extracted/.
+
+Write the report to {round}/review.md in the skill's report format, then stop.
+Do not edit any other file.
+"""
+
+_REVIEW_PREVIOUS = (
+    " An earlier round of this paragraph is in {previous}: do the skill's re-review."
+)
+
+_REVIEW_FIX = """\
+The app checked {round}/review.md against {round}/draft.txt and found problems:
+
+{output}
+
+Fix review.md (a quotation that is not in draft.txt word for word must be
+corrected from it or the finding dropped), then stop. Do not edit any other file.
+"""
+
+_REWRITE_PROMPT = """\
+You are running unattended. Nobody can answer questions, so decide and keep going.
+
+Rewrite ONE paragraph of the manuscript: {pid}  {section}: {title} (in {file}).
+Follow the skill {skill}: read /skills/{skill}/SKILL.md first; its sections on the
+unattended run and on a review report apply, except that you write the revision
+to a file instead of the section file, as said below.
+
+The paragraph is in {round}/draft.txt and a review of it in {round}/review.md.
+Resolve every 치명 and 주요 finding so that its 해결 기준 holds; resolve 경미
+ones where it helps. A finding whose 해결 경로 is 새 분석 or 새 자료 cannot be
+resolved by writing: never invent data for it; mark the place {marker}.
+Keep every number, unit, citation and figure or table reference that the
+paragraph still needs.
+
+Write only the revised paragraph to {round}/revised.txt: one block of text, no
+blank line, no heading, no notes. Do not edit Manuscript/; the app puts the
+revision in place. Then stop.
+"""
+
+_REWRITE_FIX = """\
+The app checked {round}/revised.txt against {round}/draft.txt and refused it:
+
+{output}
+
+Write revised.txt again as one paragraph that keeps what the check names, then stop.
+"""
+
+_CHECK_OUTPUT_MAX = 3000
+
+
+def _stage_thread(thread_id: str, pid: str, stage: str) -> str:
+    return _section_thread(thread_id, f"{pid}/{stage}")
+
+
+def _relative(root: Path, path: Path) -> str:
+    return path.relative_to(root).as_posix()
+
+
+def _read(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return ""
+
+
+def _write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8", newline="\n")
+
+
+@dataclass
+class _Pipeline:
+    """One run's paragraph review: what every turn needs, and its notes."""
+
+    root: Path
+    invoke: AgentInvoke
+    thread_id: str
+    titles: dict[str, Paragraph]
+    language: str
+    say: Callable[[str], None]
+    notes: list[str] = field(default_factory=list)
+
+    @property
+    def skills(self) -> run_stages.Skills:
+        return run_stages.skills_for(self.language)
+
+    @property
+    def marker(self) -> str:
+        return "[근거 필요]" if self.language == "ko" else "[evidence needed]"
+
+    def note(self, text: str) -> None:
+        self.notes.append(text)
+        self.say(f"  {text}")
+
+    def _fields(self, pid: str) -> dict[str, str]:
+        p = self.titles[pid]
+        return {
+            "pid": pid,
+            "section": p.section,
+            "title": p.title,
+            "file": _file_of(p),
+            "reviews": run_stages.REVIEWS_DIR,
+            "marker": self.marker,
+        }
+
+    def _section_path(self, pid: str) -> Path:
+        return self.root / _file_of(self.titles[pid])
+
+    # -- write -----------------------------------------------------------------
+
+    def write_prompt(self, pid: str, first: bool) -> str:
+        template = _WRITE_ONE_PROMPT if first else _WRITE_ONE_AGAIN
+        return template.format(skill=self.skills.writing, **self._fields(pid))
+
+    def section_text(self, pid: str) -> str:
+        return _read(self._section_path(pid))
+
+    def anchor(self, pid: str, before: str) -> bool:
+        """Make sure the paragraph the write turn added carries its anchor."""
+        path = self._section_path(pid)
+        after = _read(path)
+        if run_stages.paragraph_text(after, pid) is not None:
+            return True
+        anchored = run_stages.anchor_new_paragraph(before, after, pid)
+        if anchored is None:
+            return False
+        try:
+            _write_text(path, anchored)
+        except OSError:
+            return False
+        return run_stages.paragraph_text(anchored, pid) is not None
+
+    # -- review and rewrite ------------------------------------------------------
+
+    def _guarded(self, pid: str, thread: str, prompt: str) -> None:
+        """One review or rewrite turn. Neither may change a section file, so
+        any change is undone from the copy taken before the turn."""
+        folder = self.root / MANUSCRIPT_DIR
+        before = read_section_texts(folder)
+        try:
+            self.invoke(thread, prompt)
+        finally:
+            after = read_section_texts(folder)
+            if after != before:
+                for name in set(before) | set(after):
+                    path = folder / name
+                    with contextlib.suppress(OSError):
+                        if name in before:
+                            _write_text(path, before[name])
+                        else:
+                            path.unlink()
+                self.note(f"{pid}: the turn changed {MANUSCRIPT_DIR}/; undone.")
+
+    def review(self, pid: str) -> Path | None:
+        """Review the paragraph in a fresh round folder; the round, or None
+        when the paragraph cannot be found."""
+        text = run_stages.paragraph_text(self.section_text(pid), pid)
+        if text is None:
+            return None
+        folder = run_stages.review_dir(self.root, self.titles[pid].section, pid)
+        rounds = sorted(
+            (p for p in folder.glob("r*") if p.name[1:].isdigit()),
+            key=lambda p: int(p.name[1:]),
+        )
+        previous = None
+        if rounds and (rounds[-1] / "review.md").is_file():
+            previous = rounds[-1] / "review.md"
+        current = run_stages.next_round(folder)
+        _write_text(current / "draft.txt", text.strip() + "\n")
+        round_rel = _relative(self.root, current)
+        extra = (
+            _REVIEW_PREVIOUS.format(previous=_relative(self.root, previous))
+            if previous
+            else ""
+        )
+        thread = _stage_thread(self.thread_id, pid, current.name + "/review")
+        self._guarded(
+            pid,
+            thread,
+            _REVIEW_PROMPT.format(round=round_rel, previous=extra, **self._fields(pid)),
+        )
+        report = current / "review.md"
+        if not report.is_file():
+            self._guarded(
+                pid,
+                thread,
+                f"{round_rel}/review.md was not written. Write it now, then stop.",
+            )
+        if not report.is_file():
+            return current
+        knowledge = Workspace(self.root).state_dir / "extracted"
+        check = run_stages.check_review(self.root, current, knowledge, previous)
+        if not check.passed:
+            self._guarded(
+                pid,
+                thread,
+                _REVIEW_FIX.format(
+                    round=round_rel, output=check.output[:_CHECK_OUTPUT_MAX]
+                ),
+            )
+            check = run_stages.check_review(self.root, current, knowledge, previous)
+            if not check.passed:
+                self.note(
+                    f"{pid}: {round_rel}/review.md still fails the review check; "
+                    "read it with care."
+                )
+        return current
+
+    def rewrite(self, pid: str, current: Path) -> bool:
+        """Revise the paragraph from its review and put the revision in place.
+        False when the revision was refused and the paragraph kept."""
+        round_rel = _relative(self.root, current)
+        thread = _stage_thread(self.thread_id, pid, current.name + "/rewrite")
+        self._guarded(
+            pid,
+            thread,
+            _REWRITE_PROMPT.format(
+                skill=self.skills.rewriting, round=round_rel, **self._fields(pid)
+            ),
+        )
+        for attempt in range(2):
+            revised = run_stages.single_paragraph(_read(current / "revised.txt"))
+            if revised is None:
+                problem = (
+                    "revised.txt is missing, empty, or holds more than one paragraph."
+                )
+            else:
+                _write_text(current / "revised.txt", revised + "\n")
+                check = run_stages.check_revision(self.root, current, self.language)
+                if check.passed:
+                    return self._put_in_place(pid, revised)
+                problem = check.output[:_CHECK_OUTPUT_MAX]
+            if attempt == 0:
+                self._guarded(
+                    pid, thread, _REWRITE_FIX.format(round=round_rel, output=problem)
+                )
+        self.note(
+            f"{pid}: the revision was refused by the app's check; the written "
+            f"paragraph is kept. See {round_rel}/."
+        )
+        return False
+
+    def _put_in_place(self, pid: str, revised: str) -> bool:
+        path = self._section_path(pid)
+        updated = run_stages.replace_paragraph(_read(path), pid, revised)
+        if updated is None:
+            self.note(f"{pid}: its anchor is gone from {_file_of(self.titles[pid])}.")
+            return False
+        _write_text(path, updated)
+        return True
+
+
+def _paths_display(path: Path) -> str:
+    home = Path.home()
+    try:
+        return "~/" + path.relative_to(home).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def _language(root: Path, targets: list[str], titles: dict[str, Paragraph]) -> str:
+    """The manuscript's language for choosing the skills (``run_stages``)."""
+    texts = [_read(root / "outline.md")]
+    texts += [_read(root / _file_of(titles[i])) for i in targets[:1]]
+    return run_stages.manuscript_language(_read(root / "program.md"), *texts)
+
+
+def _latest_round(folder: Path) -> Path | None:
+    rounds = [p for p in folder.glob("r*") if p.name[1:].isdigit()]
+    return max(rounds, key=lambda p: int(p.name[1:]), default=None)
+
+
+def _review_paragraphs(root, pipe: _Pipeline, state: RunState, targets, result, notes):
+    """Take the targets, in outline order, through write, review and rewrite.
+
+    Returns the state to give a verdict on (all final, or stopped at a blocked
+    or unfinished paragraph), or a ``RunResult`` when the run must end here
+    (an error out of ``invoke``, lost text, a state that cannot be saved).
+    """
+    state_dir = Workspace(root).state_dir
+
+    def progress() -> str:
+        final = sum(
+            1
+            for i in targets
+            if state.paragraphs.get(i) == DONE and state.stages.get(i) == FINAL
+        )
+        return f"{final}/{len(targets)} paragraphs written and reviewed"
+
+    def save() -> RunResult | None:
+        try:
+            state.save(root)
+        except OSError as exc:
+            return result(
+                RunExit.FAILED,
+                f".metasci-scribe/run.json cannot be written: {_short(exc)}",
+                state,
+                notes,
+            )
+        return None
+
+    def finish(pid: str, why: str | None = None) -> RunResult | None:
+        state.stages[pid] = FINAL
+        if why:
+            pipe.note(f"{pid}: {why}")
+        return save()
+
+    for pid in targets:
+        # -- write -------------------------------------------------------------
+        if state.paragraphs.get(pid) == PENDING:
+            section_before = pipe.section_text(pid)
+            for attempt in range(MAX_PASSES):
+                _clear_marks(state_dir)
+                try:
+                    backup, before = _backup_manuscript(root, state_dir)
+                except OSError as exc:
+                    return result(
+                        RunExit.FAILED,
+                        f"{MANUSCRIPT_DIR}/ could not be backed up before the pass: "
+                        f"{_short(exc)}",
+                        state,
+                        notes,
+                    )
+                error: Exception | None = None
+                try:
+                    pipe.invoke(
+                        _stage_thread(state.thread_id, pid, "write"),
+                        pipe.write_prompt(pid, attempt == 0),
+                    )
+                except Exception as exc:  # PlanStop and the rest: handled below
+                    error = exc
+                if error is not None:
+                    state = _reload_quietly(root, state)
+                lost, copy = _lost_since(root, state_dir, before, backup)
+                if lost:
+                    return result(
+                        RunExit.FAILED, _loss_message(root, lost, copy), state, notes
+                    )
+                if error is not None:
+                    return _error_result(error, state, result, notes, progress())
+                try:
+                    state = _reload(root, state)
+                except RunStateError as exc:
+                    return result(
+                        RunExit.FAILED, f"{exc}. Delete it to start over.", None, notes
+                    )
+                if state.paragraphs.get(pid) != PENDING:
+                    break
+            if state.paragraphs.get(pid) != DONE:
+                return state  # blocked, or not finished: the verdict says which
+            if not pipe.anchor(pid, section_before):
+                if stop := finish(
+                    pid,
+                    f"written, but the app could not find it in "
+                    f"{_file_of(pipe.titles[pid])} to review it.",
+                ):
+                    return stop
+                continue
+        if state.paragraphs.get(pid) == BLOCKED:
+            return state
+        if state.paragraphs.get(pid) != DONE or state.stages.get(pid) == FINAL:
+            continue
+
+        # -- review --------------------------------------------------------------
+        try:
+            if state.stages.get(pid) == REVIEWED:
+                current = _latest_round(
+                    run_stages.review_dir(root, pipe.titles[pid].section, pid)
+                )
+            else:
+                text = run_stages.paragraph_text(pipe.section_text(pid), pid)
+                if text is None:
+                    if stop := finish(
+                        pid, "written before paragraph review; not reviewed."
+                    ):
+                        return stop
+                    continue
+                current = pipe.review(pid)
+            report = _read(current / "review.md") if current else ""
+            if not report:
+                if stop := finish(pid, "no review was written; the paragraph is kept."):
+                    return stop
+                continue
+            findings = run_stages.count_findings(report)
+            where = _relative(root, current)
+            counts = " · ".join(f"{s} {findings[s]}" for s in ("치명", "주요", "경미"))
+            if not run_stages.needs_rewrite(findings):
+                pipe.say(f"  {pid} reviewed ({where}): {counts}; kept as written.")
+                if stop := finish(pid):
+                    return stop
+                continue
+            if state.stages.get(pid) != REVIEWED:
+                pipe.say(f"  {pid} reviewed ({where}): {counts}; rewriting.")
+                state.stages[pid] = REVIEWED
+                if stop := save():
+                    return stop
+
+            # -- rewrite -----------------------------------------------------------
+            if pipe.rewrite(pid, current):
+                pipe.say(f"  {pid} rewritten from its review and put in place.")
+        except Exception as exc:  # PlanStop and the rest
+            return _error_result(exc, state, result, notes, progress())
+        if stop := finish(pid):
+            return stop
+    return state
 
 
 def _loss_message(root: Path, lost: list[str], copy: Path | None) -> str:

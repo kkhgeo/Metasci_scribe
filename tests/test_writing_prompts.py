@@ -507,3 +507,17 @@ async def test_no_tool_description_invites_experiments_or_upstream_packs(tmp_pat
         lowered = text.lower()
         for word in ("experiment", "evoskills", "evoscientist", "web search", "gpu"):
             assert word not in lowered, (name, word)
+
+
+def test_the_author_s_own_pipeline_skills_never_ship():
+    """The paragraph review's skills copy the author's personal skills (a
+    style profile, quoted sources). The repository is public, so they live in
+    ~/.metasci-scribe/skills only, and the run looks for them there."""
+    from pathlib import Path
+
+    from metasci_scribe import run_stages
+
+    for language in ("ko", "en"):
+        s = run_stages.skills_for(language)
+        for name in (s.writing, s.review, s.rewriting):
+            assert not (Path(SKILLS_DIR) / name).exists(), name
