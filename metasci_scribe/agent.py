@@ -783,7 +783,8 @@ def _get_default_backend(
         timeout=cfg.sandbox_execute_timeout,
         guard_dangerous=guard_dangerous,
         refuse_delete=refuse_delete,
-        env=research_env_overrides(),
+        # An unattended run has no shell (ShellGateMiddleware): no setup hint.
+        env=research_env_overrides(log_hint=not getattr(cfg, "auto_mode", False)),
         skills_dir=workspace.skills_dir,
     )
     return CompositeBackend(default=ws_backend, routes=_agent_routes(cfg, workspace))
@@ -1319,7 +1320,8 @@ def create_cli_agent(
         # CustomSandboxBackend._effective_guard_dangerous), not baked here.
         guard_dangerous=False,
         refuse_delete=refuse_delete,
-        env=research_env_overrides(),
+        # An unattended run has no shell (ShellGateMiddleware): no setup hint.
+        env=research_env_overrides(log_hint=not getattr(cfg, "auto_mode", False)),
         skills_dir=workspace.skills_dir,
     )
     be = CompositeBackend(default=ws_backend, routes=_agent_routes(cfg, workspace))

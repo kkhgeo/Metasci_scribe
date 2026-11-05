@@ -693,18 +693,21 @@ MISSING_PYTHON_HINT = (
 )
 
 
-def research_env_overrides() -> dict[str, str] | None:
+def research_env_overrides(*, log_hint: bool = True) -> dict[str, str] | None:
     """Env overrides that put the research environment first for the agent's shell.
 
     None when a usable ``python`` is on PATH or the environment is not ready.
     ``PATH`` is built from the current ``os.environ`` on every call, so changes
     made after the decision (e.g. the private Node from ``activate_runtime``)
     are kept. Called where the agent is built, so it also logs the setup hint
-    for the agent's shell once (:func:`~metasci_scribe.agent_shell.log_setup_hint`).
+    for the agent's shell once (:func:`~metasci_scribe.agent_shell.log_setup_hint`),
+    unless *log_hint* is False: an unattended run has no shell, so the hint
+    would only be noise there.
     """
-    from ..agent_shell import log_setup_hint
+    if log_hint:
+        from ..agent_shell import log_setup_hint
 
-    log_setup_hint()
+        log_setup_hint()
     _python, env = _agent_python()
     if env is None:
         return None

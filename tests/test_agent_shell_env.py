@@ -14,7 +14,9 @@ _PROBE = {"METASCI_SCRIBE_SHELL_PROBE": "venv"}
 
 @pytest.fixture
 def overrides(monkeypatch):
-    monkeypatch.setattr(research_env, "research_env_overrides", lambda: dict(_PROBE))
+    monkeypatch.setattr(
+        research_env, "research_env_overrides", lambda **_: dict(_PROBE)
+    )
 
 
 def test_default_backend_gets_the_overrides(overrides, workspace):

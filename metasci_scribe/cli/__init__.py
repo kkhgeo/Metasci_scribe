@@ -77,10 +77,28 @@ def _write_redirected_output_as_utf8() -> None:
             pass
 
 
+def quiet_known_warnings() -> None:
+    """Hide the library notices the app has already decided about."""
+    import warnings
+
+    warnings.filterwarnings("ignore", message=".*not known to support tools.*")
+    warnings.filterwarnings(
+        "ignore", message=".*type is unknown and inference may fail.*"
+    )
+    # v3 streaming is a deliberate choice (#268), so its beta notice is noise.
+    # Matched by message, not category, to keep other beta warnings visible.
+    # Importing langchain_core puts its own "show beta warnings" filter first,
+    # so it is imported before ours, which then goes in front of it.
+    import langchain_core  # noqa: F401
+
+    warnings.filterwarnings(
+        "ignore", message=".*v3 streaming protocol on Pregel is experimental.*"
+    )
+
+
 def main():
     """CLI entry point."""
     import os
-    import warnings
 
     # The folder we start in is the agent's workspace, which it writes to, and
     # this app imports lazily: take it off the import path before anything
@@ -96,15 +114,7 @@ def main():
     # Before anything is printed.
     _write_redirected_output_as_utf8()
 
-    warnings.filterwarnings("ignore", message=".*not known to support tools.*")
-    warnings.filterwarnings(
-        "ignore", message=".*type is unknown and inference may fail.*"
-    )
-    # v3 streaming is a deliberate choice (#268), so its beta notice is noise.
-    # Matched by message, not category, to keep other beta warnings visible.
-    warnings.filterwarnings(
-        "ignore", message=".*v3 streaming protocol on Pregel is experimental.*"
-    )
+    quiet_known_warnings()
     from ..config import load_config
     from .commands import _configure_logging
 
