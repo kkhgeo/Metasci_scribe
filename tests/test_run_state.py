@@ -1066,3 +1066,19 @@ def test_text_moved_between_section_files_is_not_a_loss(project):
             mark(project, pid)
 
     assert run_project(project, move).exit == RunExit.OK
+
+
+def test_a_mark_counts_within_its_section_then_the_whole_outline(project):
+    replies: list[str] = []
+
+    def agent(thread_id: str, prompt: str) -> None:
+        with open(project / DRAFT, "a", encoding="utf-8") as f:
+            f.write("Draft.\n")
+        replies.append(mark(project, "R1"))
+        replies.append(mark(project, "R2"))
+
+    assert run_project(project, agent, section="Results").exit == RunExit.OK
+    assert replies == [
+        "R1 marked done (Results 1/2 done; whole outline 1/4).",
+        "R2 marked done (Results 2/2 done; whole outline 2/4).",
+    ]

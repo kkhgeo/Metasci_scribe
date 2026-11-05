@@ -478,6 +478,24 @@ def _take_mark_snapshot(root: Path, state_dir: Path) -> None:
         copy_section_files(root, state_dir / MARK_SNAPSHOT)
 
 
+def _mark_progress(root: Path, state: RunState, pid: str) -> str:
+    """How far the section of *pid* is, then the whole outline: a run of one
+    section ("Results 1/12 done") must not read as "1/14" of something."""
+    whole = f"{state.count(DONE)}/{len(state.paragraphs)}"
+    try:
+        paragraphs = parse_paragraphs((root / "outline.md").read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, OutlineError):
+        return f"{whole} done"
+    section = next((p.section for p in paragraphs if p.id == pid), "")
+    ids = [
+        p.id for p in paragraphs if p.section == section and p.id in state.paragraphs
+    ]
+    if not section or len(ids) == len(state.paragraphs):
+        return f"{whole} done"
+    done = sum(state.paragraphs[i] == DONE for i in ids)
+    return f"{_short(section)[:40]} {done}/{len(ids)} done; whole outline {whole}"
+
+
 def make_mark_paragraph_tool(root: Path) -> BaseTool:
     """The ``mark_paragraph`` tool of the run in *root*.
 
@@ -542,7 +560,7 @@ def make_mark_paragraph_tool(root: Path) -> BaseTool:
                 return f"Rejected: could not save ({type(exc).__name__})."
             if status == DONE:
                 _take_mark_snapshot(root, state_dir)
-            return f"{pid} marked {status} ({state.count(DONE)}/{len(state.paragraphs)} done)."
+            return f"{pid} marked {status} ({_mark_progress(root, state, pid)})."
 
     mark_paragraph.handle_validation_error = lambda _exc: (
         "Rejected: give paragraph_id and a status of 'done' or 'blocked'."

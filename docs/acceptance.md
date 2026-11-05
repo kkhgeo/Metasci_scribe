@@ -52,7 +52,11 @@ fails, write the message exactly and what you did next.
 
 - [ ] **5. `/run`.** `/run` writes autonomously into `Manuscript/` and `manuscript.md` is joined from it. `/run <section>` writes one section.
 
-  Result:
+  Result: `/run Results` passed (2026-11-05, 0227f46 + 5402ed0): it first
+  stopped on the key message `◇` left by `/init` (exit 4, as designed); once
+  that was settled in chat it wrote all 12 Results paragraphs into
+  `Manuscript/Results.md`, left the other section files empty, joined
+  `manuscript.md`, and ended with exit 0. A full `/run` is still to check.
 
 - [ ] **6. Reopen and continue.** After closing and reopening the app, the same
   work continues.
@@ -86,3 +90,5 @@ this record is late against the rule above.
 |---|---|---|
 | 3 | The tester's papers live on the Z: drive (RaiDrive), and the app refused network folders. | Supported: Z: resolves to an unopenable UNC name, so the app keeps the drive letter (`drive_paths.py`, ddfa98b). |
 | 3 | The tester asked for the manuscript per section. | `Manuscript/<Section>.md` per outline section, joined into `manuscript.md`; `/run <section>` (b2a4de4). |
+| 5 | `/run Results` stopped on the `/init` key-message placeholder; the stop gave only a line number, and asked to "confirm the outline" the chat agent settled R1 instead. | The stop lists each blocking line with its text; scribe-mapping and the chat prompt settle the key message first (5402ed0). |
+| 5 | The run printed the Git Bash hint (a run has no shell) and a LangChain beta notice; its progress read "1/14" in a 12-paragraph section run. | Both notices removed (5fdb509); progress counts the section, then the outline. |
