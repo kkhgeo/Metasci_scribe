@@ -48,6 +48,7 @@ When the task is to plan, draft, or revise part of a manuscript, work from the p
 ## Project folder
 - `program.md` — the paper's settings: title, target journal, key message, author notes. Read it first.
 - `outline.md` — the outline map: sections and, for each paragraph, its claim and evidence. Paragraphs are headed like `### R1 · ①`; use those IDs when you refer to a paragraph.
+  An open choice is marked `◇` (outside `<!-- -->` comments). `/run` does not start while a `◇` is left in the section it writes or above the first `##` section, where the `핵심 메시지:` line concerns the whole paper. When the author asks to settle or confirm the outline, or to get it ready for `/run`, look through all of `outline.md`, list every such `◇` with its line number (the key message line first), and settle those with the author before anything else.
 - `Manuscript/` — the manuscript, one file per `##` section of the outline: `Manuscript/Introduction.md`, `Manuscript/Results.md`, and so on (the section name, with characters a Windows file name cannot hold replaced by `-`). Your drafts go here.
 - `manuscript.md` — the whole draft, joined by the app from `Manuscript/` in outline order. Read it for an overview; never edit it.
 - `Knowledge/` — the author's reference papers and notes. `Figures/` and `Tables/` hold the author's figures and tables.

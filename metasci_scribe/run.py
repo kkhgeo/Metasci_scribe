@@ -211,6 +211,34 @@ def open_markers(text: str, section: str | None = None) -> list[int]:
     return marks
 
 
+_SHOWN_MARKS = 8
+
+
+def open_markers_message(text: str, marks: list[int]) -> str:
+    """What stops a run: each line with a ``◇`` (see ``open_markers``), where
+    it is and what it says, so the author can name it in chat."""
+    lines = _normalize_newlines(text).split("\n")
+    where: dict[int, str] = {}
+    current = ""
+    for n, line in enumerate(lines, start=1):
+        if m := _SECTION.match(line):
+            current = m.group("name")
+        where[n] = current
+    shown = []
+    for n in marks[:_SHOWN_MARKS]:
+        place = f"section {_short(where[n])[:40]}" if where[n] else "whole paper"
+        shown.append(f"  line {n} ({place}): {_short(lines[n - 1].strip())[:100]}")
+    if len(marks) > _SHOWN_MARKS:
+        shown.append(f"  ... and {len(marks) - _SHOWN_MARKS} more")
+    first = marks[0]
+    return (
+        f"outline.md still has {len(marks)} open choice(s) (◇) that stop this run:\n"
+        + "\n".join(shown)
+        + "\nSettle them in chat, naming the line (for example: "
+        f'"settle the ◇ on line {first} of outline.md"), then run again.'
+    )
+
+
 def outline_digest(text: str) -> str:
     """A hash of what the outline says, without comments, blank lines or
     trailing spaces. A change that is only a comment keeps the digest, so it
@@ -744,14 +772,7 @@ def run_project(
         targets[:] = [p.id for p in paragraphs]
     marks = open_markers(outline, section)
     if marks:
-        shown = ", ".join(str(n) for n in marks[:10]) + (
-            " ..." if len(marks) > 10 else ""
-        )
-        return result(
-            RunExit.NEEDS_DECISION,
-            f"outline.md still has {len(marks)} open question mark(s) (◇) on line(s) {shown}. "
-            "Settle them in a chat session, then run again.",
-        )
+        return result(RunExit.NEEDS_DECISION, open_markers_message(outline, marks))
     digest = outline_digest(outline)
     titles = {p.id: p for p in paragraphs}
 

@@ -1033,6 +1033,17 @@ def test_open_marks_about_the_whole_paper_stop_a_section_run(project):
     (project / "outline.md").write_text(marked, encoding="utf-8")
     result = run_project(project, boom, section="Results")
     assert result.exit == RunExit.NEEDS_DECISION
+    # The stop names the line, where it is and what it says.
+    line = marked.splitlines().index("핵심 메시지: ◇") + 1
+    assert f"line {line} (whole paper): 핵심 메시지: ◇" in result.message
+    assert f"on line {line} of outline.md" in result.message
+
+
+def test_the_stop_names_the_section_of_each_open_mark(project):
+    marked = OUTLINE.replace("### D1 · ① Meaning", "### D1 · ① ◇ Meaning")
+    (project / "outline.md").write_text(marked, encoding="utf-8")
+    result = run_project(project, boom)
+    assert "(section Discussion): ### D1 · ① ◇ Meaning" in result.message
 
 
 def test_two_sections_that_share_a_file_are_refused(project):

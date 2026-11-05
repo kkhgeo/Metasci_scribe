@@ -201,6 +201,18 @@ class TestBuiltInSkills:
         ]
         assert len(open_markers(example)) == 1  # the open choice it shows
 
+    def test_the_key_message_line_is_settled_not_left_behind(self):
+        """/run stops on a ◇ in the key message line, so mapping one section
+        must not leave the /init placeholder there unasked."""
+        from pathlib import Path
+
+        skill = (Path(SKILLS_DIR) / "scribe-mapping" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        assert "## 핵심 메시지와 `/run`을 막는 ◇" in skill
+        assert "핵심 메시지: ◇ 아직 정하지 않음" in skill
+        assert "`핵심 메시지:` line" in prompts.WRITING_WORKFLOW
+
 
 # -- One real turn ------------------------------------------------------------
 
