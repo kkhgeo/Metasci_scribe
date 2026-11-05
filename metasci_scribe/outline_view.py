@@ -7,8 +7,9 @@ message, and for each section a flow of paragraph cards, the short table
 choices (◇), evidence still to check and missing evidence are marked.
 
 The app writes the page itself, under ``.metasci-scribe/view/``, so nothing in
-the paper folder changes. Nothing is fetched from the network: the page has
-its own styles and no scripts.
+the paper folder changes. The page has its own styles and no scripts. It is
+set in Paperlogy: the installed font when there is one, otherwise the web font
+from jsDelivr (the only thing the page fetches; no outline text leaves).
 """
 
 from __future__ import annotations
@@ -159,70 +160,74 @@ def parse_outline_view(text: str) -> OutlineView:
 
 # ------------------------------------------------------------------ rendering
 
+_CDN = "https://cdn.jsdelivr.net/gh/fonts-archive/Paperlogy"
+_WEIGHTS = {
+    300: "3Light",
+    400: "4Regular",
+    500: "5Medium",
+    600: "6SemiBold",
+    700: "7Bold",
+}
+
+# Paperlogy: the installed font first, the web font only where it is missing.
+_FONTS = "".join(
+    "@font-face{font-family:'Paperlogy';font-style:normal;font-display:swap;"
+    f"font-weight:{weight};src:local('Paperlogy {name[0]} {name[1:]}'),"
+    f"local('Paperlogy-{name}'),url('{_CDN}/Paperlogy-{name}.woff2') format('woff2')}}"
+    for weight, name in _WEIGHTS.items()
+)
+
 _CSS = """
-:root{--bg:#f6f7f9;--panel:#fff;--ink:#1d2330;--muted:#5d6676;--line:#dde2ea;
---accent:#00897b;--accent-soft:#e0f2f1;--warn:#b26a00;--warn-soft:#fff4e0;
---bad:#c0392b;--bad-soft:#fdecea;--chip:#eef1f5;--shadow:0 1px 2px rgba(20,30,50,.06)}
-@media (prefers-color-scheme:dark){:root{--bg:#12151b;--panel:#1a1f27;--ink:#e6e9ee;
---muted:#9aa3b2;--line:#2c333e;--accent:#4db6ac;--accent-soft:#16302d;--warn:#f0b357;
---warn-soft:#33270f;--bad:#f08070;--bad-soft:#3a1d1a;--chip:#232a34;--shadow:none}}
+:root{--bg:#fff;--ink:#16181d;--muted:#6b7079;--faint:#a3a8b0;--rule:#e7e9ec;
+--accent:#00897b;--open:#b26a00;--miss:#c0392b}
+@media (prefers-color-scheme:dark){:root{--bg:#121417;--ink:#e8eaed;--muted:#9aa0a8;
+--faint:#5f656e;--rule:#2a2e34;--accent:#4db6ac;--open:#e0a54a;--miss:#ef8a7e}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
-font:15px/1.6 "Pretendard","Apple SD Gothic Neo","Malgun Gothic","Segoe UI",sans-serif}
-main{max-width:1080px;margin:0 auto;padding:28px 16px 64px}
-header .kind{color:var(--accent);font-weight:700;letter-spacing:.04em;font-size:13px}
-h1{font-size:26px;margin:4px 0 6px;line-height:1.3}
-.meta{color:var(--muted);font-size:13px}
-.badge{display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;font-weight:700}
-.badge.draft{background:var(--warn-soft);color:var(--warn)}
-.badge.saved{background:var(--accent-soft);color:var(--accent)}
-.key{margin:18px 0 8px;padding:14px 18px;background:var(--panel);border:1px solid var(--line);
-border-left:4px solid var(--accent);border-radius:10px;box-shadow:var(--shadow)}
-.key b{display:block;font-size:12px;color:var(--muted);font-weight:600;margin-bottom:2px}
-.stats{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 0}
-.stats span{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:4px 10px;font-size:13px}
-nav{display:flex;gap:6px;flex-wrap:wrap;margin:16px 0 4px}
-nav a{color:var(--ink);text-decoration:none;background:var(--chip);border-radius:999px;padding:3px 12px;font-size:13px}
-section.sec{margin-top:34px}
-h2{font-size:20px;margin:0 0 12px;padding-bottom:6px;border-bottom:2px solid var(--line)}
-h3{font-size:14px;color:var(--muted);margin:22px 0 8px;font-weight:700}
-.notes{background:var(--panel);border:1px dashed var(--line);border-radius:10px;padding:10px 14px;
-color:var(--muted);font-size:13.5px;white-space:pre-wrap}
-.flow{display:flex;flex-direction:column;align-items:stretch;max-width:720px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;box-shadow:var(--shadow)}
-.card.open{border-color:var(--warn);background:linear-gradient(0deg,var(--warn-soft),var(--warn-soft)),var(--panel)}
-.card .top{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
-.pid{font:700 12px/1.4 "D2Coding",Consolas,monospace;background:var(--accent-soft);color:var(--accent);
-border-radius:6px;padding:2px 7px;white-space:nowrap}
-.card .title{font-weight:700}
-.card .role{color:var(--muted);font-size:13px}
-.card .claim{margin-top:4px}
-.arrow{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;padding:4px 0 4px 22px}
-.arrow::before{content:"↓";font-size:18px;color:var(--accent);font-weight:700}
-.tag{display:inline-block;font-size:11.5px;font-weight:700;border-radius:6px;padding:1px 7px}
-.tag.open{background:var(--warn-soft);color:var(--warn)}
-table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);
-border-radius:10px;overflow:hidden;box-shadow:var(--shadow)}
-th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--line)}
-th{font-size:12.5px;color:var(--muted);background:var(--chip);font-weight:700}
-tr:last-child td{border-bottom:0}
-td.no{white-space:nowrap;width:1%}
-tr.open td{background:var(--warn-soft)}
-.ev{display:flex;flex-direction:column;gap:4px}
-.chip{display:inline-block;border-radius:6px;padding:2px 8px;font-size:12.5px;background:var(--chip)}
-.chip code{font:12px "D2Coding",Consolas,monospace}
-.chip.check{background:var(--warn-soft);color:var(--warn)}
-.chip.miss{background:var(--bad-soft);color:var(--bad)}
-.decide{margin:8px 0 0;padding:0;list-style:none}
-.decide li{background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:6px 10px;margin-top:6px;font-size:13.5px}
-.sentences{margin-top:6px;font-size:13px;color:var(--muted)}
-code{font-family:"D2Coding",Consolas,monospace;font-size:.92em}
-footer{margin-top:40px;color:var(--muted);font-size:12px}
-.chip{overflow-wrap:anywhere}
-@media (max-width:720px){table,tbody,tr,td{display:block;width:100%}
-tr.head{display:none}tr{border-bottom:1px solid var(--line)}td{border:0;padding:6px 12px}
-td[data-label]::before{content:attr(data-label);display:block;font-size:11.5px;color:var(--muted);font-weight:700}
-td.no{width:auto;padding-top:10px}}
+font:400 16px/1.75 'Paperlogy','Malgun Gothic','Apple SD Gothic Neo',sans-serif;
+-webkit-font-smoothing:antialiased;word-break:keep-all;overflow-wrap:anywhere}
+main{max-width:860px;margin:0 auto;padding:64px 20px 96px}
+.meta{color:var(--muted);font-size:13px;letter-spacing:.01em}
+h1{font-weight:700;font-size:34px;line-height:1.3;margin:10px 0 0;letter-spacing:-.01em}
+.key{font-weight:400;font-size:20px;line-height:1.6;margin:22px 0 0;color:var(--ink)}
+.key::before{content:"핵심 메시지";display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+.counts{color:var(--muted);font-size:13px;margin-top:22px}
+.open-text{color:var(--open)}
+section{margin-top:72px}
+h2{font-weight:600;font-size:24px;margin:0 0 6px;padding-top:20px;border-top:1px solid var(--ink)}
+h3{font-weight:500;font-size:13px;color:var(--muted);margin:36px 0 12px;letter-spacing:.02em}
+.notes{color:var(--muted);font-size:14px;white-space:pre-wrap;margin:10px 0 0}
+.decide{list-style:none;margin:10px 0 0;padding:0}
+.decide li{color:var(--open);font-size:14px}
+ol.flow{list-style:none;margin:0;padding:0}
+ol.flow>li{position:relative;padding:0 0 26px 26px;border-left:1px solid var(--rule);margin-left:5px}
+ol.flow>li:last-child{border-left-color:transparent;padding-bottom:0}
+ol.flow>li::before{content:"";position:absolute;left:-5px;top:9px;width:9px;height:9px;
+border-radius:50%;background:var(--bg);border:1.5px solid var(--accent)}
+ol.flow>li.open::before{border-color:var(--open)}
+.pid{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums;margin-right:8px}
+.ptitle{font-weight:600}
+.role{color:var(--muted);font-size:13px;margin-left:8px}
+.claim{margin-top:2px}
+.link{color:var(--muted);font-size:13px;margin-top:6px}
+.link::before{content:"→ ";color:var(--faint)}
+.sentences{color:var(--muted);font-size:13px;margin-top:4px}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;vertical-align:top;padding:12px 14px 12px 0;border-bottom:1px solid var(--rule)}
+th{font-weight:500;font-size:12px;color:var(--muted);border-bottom-color:var(--ink);padding-top:0}
+td.no{white-space:nowrap;width:1%;color:var(--muted);font-size:13px}
+tr.open td.no{color:var(--open)}
+.ev div{font-size:13.5px}
+.path{color:var(--muted)}
+.check{color:var(--open)}
+.miss{color:var(--miss)}
+.mark{color:var(--open)}
+code{font-family:'D2Coding',Consolas,monospace;font-size:.9em}
+footer{margin-top:80px;color:var(--faint);font-size:12px}
+@media (max-width:720px){main{padding:40px 18px 72px}h1{font-size:28px}.key{font-size:18px}
+table,tbody,tr,td{display:block;width:100%}tr.head{display:none}
+tr{border-bottom:1px solid var(--rule);padding:10px 0}td{border:0;padding:3px 0}
+td[data-label]::before{content:attr(data-label);display:block;font-size:12px;color:var(--muted)}}
 """
 
 
@@ -231,27 +236,27 @@ def _inline(text: str) -> str:
     out = html.escape(text)
     out = re.sub(r"`([^`]+)`", r"<code>\1</code>", out)
     out = re.sub(r"\*\*([^*]+)\*\*", r"<b>\1</b>", out)
-    return out.replace(_MARKER, f'<span class="tag open">{_MARKER}</span>')
+    return out.replace(_MARKER, f'<span class="mark">{_MARKER}</span>')
 
 
 def _evidence(value: str) -> str:
     if not value.strip():
         return ""
-    chips = []
+    rows = []
     for item in (part.strip() for part in value.split(";")):
         if not item:
             continue
         if "자료없음" in item or item.startswith("⚠"):
-            chips.append(f'<span class="chip miss">{_inline(item)}</span>')
+            rows.append(f'<div class="miss">{_inline(item)}</div>')
         elif item.startswith("확인 필요"):
-            chips.append(f'<span class="chip check">{_inline(item)}</span>')
+            rows.append(f'<div class="check">{_inline(item)}</div>')
         else:
             path, sep, what = item.partition(" — ")
-            body = f"<code>{html.escape(path)}</code>" + (
-                f" — {_inline(what)}" if sep else ""
+            what_html = f" — {_inline(what)}" if sep else ""
+            rows.append(
+                f'<div><span class="path">{html.escape(path)}</span>{what_html}</div>'
             )
-            chips.append(f'<span class="chip">{body}</span>')
-    return '<div class="ev">' + "".join(chips) + "</div>"
+    return '<div class="ev">' + "".join(rows) + "</div>"
 
 
 def _label(p: Paragraph) -> str:
@@ -268,10 +273,28 @@ def _decisions(items: list[str]) -> str:
     )
 
 
-def _section_html(index: int, s: Section) -> str:
-    parts = [
-        f'<section class="sec" id="s{index}"><h2>{html.escape(s.name or "(섹션 없음)")}</h2>'
-    ]
+def _flow_item(p: Paragraph, last: bool) -> str:
+    role, claim, link = p.value("역할"), p.value("핵심 내용"), p.value("연결")
+    sentences = p.value("문장 구성")
+    return (
+        f'<li class="{"open" if p.open else ""}">'
+        f'<span class="pid">{html.escape(_label(p))}</span>'
+        f'<span class="ptitle">{_inline(p.title)}</span>'
+        + (f'<span class="role">{_inline(role)}</span>' if role else "")
+        + (f'<div class="claim">{_inline(claim)}</div>' if claim else "")
+        + (
+            f'<div class="sentences">문장 구성 {_inline(sentences)}</div>'
+            if sentences
+            else ""
+        )
+        + _decisions(p.decisions)
+        + (f'<div class="link">{_inline(link)}</div>' if link and not last else "")
+        + "</li>"
+    )
+
+
+def _section_html(s: Section) -> str:
+    parts = [f"<section><h2>{html.escape(s.name or '(섹션 없음)')}</h2>"]
     if s.notes:
         parts.append(
             '<div class="notes">'
@@ -283,33 +306,10 @@ def _section_html(index: int, s: Section) -> str:
         parts.append('<p class="meta">아직 단락이 없습니다.</p></section>')
         return "".join(parts)
 
-    parts.append('<h3>흐름</h3><div class="flow">')
-    for i, p in enumerate(s.paragraphs):
-        role = p.value("역할")
-        parts.append(
-            f'<div class="card{" open" if p.open else ""}"><div class="top">'
-            f'<span class="pid">{html.escape(_label(p))}</span>'
-            f'<span class="title">{_inline(p.title)}</span>'
-            + (f'<span class="role">{_inline(role)}</span>' if role else "")
-            + (' <span class="tag open">결정 필요</span>' if p.open else "")
-            + "</div>"
-            + (
-                f'<div class="claim">{_inline(p.value("핵심 내용"))}</div>'
-                if p.value("핵심 내용")
-                else ""
-            )
-            + (
-                f'<div class="sentences">문장 구성: {_inline(p.value("문장 구성"))}</div>'
-                if p.value("문장 구성")
-                else ""
-            )
-            + _decisions(p.decisions)
-            + "</div>"
-        )
-        if i < len(s.paragraphs) - 1:
-            link = p.value("연결")
-            parts.append(f'<div class="arrow">{_inline(link)}</div>')
-    parts.append("</div>")
+    count = len(s.paragraphs)
+    parts.append('<h3>흐름</h3><ol class="flow">')
+    parts.extend(_flow_item(p, i == count - 1) for i, p in enumerate(s.paragraphs))
+    parts.append("</ol>")
 
     parts.append(
         '<h3>간략 구성표</h3><table><tr class="head"><th>번호</th><th>역할</th>'
@@ -317,8 +317,8 @@ def _section_html(index: int, s: Section) -> str:
     )
     for p in s.paragraphs:
         parts.append(
-            f'<tr class="{"open" if p.open else ""}"><td class="no">'
-            f'<span class="pid">{html.escape(_label(p))}</span></td>'
+            f'<tr class="{"open" if p.open else ""}">'
+            f'<td class="no">{html.escape(_label(p))}</td>'
             f'<td data-label="역할">{_inline(p.value("역할"))}</td>'
             f'<td data-label="핵심 내용">{_inline(p.value("핵심 내용"))}</td></tr>'
         )
@@ -330,8 +330,8 @@ def _section_html(index: int, s: Section) -> str:
     )
     for p in s.paragraphs:
         parts.append(
-            f'<tr class="{"open" if p.open else ""}"><td class="no">'
-            f'<span class="pid">{html.escape(_label(p))}</span></td>'
+            f'<tr class="{"open" if p.open else ""}">'
+            f'<td class="no">{html.escape(_label(p))}</td>'
             f'<td data-label="전달할 내용">{_inline(p.value("전달할 내용"))}</td>'
             f'<td data-label="근거">{_evidence(p.value("근거"))}</td>'
             f'<td data-label="연결">{_inline(p.value("연결"))}</td></tr>'
@@ -341,47 +341,33 @@ def _section_html(index: int, s: Section) -> str:
 
 
 def render_outline_html(
-    view: OutlineView, *, title: str = "", saved: bool = True, source: str = ""
+    view: OutlineView, *, title: str = "", saved: bool = True
 ) -> str:
     """The page for *view*. *saved* tells a saved ``outline.md`` from a
-    proposal not yet saved; *source* is shown in the header."""
+    proposal not yet saved."""
     heading = title.strip() or "논문 구성 지도"
-    status = (
-        '<span class="badge saved">저장된 outline.md</span>'
-        if saved
-        else '<span class="badge draft">제안 — 아직 저장하지 않음</span>'
-    )
-    stats = (
-        f"<span>섹션 {len(view.sections)}</span>"
-        f"<span>단락 {view.paragraph_count}</span>"
-        + (
-            f'<span class="tag open">결정 필요 {view.open_count}</span>'
-            if view.open_count
-            else "<span>남은 결정 없음</span>"
-        )
-    )
-    nav = "".join(
-        f'<a href="#s{i}">{html.escape(s.name or "(섹션 없음)")}</a>'
-        for i, s in enumerate(view.sections)
-    )
-    key = (
-        f'<div class="key"><b>핵심 메시지</b>{_inline(view.key_message)}</div>'
-        if view.key_message
+    status = "저장된 outline.md" if saved else "제안 · 아직 저장하지 않음"
+    when = datetime.now().strftime("%Y-%m-%d %H:%M")
+    meta = " · ".join(("구성 지도", status, when))
+    opens = (
+        f' · <span class="open-text">◇ 결정 {view.open_count}</span>'
+        if view.open_count
         else ""
     )
-    when = datetime.now().strftime("%Y-%m-%d %H:%M")
-    body = "".join(_section_html(i, s) for i, s in enumerate(view.sections))
+    counts = f"섹션 {len(view.sections)} · 단락 {view.paragraph_count}{opens}"
+    key = f'<p class="key">{_inline(view.key_message)}</p>' if view.key_message else ""
+    body = "".join(_section_html(s) for s in view.sections)
     return (
         '<!doctype html><html lang="ko"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        f"<title>{html.escape(heading)} — 구성 지도</title><style>{_CSS}</style></head>"
-        f'<body><main><header><div class="kind">METASCI SCRIBE · 구성 지도</div>'
-        f"<h1>{html.escape(heading)}</h1>"
-        f'<div class="meta">{status} &nbsp;{html.escape(source)} · {when}</div>'
-        f'<div class="stats">{stats}</div></header>{key}'
+        f"<title>{html.escape(heading)} — 구성 지도</title>"
+        f"<style>{_FONTS}{_CSS}</style></head>"
+        f'<body><main><header><div class="meta">{html.escape(meta)}</div>'
+        f"<h1>{html.escape(heading)}</h1>{key}"
+        f'<div class="counts">{counts}</div>'
         + _decisions(view.decisions)
-        + f"<nav>{nav}</nav>{body}"
-        "<footer>이 페이지는 Metasci Scribe가 만든 미리보기입니다. "
+        + f"</header>{body}"
+        "<footer>Metasci Scribe가 만든 미리보기입니다. "
         "고칠 때는 outline.md를 고치거나 대화로 요청하세요.</footer>"
         "</main></body></html>"
     )
@@ -413,7 +399,6 @@ def show_outline(
         view,
         title=_paper_title(root),
         saved=saved,
-        source="outline.md" if saved else "대화의 제안",
     )
     folder = Workspace(root).state_dir / "view"
     folder.mkdir(parents=True, exist_ok=True)

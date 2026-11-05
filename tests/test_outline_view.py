@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from io import StringIO
 from types import SimpleNamespace
 
@@ -64,15 +65,27 @@ def test_the_outline_is_read_into_sections_paragraphs_and_fields():
 def test_the_page_shows_the_parts_and_marks_what_is_open():
     page = render_outline_html(parse_outline_view(OUTLINE), title="Plants", saved=False)
     assert page.startswith("<!doctype html>")
-    assert "제안 — 아직 저장하지 않음" in page
+    assert "제안 · 아직 저장하지 않음" in page
     assert "Plants grow." in page
-    assert page.count('class="card') == 2
-    assert "결정 필요" in page
-    assert 'class="chip check"' in page  # 확인 필요
-    assert 'class="chip miss"' in page  # 자료없음
-    assert "<code>Tables/T1.csv</code>" in page
+    assert page.count('<li class="') == 2  # one flow item per paragraph
+    assert "◇ 결정 1" in page
+    assert '<div class="check">확인 필요: T2/units</div>' in page
+    assert '<div class="miss">⚠ 자료없음: site C</div>' in page
+    assert '<span class="path">Tables/T1.csv</span> — growth' in page
     assert "Not a section" not in page
-    assert "http" not in page.split("</style>")[0]  # nothing fetched
+    assert "<button" not in page
+    assert "<script" not in page
+
+
+def test_the_page_is_set_in_paperlogy_installed_first():
+    page = render_outline_html(parse_outline_view(OUTLINE))
+    assert "font-family:'Paperlogy'" in page
+    assert page.index("local('Paperlogy 4 Regular')") < page.index(
+        "Paperlogy-4Regular.woff2"
+    )
+    # The only address on the page is the font's.
+    urls = set(re.findall(r"https?://[^/'\")]+", page))
+    assert urls == {"https://cdn.jsdelivr.net"}
 
 
 def test_text_from_the_outline_cannot_add_markup():
