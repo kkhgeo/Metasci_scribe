@@ -80,7 +80,14 @@ def test_line_endings_alone_are_no_edit(tmp_path):
     source, target = _shipped(tmp_path), tmp_path / "home"
     seed_skills(source, target)
     skill = target / "scribe-review" / "SKILL.md"
-    skill.write_bytes(skill.read_bytes().replace(b"\n", b"\r\n"))
+    data = skill.read_bytes()  # flip the endings, whichever they are
+    flipped = (
+        data.replace(b"\r\n", b"\n")
+        if b"\r\n" in data
+        else data.replace(b"\n", b"\r\n")
+    )
+    assert flipped != data
+    skill.write_bytes(flipped)
     _shipped(tmp_path, "v2")
     seed_skills(source, target)
     assert "v2" in skill.read_text("utf-8")
