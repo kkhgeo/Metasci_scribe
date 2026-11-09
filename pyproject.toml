@@ -134,7 +134,8 @@ exclude = [
 ]
 
 # One-off experiments and the design notes are records, not maintained code.
-extend-exclude = ["spikes", "docs/superpowers"]
+# The scribe-* skills carry the author's own checker scripts, kept as they are.
+extend-exclude = ["spikes", "docs/superpowers", "metasci_scribe/skills/scribe-*/scripts"]
 
 line-length = 88
 indent-width = 4

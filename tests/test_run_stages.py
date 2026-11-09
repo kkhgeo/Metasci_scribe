@@ -147,4 +147,4 @@ def test_skills_are_found_in_the_paper_then_the_author_s_folder(tmp_path, monkey
     own.mkdir(parents=True)
     (own / "SKILL.md").write_text("x", encoding="utf-8")
     assert run_stages.find_skill(paper, "scribe-review") == own
-    assert "scribe-writing-korean" in run_stages.missing_skills(paper, "ko")
+    assert run_stages.missing_skills(paper, "ko") == []  # the rest ship with the app

@@ -1,0 +1,483 @@
+# Meta Writing Template
+
+## 5-Loop 상세 실행 절차
+
+이 파일은 SKILL.md Phase 2~3에서 참조하는 상세 실행 절차이다.
+소스별 처리 방법, 갭 분석, 출력 형식 상세를 포함한다.
+
+> **Metasci Scribe에서:** 설정은 `program.md`와 `outline.md`에서 읽는다. 선행문헌은
+> `Knowledge/`의 PDF를 앱이 추출한 `.metasci-scribe/extracted/<PDF 파일 이름>.md`
+> (`[p. N]` 쪽 표시)이며, 아래의 "Knowledge 파일"·"PDF"는 모두 이 추출본을 뜻한다.
+> PDF는 직접 열지 않는다. 웹 검색은 없다. 근거가 모자라면 갭을 보고하고 본문에
+> `[evidence needed]`를 남긴다.
+
+---
+
+## Loop 1: Source Scan & Planning
+
+```
+목적: 사용 가능한 소스 파악 및 탐색 계획
+입력: program.md, outline.md의 해당 단락 항목, 사용자 지정 경로
+출력: 탐색 계획
+```
+
+### 작업 절차
+
+1. **프로젝트 설정 확인**
+   - program.md를 읽는다 (제목, 투고처, 핵심 메시지, 언어, 독자)
+   - outline.md에서 해당 단락의 역할·핵심 내용·전달할 내용·근거·연결을 읽는다
+
+2. **My Data 폴더 확인**
+   - Figures/ 내 이미지 파일 목록
+   - Tables/ 내 데이터 파일 목록
+   - outline.md의 `근거:` 필드에 적힌 그림/표와 섹션 배치 확인
+
+3. **Knowledge 확인**
+   - `.metasci-scribe/extracted/` 목록을 본다 (index.md는 없다)
+   - outline.md `근거:`에 적힌 파일을 먼저 고른다
+   - 파일명과 요청 주제 매칭
+   - 추출본이 없는 `Knowledge/`의 PDF는 저자에게 알린다 (추측하지 않는다)
+
+4. **추가 후보 확인**
+   - `근거:`에 없지만 주제와 관련된 추출본을 파일명으로 판단
+
+5. **탐색 계획 수립**
+   - 어떤 파일을 어떤 순서로 읽을지
+   - My Data 중 분석 대상 확정
+   - 예상 소요 루프 수
+
+---
+
+## Loop 2: Knowledge Reading
+
+```
+목적: Knowledge 추출본에서 선행연구 지식 추출
+입력: 선별된 Knowledge 추출본 (최대 5개)
+출력: 중간 결과 A
+```
+
+### 작업 절차
+
+1. Knowledge 파일 순차 읽기
+2. 요청 섹션/주제 관련 카테고리 추출:
+   - Theoretical Foundations (이론적 기반)
+   - Empirical Precedents (실증적 선례)
+   - Methodological Heritage (방법론적 유산)
+   - Contextual Knowledge (맥락 지식)
+   - Critical Discourse (비판적 담론)
+3. Claim + Citation 쌍으로 저장
+4. 소스 표기: [Knowledge]
+
+### 추출 형식
+
+```markdown
+| Claim | Citation | Category | Source |
+|-------|----------|----------|--------|
+| [주요 발견/사실] | Author1 et al. (Year) | Empirical Precedents | Knowledge |
+| [방법론 정보] | Author2 et al. (Year) | Methodological Heritage | Knowledge |
+```
+
+---
+
+## Loop 3: My Data Analysis + Additional Sources
+
+```
+목적: 내 데이터 분석 + 추가 Knowledge/PDF로 보완
+입력: My Data 파일 + 추가 Knowledge/PDF 파일
+출력: 중간 결과 B
+```
+
+### 3-1. 내 데이터 분석
+
+**그림(Figure) 처리:**
+```
+1. 이미지 파일 읽기 (Claude가 직접 시각 분석)
+2. 축 라벨, 단위, 범위 파악
+3. 데이터 분포 패턴 식별:
+   - 그룹화 여부
+   - 추세선/상관관계
+   - 이상값 존재 여부
+4. 정량적 특성 추출:
+   - 값의 범위 (최소~최대)
+   - 주요 그룹별 범위
+   - 뚜렷한 패턴
+5. 수치의 출처 등급 판정:
+   - 원자료(CSV/Excel)가 있으면 → 반드시 그것에서 수치를 가져온다 (정확값)
+   - 이미지에서만 읽었으면 → 근사값. 본문에 "~" 표기 + 저자 확인 대상으로 표시
+   - 축 라벨·단위·범례가 불명확하면 → 추정하지 말고 사용자에게 질문
+6. 출력: 패턴 기술 + 수치 정보 (각 수치에 정확/근사 등급 부기)
+```
+
+> 이미지에서 눈으로 읽은 값은 추정치다. 검증 단계에서 그림 번호와 파일 존재만 확인하면
+> 잘못 읽은 수치가 그대로 통과하므로, 여기서 등급을 남겨야 Phase 4가 잡을 수 있다.
+
+**표(Table) 처리:**
+```
+1. CSV/Excel/이미지 읽기
+2. 열(Column) 구조 파악
+3. 기초 통계 산출:
+   - 범위, 평균, 중앙값
+   - 시료 수
+4. 패턴 식별:
+   - 그룹 간 차이
+   - 공간적/시간적 변화
+   - 이상값
+5. 출력: 데이터 요약 + 통계 정보
+```
+
+**데이터 파일(CSV/Excel) 처리:**
+```
+1. 파일 로드
+2. 변수별 기초 통계 산출
+3. 주요 패턴 식별
+4. 출력: 통계 요약 + 패턴
+```
+
+### 3-2. 내 데이터와 Knowledge 매칭
+
+```
+내 데이터에서 추출한 수치/패턴에 대해:
+1. Knowledge 중간 결과 A에서 비교 가능한 데이터 검색
+2. 비교 쌍 생성:
+
+| 내 데이터 | 선행연구 | 비교 유형 |
+|-----------|---------|-----------|
+| [변수]: [내 범위/값] | Author1(Year): [선행 범위/값] | 유사/차이/신규 |
+| [관찰된 패턴] | Author2(Year): [선행 패턴] | 유사/차이/신규 |
+```
+
+### 3-3. 추가 소스 읽기
+
+```
+1. 남은 Knowledge 추출본 읽기 (있으면)
+2. 추가 추출본 읽기 필요 여부 판단:
+   - 지금까지 읽은 자료에서 커버 안 된 주제?
+   - 사용자·outline이 특정 문헌 지정?
+   - 내 데이터 해석에 필요한 추가 정보?
+3. 추가 추출본 읽기 (필요시)
+   - 관련 섹션에서 정보 추출, `[p. N]` 기록
+   - 소스 표기: [PDF]
+4. 중간 결과 B 저장
+```
+
+---
+
+## Loop 4: Gap Check
+
+```
+목적: 지식 갭 식별 + 폴더 안 자료로 보완, 남은 갭은 표시
+입력: 중간 결과 A + B
+출력: 중간 결과 C + 갭 보고서
+```
+
+### 갭 체크 항목
+
+```
+□ 최소 인용 수 충족?
+□ 핵심 키워드 모두 커버?
+□ 최신 연구 포함? (2023년 이후)
+□ 지역별 데이터 균형?
+□ 방법론 정보 충분?
+□ 내 데이터의 모든 주요 패턴에 대해 비교할 선행연구가 있는가?
+□ Discussion에서 해석할 근거가 충분한가?
+```
+
+### 갭 분석 보고서 템플릿
+
+```markdown
+## 갭 분석 보고서
+
+### 현재 수집된 지식
+- Knowledge: N claims from N files
+- PDF: N claims from N files
+- My Data: Figure N개, Table N개 분석 완료
+- Total: N claims
+
+### 갭 체크 결과
+
+| 항목 | 상태 | 조치 |
+|------|------|------|
+| 최소 인용 수 (5개) | ✅ / ❌ | - / 남은 추출본 확인 → 갭 보고 |
+| 내 데이터 비교 대상 확보 | ✅ / ❌ | - / 남은 추출본 확인 → 갭 보고 |
+| 2023년 이후 연구 | ✅ / ❌ | - / 갭 보고 |
+| 해석 근거 충분 | ✅ / ❌ | - / `[interpretation needed — no supporting source]` |
+
+### 남은 갭 (저자에게 요청할 자료)
+- [부족한 정보] — 본문 위치에 `[evidence needed]`
+```
+
+### 갭 처리 규칙
+
+```
+1. 웹 검색은 없다. 폴더 밖 지식이나 기억으로 갭을 채우지 않는다
+2. 폴더 안의 다른 추출본·그림·표로 채울 수 있으면 채운다
+3. 채울 수 없으면 본문에 [evidence needed]를 남기고, 무엇이 없는지 갭 보고에 적는다
+4. 인용 수 목표를 채우려고 주장과 무관한 문헌을 끌어오지 않는다
+```
+
+---
+
+## Loop 5: Synthesis & Writing
+
+```
+목적: 모든 소스 종합 + 최종 글쓰기
+입력: 중간 결과 A + B + C + My Data 분석 결과
+출력: 최종 글
+```
+
+### 5-0. 골격 확정 (산문화 이전)
+
+문장을 만들기 전에 단락별 논지를 한 줄씩 확정한다. 이 골격이 Phase 3.5의 판정 기준이 된다.
+
+```
+Core message: [이 글이 관철해야 할 단 하나의 주장]
+
+| 단락 | topic sentence (한 줄) | 근거 소스 | Core message 기여 |
+|------|----------------------|----------|------------------|
+| 1 | [주장] | Figure 1, (Author, Year) | [어떻게 기여하는가] |
+| 2 | [주장] | (Author, Year) x2 | [어떻게 기여하는가] |
+| 3 | [주장] | Table 1, (Author, Year) | [어떻게 기여하는가] |
+```
+
+- Core message 기여를 한 줄로 못 쓰는 단락은 골격 단계에서 뺀다. 쓰고 나서 빼는 것보다 싸다.
+- section_guides.md의 섹션별 "구조" 블록은 *일반 템플릿*이다. 이 표는 *이번 원고*의 논지다.
+- 근거 소스가 비어 있는 단락이 있으면 Loop 4로 돌아가 보완하거나 범위를 줄인다.
+
+### 5-1. 소스 병합
+
+```
+1. Knowledge + PDF 결과 통합 (선행연구)
+2. My Data 분석 결과 별도 유지 (본 연구)
+3. 중복 제거
+4. 소스 유형 태그 유지
+```
+
+### 5-2. My Data vs Knowledge 문장 구분 규칙
+
+**Results 섹션에서:**
+```
+내 데이터 (주어, 기술 대상):
+- "본 연구의 [변수] 값은 [범위] 범위를 보였다 (Figure N)."
+- "The [variable] values ranged from [X] to [Y] (Figure N)."
+
+선행연구 (비교 대상):
+- "이는 Author (Year)이 보고한 [범위]와 유사하다."
+- "comparable to the range reported by Author (Year)."
+```
+
+**Discussion 섹션에서:**
+```
+내 데이터 (해석 대상):
+- "본 연구에서 관찰된 [패턴/현상]은..."
+- "The [pattern/phenomenon] observed in this study..."
+
+선행연구 (해석 근거):
+- "이는 Author (Year)이 제안한 [이론/모델]로 설명될 수 있다."
+- "This can be explained by the [theory/model] proposed by Author (Year)."
+```
+
+### 5-3. 정렬 원칙
+
+```
+시간순: foundational → recent
+지역순: global → regional → local
+논리순: Problem → Evidence → Application
+
+Results 내 정렬:
+1. 내 데이터 기술 먼저
+2. 선행연구와 비교
+3. 패턴/이상점 주목
+
+Discussion 내 정렬:
+1. 주요 발견 요약
+2. 메커니즘 해석 (선행연구 근거)
+3. 함의 → 한계 → 향후 연구
+```
+
+### 5-4. 그림/표 참조 삽입 규칙
+
+```
+본문 내 참조:
+- "(Figure 1)" 또는 "(Table 1)" — 괄호 안
+- "Figure 1에 제시하였다" — 문장 주어로
+- "as shown in Figure 1" — 부연
+
+참조 위치:
+- 해당 데이터를 처음 언급하는 문장에 삽입
+- 같은 그림을 재참조할 때: "(Figure 1)" 반복 가능
+- 순서: 본문에서 언급 순서대로 Figure 1, 2, 3...
+```
+
+---
+
+## 출력 형식 상세
+
+> **Metasci Scribe에서:** 아래 일곱 블록은 기본 출력이 아니다. 본문(C)은
+> `Manuscript/<섹션>.md`에 원고 언어로만 쓰고(영한 병기 없음), 새 참고문헌(D)은
+> 대화 답에만 나열한다. A·B·E·F·G는 저자가 요청할 때만 대화에 낸다. 기본 답의
+> 짜임은 SKILL.md "대화 화면의 짜임"을 따른다.
+
+### A) Approach Checklist (접근법 체크리스트)
+
+3~8개 단계로 수행한 작업 요약. 영어 + 한국어.
+
+```markdown
+**English:**
+- [1] Loaded project settings from program.md and the outline entry
+- [2] Analyzed Figure N ([그림 설명])
+- [3] Read N Knowledge files ([파일명 목록])
+- [4] Gap check: [부족 항목] → [보완 방법]
+- [5] Synthesized all sources → wrote [섹션명]
+- [6] Reference verification → all citations validated
+
+**한국어:**
+- [1] program.md와 outline 항목에서 프로젝트 설정 로드
+- [2] Figure N 분석 ([그림 설명])
+- [3] Knowledge 파일 N개 읽기
+- [4] 갭 체크: [부족 항목] → [보완 방법]
+- [5] 모든 소스 종합 → [섹션명] 작성
+- [6] 레퍼런스 검증 → 모든 인용 확인
+```
+
+### B) Source Summary (소스 요약)
+
+```markdown
+## 사용된 소스
+
+### My Data (본 연구)
+| 유형 | 파일 | 섹션 배치 |
+|------|------|----------|
+| Figure | [파일명] | [섹션] |
+| Table | [파일명] | [섹션] |
+
+### Knowledge Sources (선행연구)
+| 소스 유형 | 파일/쿼리 | 추출 항목 수 |
+|-----------|----------|-------------|
+| Knowledge | [파일명 목록] | N claims |
+| PDF | [파일명 목록] | N claims |
+
+### 갭 보고
+- [해결됨/미해결] [항목 설명]
+- [보완 방법] [추가된 내용 설명]
+```
+
+### C) Main Text (본문)
+
+영어 + 한국어 이중 출력. (소스 유형은 본문에 표기하지 않는다 — 내부 추적은 B) Source Summary에만 기록.)
+
+> **AI 생성 초안 — 저자 검증·개작 필요.** 논지 선택과 해석의 타당성, 최종 문장은 저자가
+> 결정한다. 소스가 결정해 주지 않는 판단이 들어간 문장에는
+> `[interpretation needed — no supporting source]` 또는 `[author judgement]`를 인라인
+> 표시해 저자가 어디를 봐야 하는지 드러낸다.
+
+```markdown
+#### Paragraph 1
+
+**[English]**
+[My Data 기술]. [Knowledge 비교 (Author1, Year)].
+Furthermore, [PDF 근거 (Author2, Year)].
+[결론/전환문].
+
+**[한국어]**
+[내 데이터 기술]. [Knowledge 비교 (Author1, Year)].
+또한, [PDF 근거 (Author2, Year)].
+[결론/전환문].
+```
+
+### D) References (APA 7)
+
+저자 알파벳순 **단일 통합 목록**. `citation-and-verification.md` §2.1 형식 참조.
+
+### E) Self-Assessment
+
+`citation-and-verification.md`의 체크리스트 참조.
+
+### F) Reference Verification Report
+
+`citation-and-verification.md`의 검증 보고서 템플릿 참조.
+
+### G) AI Assistance Log
+
+투고 시 AI 사용 공개(disclosure)를 요구하는 저널이 늘고 있다. A) Approach Checklist에
+재료가 이미 있으므로 그것을 공개용 형식으로 정리한다.
+
+```markdown
+## G) AI Assistance Log
+
+### 개입 층위
+[ ] 기술 지원 — 서식·인용 정리·번역 수준
+[x] 텍스트 개발 — 단락 초안 생성
+[ ] 전환적 — 해석·논증 구성에 관여
+> 층위가 높을수록 저자 검토 부담이 커집니다.
+
+### 수행한 작업
+- Knowledge 파일 N개에서 Claim-Citation 추출
+- Figure N / Table N 판독 및 기술
+- [섹션명] 초안 단락 N개 생성 (영/한)
+- APA 7 참고문헌 서식 정리
+- 인용-참고문헌 매칭 및 Claim-Source 대조 검증
+
+### 수행하지 않은 작업
+- 데이터 생성·수정 없음
+- 통계 재계산 없음
+- 원자료에 없는 수치 산출 없음
+- 제공되지 않은 문헌의 인용 생성 없음
+
+### 저자 확인이 필요한 항목
+- [근사값으로 표기된 수치 목록]
+- [unverified secondary citation 목록]
+- [interpretation needed 표시 위치]
+
+### 저널 제출용 disclosure 초안
+"During the preparation of this work the author(s) used [tool] to draft and edit
+sections of the manuscript based on author-supplied data and literature. The author(s)
+reviewed and edited the content and take full responsibility for the content of the
+publication."
+> 실제 문구는 투고처 정책에 맞춰 저자가 조정하십시오.
+```
+
+---
+
+## 소스별 상세 처리 방법
+
+### PDF 추출본 처리
+
+```
+입력: [.metasci-scribe/extracted/<PDF 파일 이름>.md]  (PDF 자체는 열지 않는다)
+
+절차:
+1. Abstract + Conclusion 우선 읽기 (핵심 파악)
+2. 필요 시 특정 섹션(Methods, Results 등) 추가 읽기
+3. 주제 관련 문장 식별
+4. 인용 정보 추출 (저자, 연도, 저널) — 추출본에 보이는 것만
+5. 페이지 번호 기록 ([p. N] 표시)
+6. 그 논문이 다른 문헌을 인용해 전하는 주장은 2차 정보로 표시
+   (citation-and-verification.md Step 3 "2차 인용 처리")
+
+출력:
+| Claim | Citation | Source |
+|-------|----------|--------|
+| [핵심 주장/사실] | Author et al. (Year, p.N) | PDF |
+
+> Source 열은 **내부 추적용**이다. 본문 표기 규칙은
+> `citation-and-verification.md` §1을 따른다.
+```
+
+---
+
+## 에러 처리
+
+| 상황 | 대응 |
+|------|------|
+| 모든 소스 없음 | "Knowledge/에 PDF를, Figures/·Tables/에 자료를 넣어 주세요." 쓸 수 있는 부분만 쓰고 `[evidence needed]` |
+| My Data 파일 읽기 실패 | 오류 보고 + 사용자에게 파일 확인 요청 |
+| PDF의 추출본 없음 | 저자에게 알림. 내용을 추측하지 않음 |
+| 폴더 자료로 근거 부족 | "사용 가능한 자료에서 충분한 근거를 확보하지 못했습니다." 무엇이 없는지 적고 `[evidence needed]` |
+| 그림/표 번호와 파일 불일치 | 사용자에게 확인 요청 (`/run`에서는 `[evidence needed]` 표시 후 진행) |
+| 그림 축 라벨·단위·범례 판독 불가 | 추정 금지 — 사용자에게 질문 (`/run`에서는 수치를 쓰지 않고 `[evidence needed]`) |
+| 해석 근거가 될 소스가 없음 | 지어내지 말고 `[interpretation needed — no supporting source]` 표기 후 보고 |
+| Knowledge의 인용을 원문에서 확인 불가 | `[unverified secondary citation]` 표기 후 보고 |
+
+---
+
+**Version**: 1.1.0

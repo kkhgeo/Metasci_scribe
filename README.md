@@ -74,10 +74,17 @@ text. This takes about three times the model use of `/run --quick`. Reviews
 are the agent's own; they are no check by a person.
 
 The five skills these turns use (`scribe-writing`, `scribe-writing-korean`,
-`scribe-review`, `scribe-rewriting`, `scribe-rewriting-korean`) **do not ship
-with the app**: they are personal skills. Put them in `~/.metasci-scribe/skills/`
-(all papers) or in the paper's `.metasci-scribe/skills/`. Without them `/run`
-stops and names what is missing; `/run --quick` works without them.
+`scribe-review`, `scribe-rewriting`, `scribe-rewriting-korean`) ship with the
+app. They are adapted from the author's own writing skills, including a
+personal Korean style profile (`blueprint.md`, used only when asked for) and
+writing manuals that quote published sources.
+
+**Editing the skills.** At start the app copies them to
+`~/.metasci-scribe/skills/`, and the agent reads that copy. Edit it there. A
+copy you have not changed follows the app's updates; a copy you changed is
+kept, and the app tells you once when a newer version ships. Delete a copy to
+get the shipped one back. A skill in the paper's `.metasci-scribe/skills/`
+applies to that paper only and comes first.
 
 To come back to a paper later, open a terminal in the same folder and run
 `metasci-scribe` again. `/threads` and `/resume` bring back an earlier

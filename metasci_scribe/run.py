@@ -919,10 +919,9 @@ def _run_locked(
                 RunExit.FAILED,
                 "The review of each paragraph needs the skills "
                 + ", ".join(missing)
-                + ", which do not ship with the app. Put them in "
-                f"{_paths_display(paths.GLOBAL_SKILLS_DIR)} (or this paper's "
-                ".metasci-scribe/skills), or run /run --quick to write without "
-                "reviews.",
+                + ", and they were not found in this paper's .metasci-scribe/skills, in "
+                f"{_paths_display(paths.GLOBAL_SKILLS_DIR)}, or in the app. Reinstall "
+                "the app, or run /run --quick to write without reviews.",
                 state,
                 notes,
             )

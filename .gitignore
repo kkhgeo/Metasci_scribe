@@ -60,11 +60,3 @@ conversation_history/
 *meals/
 botpy.log
 large_tool_results/
-
-# The paragraph review's skills copy the author's personal skills; they live in
-# ~/.metasci-scribe/skills and never go into this public repository.
-metasci_scribe/skills/scribe-writing/
-metasci_scribe/skills/scribe-writing-korean/
-metasci_scribe/skills/scribe-review/
-metasci_scribe/skills/scribe-rewriting/
-metasci_scribe/skills/scribe-rewriting-korean/

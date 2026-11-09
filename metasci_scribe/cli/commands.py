@@ -1774,6 +1774,7 @@ def _main_callback(
     reload_env_dirs()
     # Ensure memory and skills subdirs exist in workspace
     ensure_dirs()
+    _seed_skills(lambda line: console.print(f"[dim]{escape(line)}[/dim]"))
 
     dirs = SessionDirs(workspace)
 
@@ -1963,6 +1964,14 @@ def _main_callback(
 RUN_INTERRUPTED_EXIT_CODE = 130
 
 
+def _seed_skills(say) -> None:
+    """Editable copies of the shipped writing skills (``skill_seed``)."""
+    from ..skill_seed import seed_skills
+
+    for line in seed_skills():
+        say(line)
+
+
 @app.command("run")
 def run_command(
     workdir: Annotated[
@@ -2035,6 +2044,7 @@ def run_command(
     apply_config_to_env(config)
     reload_env_dirs()
     ensure_dirs()
+    _seed_skills(typer.echo)
     typer.echo(
         f"Metasci Scribe run: {root}" + (f" (section {section})" if section else "")
     )

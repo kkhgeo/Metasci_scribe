@@ -170,7 +170,15 @@ class TestSubagents:
         assert "JSON" not in text
 
 
-BUILT_IN = {"skill-creator", "scribe-mapping"}
+BUILT_IN = {
+    "skill-creator",
+    "scribe-mapping",
+    "scribe-writing",
+    "scribe-writing-korean",
+    "scribe-review",
+    "scribe-rewriting",
+    "scribe-rewriting-korean",
+}
 
 
 class TestBuiltInSkills:
@@ -509,15 +517,24 @@ async def test_no_tool_description_invites_experiments_or_upstream_packs(tmp_pat
             assert word not in lowered, (name, word)
 
 
-def test_the_author_s_own_pipeline_skills_never_ship():
-    """The paragraph review's skills copy the author's personal skills (a
-    style profile, quoted sources). The repository is public, so they live in
-    ~/.metasci-scribe/skills only, and the run looks for them there."""
+def test_the_pipeline_skills_and_their_checkers_ship():
+    """The run's paragraph review reads these skills and runs their scripts."""
     from pathlib import Path
 
     from metasci_scribe import run_stages
 
     for language in ("ko", "en"):
-        s = run_stages.skills_for(language)
-        for name in (s.writing, s.review, s.rewriting):
-            assert not (Path(SKILLS_DIR) / name).exists(), name
+        skills = run_stages.skills_for(language)
+        for name in (skills.writing, skills.review, skills.rewriting):
+            text = (Path(SKILLS_DIR) / name / "SKILL.md").read_text(encoding="utf-8")
+            assert f"name: {name}" in text
+            assert "자동 집필(`/run`)" in text
+    shipped = Path(SKILLS_DIR)
+    assert (shipped / "scribe-review" / "scripts" / "check_review.py").is_file()
+    assert (shipped / "scribe-review" / "scripts" / "check_preservation.py").is_file()
+    assert (
+        shipped / "scribe-rewriting-korean" / "scripts" / "verify_korean_revision.py"
+    ).is_file()
+    names = [p.name for p in shipped.rglob("*")]
+    assert "__pycache__" not in names
+    assert "CHANGELOG.md" not in names
