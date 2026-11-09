@@ -40,14 +40,15 @@ _SKIP_DIRS = {"__pycache__"}
 
 def tree_hash(folder: Path) -> str:
     """A hash of every file under *folder* (paths and bytes), without the
-    stamps and Python caches."""
+    stamps and Python caches. Line endings do not count: a git checkout on
+    Windows may turn them into CRLF, which is no edit."""
     digest = hashlib.sha256()
     for path in sorted(p for p in folder.rglob("*") if p.is_file()):
         rel = path.relative_to(folder)
         if rel.name in (STAMP, SEEN) or _SKIP_DIRS & set(rel.parts):
             continue
         digest.update(rel.as_posix().encode("utf-8") + b"\0")
-        digest.update(path.read_bytes() + b"\0")
+        digest.update(path.read_bytes().replace(b"\r\n", b"\n") + b"\0")
     return digest.hexdigest()
 
 

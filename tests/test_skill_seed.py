@@ -74,3 +74,13 @@ def test_a_copy_that_already_matches_is_adopted(tmp_path):
 def test_the_real_shipped_skills_are_the_ones_seeded():
     for name in SEEDED:
         assert (skill_seed.SHIPPED / name / "SKILL.md").is_file(), name
+
+
+def test_line_endings_alone_are_no_edit(tmp_path):
+    source, target = _shipped(tmp_path), tmp_path / "home"
+    seed_skills(source, target)
+    skill = target / "scribe-review" / "SKILL.md"
+    skill.write_bytes(skill.read_bytes().replace(b"\n", b"\r\n"))
+    _shipped(tmp_path, "v2")
+    seed_skills(source, target)
+    assert "v2" in skill.read_text("utf-8")
